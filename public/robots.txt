@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Disallow: /auth
+Disallow: /lovable/
+
+Sitemap: https://ciago-vision-hub.lovable.app/sitemap.xml

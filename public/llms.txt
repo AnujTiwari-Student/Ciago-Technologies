@@ -1,0 +1,26 @@
+# Ciago Technologies
+
+> Premium technology services and consulting firm. We architect and build scalable software, cloud infrastructure, and enterprise platforms — from SaaS products to Kubernetes-powered SRE — for ambitious teams worldwide.
+
+## Core offering
+
+- Custom software & digital products: bespoke ERP and CRM systems, interactive admin dashboards, multi-tenant SaaS platforms, high-performance web interfaces, and cross-platform mobile applications.
+- Core industry solutions: API-first e-commerce storefronts, smart back-office tools, high-throughput logistics data pipelines, and legacy system API modernization.
+- Backend engineering & application security: concurrent high-throughput microservices, robust API architectures, proactive application security, encrypted data management.
+- Cloud infrastructure & DevOps: highly available multi-region cloud design, cost optimization, CI/CD zero-downtime deployments, Kubernetes container orchestration, and proactive system monitoring / SRE.
+
+## Target audience
+
+Product teams, scale-ups, enterprises, retail and e-commerce brands, fintech companies, logistics and manufacturing operators, and internal platform teams looking for a senior engineering partner.
+
+## Main pages
+
+- [Home](/) — company overview, hero and services summary.
+- [What We Do](/what-we-do) — detailed practice areas and technical services.
+- [What We Think](/what-we-think) — vision, mission and engineering point of view.
+- [About Us](/about-us) — story, values and clients.
+- [Careers](/careers) — open engineering roles and benefits.
+
+## Contact
+
+Reach out via the lead-capture form on the home page for consultations, project scoping, or partnership inquiries.
