@@ -7,6 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+history-export.md
+
+# Environment Files
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Dependencies and Build Outputs
 node_modules
 dist
 dist-ssr
@@ -14,17 +23,26 @@ dist-ssr
 .vinxi
 .tanstack/**
 .nitro
+.next
+.turbo
+.parcel-cache
+.vite
+coverage
 *.local
 
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
 
+# TypeScript
+*.tsbuildinfo
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj

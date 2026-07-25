@@ -32,3 +32,25 @@ function readFlag(name: keyof FeatureFlags, fallback: boolean): boolean {
 export const FLAGS: FeatureFlags = {
   USE_CLERK_AUTH: readFlag("USE_CLERK_AUTH", false),
 };
+
+export const FEATURE_FLAGS = {
+  employeePortal: "employeePortalEnabled",
+  managerPortal: "managerPortalEnabled",
+  hrPortal: "hrPortalEnabled",
+  onboardingPortal: "onboardingPortalEnabled",
+  documentUploads: "documentUploadsEnabled",
+  interviewScheduling: "interviewSchedulingEnabled",
+  offerManagement: "offerManagementEnabled",
+  leaveManagement: "leaveManagementEnabled",
+  attendance: "attendanceEnabled",
+  timesheets: "timesheetsEnabled",
+  payrollPortal: "payrollPortalEnabled",
+  referrals: "referralsEnabled",
+  internalMobility: "internalMobilityEnabled",
+  advancedAnalytics: "advancedAnalyticsEnabled",
+  maintenanceMode: "maintenanceMode",
+} as const;
+
+export type FeatureKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
+
+export type Capabilities = Record<FeatureKey, boolean>;
