@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Briefcase, ShieldCheck } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
+import { FLAGS } from "@/lib/feature-flags";
+import { FORBIDDEN_CORPORATE_ERROR, STAFF_ON_CANDIDATE_ERROR } from "@/lib/portal.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,19 +53,39 @@ function safePath(p?: string): string {
 
 type Portal = "candidate" | "employee";
 
+// OAuth providers supported in the legacy branch (Supabase broker) and the
+// Clerk branch (Clerk's signIn.authenticateWithRedirect strategy map).
+// Supabase's broker supports google / apple / github / microsoft; Clerk
+// supports oauth_google / oauth_apple / oauth_github / oauth_microsoft.
+// Adding a provider here requires the matching strategy hookup in
+// forms.tsx's ClerkSocialButton and the legacy OAuth provider be enabled
+// in the Supabase Authentication dashboard.
+type SocialProvider = "google" | "apple" | "github";
+
+// Maps our SocialProvider literal to the Clerk strategy constant
+// expected by signIn.authenticateWithRedirect({ strategy }).
+const CLERK_STRATEGY: Record<SocialProvider, string> = {
+  google: "oauth_google",
+  apple: "oauth_apple",
+  github: "oauth_github",
+};
+
+// ---------------------------------------------------------------------------
+// Legacy client-side resolver — kept verbatim for the flag-off path so the
+// Supabase-backed sign-in continues to land on the exact same destination
+// as before.
+// ---------------------------------------------------------------------------
 async function resolvePostLoginDestination(portal: Portal, requested: string): Promise<string> {
   const { data: userData } = await supabase.auth.getUser();
   const uid = userData.user?.id;
   if (!uid) return requested;
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", uid);
-  const roleSet = new Set((roles ?? []).map((r: any) => r.role));
+  const roleSet = new Set((roles ?? []).map((r: { role: string }) => r.role));
   const isStaff =
     roleSet.has("employee") || roleSet.has("manager") || roleSet.has("admin") || roleSet.has("hr");
 
   if (portal === "employee") {
     if (!isStaff) {
-      // Strict MNC isolation: candidates using Corporate Login are rejected with an
-      // explicit 403 screen. We sign the user out first so their session cannot linger.
       await supabase.auth.signOut();
       throw new Error("__FORBIDDEN_CORPORATE__");
     }
@@ -73,13 +94,24 @@ async function resolvePostLoginDestination(portal: Portal, requested: string): P
     if (roleSet.has("manager")) return "/manager";
     return "/employee";
   }
-  // Candidate tab: staff accounts must use the Corporate Gateway. Block and sign out.
   if (isStaff) {
     await supabase.auth.signOut();
     throw new Error("__STAFF_ON_CANDIDATE__");
   }
   if (requested === "/") return "/my-applications";
   return requested;
+}
+
+function handlePortalError(err: unknown, navigate: ReturnType<typeof useNavigate>) {
+  const msg = (err as { message?: string })?.message ?? "";
+  if (msg === FORBIDDEN_CORPORATE_ERROR) {
+    toast.error("Corporate Login is restricted to Ciago Technologies staff.");
+    navigate({ to: "/forbidden", search: { reason: "corporate" } });
+  } else if (msg === STAFF_ON_CANDIDATE_ERROR) {
+    toast.error("Account active on Corporate Gateway. Please log in via Staff Login.");
+  } else {
+    toast.error(msg || "Sign-in blocked.");
+  }
 }
 
 function AuthPage() {
@@ -133,10 +165,11 @@ function AuthPage() {
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          <div className="grid gap-2">
-            <SocialButton provider="google" label="Continue with Google" />
-            <SocialButton provider="apple" label="Continue with Apple" />
-          </div>
+          <SocialButton provider="google" label="Continue with Google" />
+          <div className="h-2" />
+          <SocialButton provider="apple" label="Continue with Apple" />
+          <div className="h-2" />
+          <SocialButton provider="github" label="Continue with GitHub" />
         </div>
 
         <p className="mt-6 text-xs text-muted-foreground">
@@ -157,7 +190,58 @@ function AuthPage() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Branch dispatcher — Clerk-form code is split into a separate component
+// that is only mounted when the flag is on. Clerk React hooks can only be
+// called inside a component rendered under <ClerkProvider> (mounted by
+// Step 6's boundary). Mounting the Clerk-form component only when the flag
+// is on (and gating the rest via the boundary) means:
+//   - Hooks correctly conditional without violating rules of hooks.
+//   - The Clerk React SDK never enters the bundle when the flag is off
+//     (the Clerk fragment is lazy-loaded, see `ClerkFormsLazy`).
+// ---------------------------------------------------------------------------
+
 function CandidateForms({ redirectTo }: { redirectTo: string }) {
+  if (!FLAGS.USE_CLERK_AUTH) {
+    return <LegacyCandidateForms redirectTo={redirectTo} />;
+  }
+  return (
+    <Suspense fallback={<FormsSkeleton />}>
+      <ClerkCandidateForms redirectTo={redirectTo} />
+    </Suspense>
+  );
+}
+
+function EmployeeSignIn({ redirectTo }: { redirectTo: string }) {
+  if (!FLAGS.USE_CLERK_AUTH) return <LegacyEmployeeSignIn redirectTo={redirectTo} />;
+  return (
+    <Suspense fallback={<FormsSkeleton />}>
+      <ClerkEmployeeSignIn redirectTo={redirectTo} />
+    </Suspense>
+  );
+}
+
+// Lazy-load the Clerk-enabled form bundle. This is the single point that
+// pulls `@clerk/tanstack-react-start` into the client bundle; when the flag is
+// off, the dynamic import never runs and the bundle stays small.
+const ClerkFormsLazy = lazy(async () => {
+  const mod = await import("@/integrations/clerk/forms");
+  return { default: mod.ClerkForms };
+});
+
+function ClerkCandidateForms({ redirectTo }: { redirectTo: string }) {
+  return <ClerkFormsLazy variant="candidate" redirectTo={redirectTo} />;
+}
+
+function ClerkEmployeeSignIn({ redirectTo }: { redirectTo: string }) {
+  return <ClerkFormsLazy variant="employee-portal" redirectTo={redirectTo} />;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy branch — preserved byte-equivalent to pre-Step-10 behaviour.
+// ---------------------------------------------------------------------------
+
+function LegacyCandidateForms({ redirectTo }: { redirectTo: string }) {
   return (
     <Tabs defaultValue="signin" className="w-full">
       <TabsList className="grid w-full grid-cols-2">
@@ -165,20 +249,20 @@ function CandidateForms({ redirectTo }: { redirectTo: string }) {
         <TabsTrigger value="signup">Sign up</TabsTrigger>
       </TabsList>
       <TabsContent value="signin" className="mt-6">
-        <SignInForm portal="candidate" redirectTo={redirectTo} />
+        <LegacySignInForm portal="candidate" redirectTo={redirectTo} />
       </TabsContent>
       <TabsContent value="signup" className="mt-6">
-        <SignUpForm redirectTo={redirectTo} />
+        <LegacySignUpForm redirectTo={redirectTo} />
       </TabsContent>
     </Tabs>
   );
 }
 
-function EmployeeSignIn({ redirectTo }: { redirectTo: string }) {
-  return <SignInForm portal="employee" redirectTo={redirectTo} />;
+function LegacyEmployeeSignIn({ redirectTo }: { redirectTo: string }) {
+  return <LegacySignInForm portal="employee" redirectTo={redirectTo} />;
 }
 
-function SignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: string }) {
+function LegacySignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -196,15 +280,8 @@ function SignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: string
       const dest = await resolvePostLoginDestination(portal, redirectTo);
       toast.success("Signed in.");
       navigate({ to: dest });
-    } catch (err: any) {
-      if (err?.message === "__FORBIDDEN_CORPORATE__") {
-        toast.error("Corporate Login is restricted to Ciago Technologies staff.");
-        navigate({ to: "/forbidden", search: { reason: "corporate" } });
-      } else if (err?.message === "__STAFF_ON_CANDIDATE__") {
-        toast.error("Account active on Corporate Gateway. Please log in via Staff Login.");
-      } else {
-        toast.error(err?.message || "Sign-in blocked.");
-      }
+    } catch (err) {
+      handlePortalError(err, navigate);
     } finally {
       setBusy(false);
     }
@@ -247,7 +324,7 @@ function SignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: string
   );
 }
 
-function SignUpForm({ redirectTo }: { redirectTo: string }) {
+function LegacySignUpForm({ redirectTo }: { redirectTo: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -319,19 +396,46 @@ function SignUpForm({ redirectTo }: { redirectTo: string }) {
   );
 }
 
-function SocialButton({ provider, label }: { provider: "google" | "apple"; label: string }) {
+// ---------------------------------------------------------------------------
+// Social auth — flag-aware button using the same Clerk branch dispatcher.
+// ---------------------------------------------------------------------------
+function SocialButton({ provider, label }: { provider: SocialProvider; label: string }) {
   const [busy, setBusy] = useState(false);
+  if (!FLAGS.USE_CLERK_AUTH) {
+    return <LegacySocialButton provider={provider} label={label} setBusy={setBusy} busy={busy} />;
+  }
+  return (
+    <Suspense fallback={<ButtonSkeleton label={label} />}>
+      <ClerkSocialButton provider={provider} label={label} setBusy={setBusy} busy={busy} />
+    </Suspense>
+  );
+}
+
+function LegacySocialButton({
+  provider,
+  label,
+  busy,
+  setBusy,
+}: {
+  provider: SocialProvider;
+  label: string;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+}) {
   async function onClick() {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin,
+    // Supabase OAuth direct — supabase.auth.signInWithOAuth redirects the
+    // browser to the provider, which returns to `redirectTo` after consent.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
     });
-    if (result.error) {
+    if (error) {
       setBusy(false);
-      toast.error(result.error.message || "Sign-in failed");
-      return;
+      return toast.error(error.message || "Sign-in failed");
     }
-    if (result.redirected) return;
+    // On success the browser is redirected off-site to the OAuth provider;
+    // we just leave `busy=true` while the page navigates away.
   }
   return (
     <Button
@@ -345,3 +449,54 @@ function SocialButton({ provider, label }: { provider: "google" | "apple"; label
     </Button>
   );
 }
+
+// Re-uses the same lazy fragment so Clerk React SDK hooks are reachable.
+function ClerkSocialButton({
+  provider,
+  label,
+  busy,
+  setBusy,
+}: {
+  provider: "google" | "apple";
+  label: string;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+}) {
+  // Importing here would call React hooks; instead delegate via the lazy
+  // forms fragment which contains the actual Clerk social handler.
+  return (
+    <ClerkFormsLazy
+      variant="social"
+      redirectTo=""
+      provider={provider}
+      label={label}
+      busy={busy}
+      setBusy={setBusy}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Suspense fallbacks for the lazy-loaded Clerk fragments.
+// ---------------------------------------------------------------------------
+function FormsSkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden>
+      <div className="h-9 rounded-md bg-muted/50" />
+      <div className="h-9 rounded-md bg-muted/50" />
+      <div className="h-9 rounded-md bg-brand/40" />
+    </div>
+  );
+}
+
+function ButtonSkeleton({ label }: { label: string }) {
+  return (
+    <Button type="button" variant="outline" disabled className="w-full justify-center">
+      {label}
+    </Button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hoc helpers — kept exported for tests/manual inspection.
+// ---------------------------------------------------------------------------

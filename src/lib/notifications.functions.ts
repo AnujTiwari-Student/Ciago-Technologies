@@ -29,7 +29,7 @@ const idSchema = z.object({ id: z.string().uuid() });
 
 export const markNotificationRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => idSchema.parse(d))
+  .validator((d: unknown) => idSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("in_app_notifications")

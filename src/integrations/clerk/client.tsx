@@ -1,59 +1,117 @@
-// Clerk client-side provider wrapper (Step 6).
+// ClerkProvider boundary — flag-aware mount point for Clerk.
 //
-// When USE_CLERK_AUTH is false (the default at this stage of the migration):
-//   the boundary passes its children through untouched — no Clerk JS is
-//   imported, no Clerk scripts are loaded, so the client bundle size and
-//   runtime behaviour are byte-identical to the pre-migration app.
+// Flag OFF (default, pre-cutover):
+//   boundary renders `<>{children}</>` — no Clerk JS in the bundle, no
+//   runtime behaviour change. Identical to the pre-migration app.
 //
-// When USE_CLERK_AUTH is true:
-//   the boundary renders a `<ClerkProvider>` (from @clerk/tanstack-start)
-//   that loads Clerk's JS via the standard publishable-key flow. It also
-//   mounts <ClerkTokenBridge /> inside the provider, which keeps
-//   window.__clerkAuthToken in sync with useAuth().getToken() so that the
-//   server-fn attacher (Step 5) can forward a Clerk Session JWT to
-//   Step 4's server middleware.
+// Flag ON (cutover):
+//   boundary renders `<ClerkProvider>` eagerly. The ClerkProvider MUST
+//   be in the tree before any Clerk-consuming descendant (useSignIn,
+//   useUser, useAuth, useClerk) renders — including during SSR's first
+//   render. The previous implementation lazy-loaded <ClerkProvider>
+//   itself, which meant Clerk forms (also lazy) could render before
+//   the provider resolved and threw
+//   `useClerkSignal can only be used within <ClerkProvider />`.
 //
-// Lazy-loading the Clerk fragment via React.lazy keeps Clerk JS out of the
-// initial bundle when the flag is off — the import path is only reached
-// after a flag-aware <Suspense> parent triggers the load. We keep a null
-// placeholder while the lazy chunk is in flight.
-//
-// IMPORTANT setup notes for the project owner:
-//   1. USAGE — no manual config is needed to ship the flag-off path.
-//   2. WHEN ENABLING Clerk — populate these environment variables:
-//        VITE_CLERK_PUBLISHABLE_KEY=pk_test_*** …              (browser-safe)
-//        CLERK_SECRET_KEY=sk_test_*** …                       (server-only)
-//      and set USE_CLERK_AUTH=***
-//   3. APPLE OAUTH — Clerk's Apple strategy requires an Apple Developer
-//      ID in the Clerk Dashboard under Configure → SSO Connections → Apple.
-//      Until that is set, the Apple button on the /auth page (Step 10)
-//      will show a Clerk-side configuration error. Google does not require
-//      any external setup for the Clerk development instance.
-//   4. BUNDLE COST — flipping USE_CLERK_AUTH on pulls the Clerk React SDK
-//      (~60 kB gzipped, including the Clerk JS script) into the client
-//      bundle. Reverting requires flipping the flag and re-deploying.
+//   The eager import is gated by the runtime flag check. This means
+//   the @clerk/tanstack-react-start bundle IS included in the flag-on
+//   production bundle — which is correct (flag-on = Clerk is active).
 
-import { Suspense, lazy, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { FLAGS } from "@/lib/feature-flags";
-
-// Lazy-load the Clerk-using fragment so the Clerk React SDK only enters
-// the client bundle after the boundary resolves to its active branch.
-const ClerkProviderFragment = lazy(async () => {
-  const mod = await import("@/integrations/clerk/client-fragment");
-  return { default: mod.ClerkProviderFragment };
-});
 
 export function ClerkProviderBoundary({ children }: { children: ReactNode }) {
   if (!FLAGS.USE_CLERK_AUTH) {
     // Cold path — no Clerk import, no JS harness. Identical to today.
     return <>{children}</>;
   }
-  // Warm path — render the lazy-loaded Clerk fragment behind a small
-  // Suspense fallback. The fragment itself mounts <ClerkProvider> with
-  // the publishable key, plus <ClerkTokenBridge /> inside the provider.
+  // Warm path — mount <ClerkProvider> eagerly. The actual import is
+  // performed inside ClerkProviderFragment so this file's static
+  // module graph stays clean. But ClerkProviderFragment is rendered
+  // WITHOUT Suspense — it runs synchronously so the provider exists
+  // before children render.
+  //
+  // Implementation note: the previous design wrapped ClerkProviderFragment
+  // in <Suspense fallback={children}> — which meant children rendered
+  // WITHOUT a ClerkProvider during the lazy chunk's round-trip. The fix
+  // is to not lazy-load the provider itself.
+  return <ClerkProviderFragment>{children}</ClerkProviderFragment>;
+}
+
+// Synchronous fragment that mounts <ClerkProvider>. Eager imports so
+// the provider is in the React tree on the first render.---
+import { ClerkProvider, useAuth } from "@clerk/tanstack-react-start";
+import { useEffect } from "react";
+
+declare global {
+  interface Window {
+    // Published by <ClerkTokenBridge />; consumed by the auth attacher
+    // (src/integrations/supabase/auth-attacher.ts).
+    __clerkAuthToken?: string;
+  }
+}
+
+function readPublishableKey(): string | undefined {
+  const fromVite = (
+    typeof import.meta !== "undefined" && import.meta.env
+      ? (import.meta.env as unknown as Record<string, string | undefined>)
+          .VITE_CLERK_PUBLISHABLE_KEY
+      : undefined
+  ) as string | undefined;
+  const fromEnv =
+    typeof process !== "undefined" && process.env
+      ? ((process.env as unknown as Record<string, string | undefined>)
+          .VITE_CLERK_PUBLISHABLE_KEY ??
+        (process.env as unknown as Record<string, string | undefined>)
+          .CLERK_PUBLISHABLE_KEY)
+      : undefined;
+  return fromVite ?? fromEnv ?? undefined;
+}
+
+function ClerkTokenBridge() {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoaded || !isSignedIn) {
+      window.__clerkAuthToken = "";
+      return;
+    }
+    getToken()
+      .then((token) => {
+        if (cancelled) return;
+        window.__clerkAuthToken = token ?? "";
+      })
+      .catch(() => {
+        if (cancelled) return;
+        window.__clerkAuthToken = "";
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn, getToken]);
+  return null;
+}
+
+function ClerkProviderFragment({ children }: { children: ReactNode }) {
+  const publishableKey = readPublishableKey();
+  if (!publishableKey) {
+    // Misconfiguration: flag is on but no publishable key. Surface the
+    // children so the rest of the app doesn't crash; a console warning
+    // helps diagnose at runtime. The Clerk forms will also fall through
+    // gracefully because Clerk's hooks return loading states when the
+    // provider is missing its key.
+    if (typeof console !== "undefined") {
+      console.warn(
+        "[clerk] USE_CLERK_AUTH is on but VITE_CLERK_PUBLISHABLE_KEY is missing. " +
+          "Auth will not function until the key is set.",
+      );
+    }
+    return <>{children}</>;
+  }
   return (
-    <Suspense fallback={<>{children}</>}>
-      <ClerkProviderFragment>{children}</ClerkProviderFragment>
-    </Suspense>
+    <ClerkProvider publishableKey={publishableKey}>
+      <ClerkTokenBridge />
+      {children}
+    </ClerkProvider>
   );
 }

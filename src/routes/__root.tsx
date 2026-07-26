@@ -7,13 +7,13 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../lib/theme";
 import { AuthProvider } from "../lib/auth";
 import { ClerkProviderBoundary } from "@/integrations/clerk/client";
+import { useEnsureUserMapped } from "@/hooks/use-ensure-user-mapped";
 
 function NotFoundComponent() {
   return (
@@ -40,9 +40,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -93,10 +90,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "form-action 'self'",
           "img-src 'self' data: blob: https:",
           "font-src 'self' https://fonts.gstatic.com data:",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-          "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
-          "frame-src https://challenges.cloudflare.com",
-          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://challenges.cloudflare.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.accounts.dev",
+          // Clerk domains are required when USE_CLERK_AUTH is on. We list
+          // both the dev frontend (`*.clerk.accounts.dev`) and the
+          // production frontend (`*.clerk.com` / `clerk.com`) so cutover
+          // and rollback don't require a code change.
+          "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev",
+          // Clerk's browser.js spins up a Web Worker from a blob: URL
+          // when running in dev mode. Without `worker-src 'self' blob:`,
+          // the browser falls back to script-src and refuses the worker.
+          "worker-src 'self' blob:",
+          "frame-src https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com",
+          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev",
         ].join("; "),
       },
     ],
@@ -153,6 +158,10 @@ function RootComponent() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
+            {/* Step 11: ensures a Clerk user's Supabase mapping exists before
+                any authenticated route reads data. No-op when flag is off or
+                user is signed out. */}
+            <EnsureUserMapped />
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
           </AuthProvider>
@@ -160,4 +169,9 @@ function RootComponent() {
       </QueryClientProvider>
     </ClerkProviderBoundary>
   );
+}
+
+function EnsureUserMapped() {
+  useEnsureUserMapped();
+  return null;
 }

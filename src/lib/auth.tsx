@@ -38,6 +38,10 @@ const defaultSignOut = async () => {
   await supabase.auth.signOut();
 };
 
+// Used only as a placeholder before the Clerk React hooks have been
+// dynamic-imported into the chunk. Never reaches Supabase.
+const noopSignOut = async () => {};
+
 const AuthContext = createContext<AuthState>({
   user: null,
   session: null,
@@ -112,7 +116,7 @@ function LegacySupabaseAuthProvider({ children }: { children: ReactNode }) {
 //
 // We dynamically import Clerk's React hooks so that the Clerk React SDK only
 // enters the client bundle when the flag is on. <ClerkProviderBoundary> in
-// Step 6 already gates the entire client-fragment chunk behind the flag; this
+// Step 6 already gates the entire Clerk client chunk behind the flag; this
 // lazy import keeps the boundary's no-op cold path free of Clerk React imports.
 //
 // Contract mapping (Clerk → Supabase-shaped AuthState):
@@ -177,42 +181,63 @@ function ClerkAuthProvider({ children }: { children: ReactNode }) {
   // useState/useEffect/useMemo suspend while we dynamic-import Clerk React.
   // The fragment chunk loads in a single round trip; the bridge publishes
   // the active session token in parallel.
-  const [{ useUserImpl, useSessionImpl, useClerkImpl }, setImpls] = useState<{
+  //
+  // NOTE: we MUST NOT destructure `null` — SSR's first render sees the
+  // initial value before `useEffect` runs, and the inner `ClerkConsumer`
+  // is what actually invokes Clerk hooks (so the React rules-of-hooks
+  // boundary stays correct). We render a no-auth placeholder until the
+  // dynamic import resolves.
+  const [impls, setImpls] = useState<{
     useUserImpl: (...args: unknown[]) => unknown;
     useSessionImpl: (...args: unknown[]) => unknown;
     useClerkImpl: (...args: unknown[]) => unknown;
   } | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const clerkReact = await import("@clerk/tanstack-start");
-      if (cancelled) return;
-      setImpls({
-        useUserImpl: clerkReact.useUser as unknown as (...args: unknown[]) => unknown,
-        useSessionImpl: clerkReact.useSession as unknown as (...args: unknown[]) => unknown,
-        useClerkImpl: clerkReact.useClerk as unknown as (...args: unknown[]) => unknown,
-      });
+      try {
+        const clerkReact = await import("@clerk/tanstack-react-start");
+        if (cancelled) return;
+        setImpls({
+          useUserImpl: clerkReact.useUser as unknown as (
+            ...args: unknown[]
+          ) => unknown,
+          useSessionImpl: clerkReact.useSession as unknown as (
+            ...args: unknown[]
+          ) => unknown,
+          useClerkImpl: clerkReact.useClerk as unknown as (
+            ...args: unknown[]
+          ) => unknown,
+        });
+      } catch {
+        // The Clerk React SDK isn't available. Render a no-auth shell so
+        // the rest of the app still mounts (matches the loading branch
+        // behaviour above). The flag-off path is unaffected.
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (!{ useUserImpl, useSessionImpl, useClerkImpl }.useUserImpl) {
+  if (!impls) {
+    // First render (SSR and CSR pre-hydration): no Clerk hooks available
+    // yet, render a loading placeholder that doesn't read `user`.
     const value: AuthState = {
       user: null,
       session: null,
       loading: true,
-      signOut: defaultSignOut,
+      signOut: noopSignOut,
     };
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
   }
 
   return (
     <ClerkConsumer
-      useUserImpl={useUserImpl}
-      useSessionImpl={useSessionImpl}
-      useClerkImpl={useClerkImpl}
+      useUserImpl={impls.useUserImpl}
+      useSessionImpl={impls.useSessionImpl}
+      useClerkImpl={impls.useClerkImpl}
     >
       {children}
     </ClerkConsumer>

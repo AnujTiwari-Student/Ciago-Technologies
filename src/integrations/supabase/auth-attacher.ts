@@ -4,7 +4,7 @@
 //
 // When USE_CLERK_AUTH is false (current default):
 //   the attacher reads the existing Supabase session from localStorage and
-//   forwards its access_token. This is the Lovable-generated behaviour,
+//   forwards its access_token. This is the original pre-migration behaviour,
 //   preserved verbatim except for the small refactor into a branch.
 //
 // When USE_CLERK_AUTH is true:
@@ -32,8 +32,8 @@ export const attachSupabaseAuth = createMiddleware({ type: "function" }).client(
 );
 
 // ---------------------------------------------------------------------------
-// Legacy branch — USE_CLERK_AUTH is false.  Verbatim from the
-// Lovable-generated implementation.
+// Legacy branch — USE_CLERK_AUTH is false. Verbatim from the pre-migration
+// implementation.
 // ---------------------------------------------------------------------------
 async function legacySupabaseAuthBranch(
   next: (args: { headers?: HeadersInit }) => Promise<unknown>,
