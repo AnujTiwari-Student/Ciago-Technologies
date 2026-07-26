@@ -457,7 +457,7 @@ function ClerkSocialButton({
   busy,
   setBusy,
 }: {
-  provider: "google" | "apple";
+  provider: SocialProvider;
   label: string;
   busy: boolean;
   setBusy: (v: boolean) => void;

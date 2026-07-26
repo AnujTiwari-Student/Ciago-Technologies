@@ -21,6 +21,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useSignIn, useSignUp } from "@clerk/tanstack-react-start";
+import type { OAuthStrategy } from "@clerk/types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,13 +39,11 @@ type SocialProvider = "google" | "apple" | "github";
 
 // Maps our SocialProvider literal to the Clerk strategy constant
 // expected by signIn.authenticateWithRedirect({ strategy }).
-const CLERK_STRATEGY: Record<SocialProvider, string> = {
+const CLERK_STRATEGY: Record<SocialProvider, OAuthStrategy> = {
   google: "oauth_google",
   apple: "oauth_apple",
   github: "oauth_github",
 };
-
-
 
 // Public surface that auth.tsx imports as `ClerkForms`.
 export function ClerkForms({
@@ -99,7 +98,7 @@ function ClerkEmployeeSignIn({ redirectTo }: { redirectTo: string }) {
 }
 
 function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: string }) {
-  const { isLoaded, signIn, setActive } = useSignIn();
+  const { signIn, errors, fetchStatus } = useSignIn();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,27 +106,33 @@ function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: s
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isLoaded || !signIn) {
-      // Don't surface this as a user error — Clerk's SDK is still hydrating.
-      // Disable interactions and wait for the next render.
+    const { error } = await signIn.password({ identifier: email, password });
+    if (error) {
+      toast.error(
+        errors?.fields?.password?.message ??
+          errors?.fields?.identifier?.message ??
+          "Sign-in blocked.",
+      );
       return;
     }
-    setBusy(true);
-    try {
-      const result = await signIn.create({ identifier: email, password });
-      const sessionId = result?.createdSessionId;
-      if (!sessionId) {
-        setBusy(false);
-        return toast.error("Sign-in incomplete — MFA / verification required.");
-      }
-      await setActive?.({ session: sessionId });
-      const dest = await resolveMyPortal({ data: { portal, requested: redirectTo } });
-      toast.success("Signed in.");
-      navigate({ to: dest });
-    } catch (err) {
-      handlePortalError(err, navigate);
-    } finally {
-      setBusy(false);
+    if (signIn.status === "complete") {
+      await signIn.finalize({
+        navigate: async ({ session }) => {
+          if (session?.currentTask) {
+            toast.error("Additional verification required.");
+            return;
+          }
+          try {
+            const dest = await resolveMyPortal({ data: { portal, requested: redirectTo } });
+            toast.success("Signed in.");
+            navigate({ to: dest });
+          } catch (err) {
+            handlePortalError(err, navigate);
+          }
+        },
+      });
+    } else if (signIn.status === "needs_second_factor") {
+      toast.error("Sign-in incomplete — MFA / verification required.");
     }
   }
 
@@ -159,17 +164,17 @@ function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: s
       </div>
       <Button
         type="submit"
-        disabled={busy || !isLoaded}
+        disabled={busy}
         className="w-full bg-brand text-brand-foreground hover:bg-brand-glow"
       >
-        {busy ? "Signing in…" : !isLoaded ? "Loading…" : portal === "employee" ? "Sign in to Employee Portal" : "Sign in"}
+        {busy ? "Signing in…" : portal === "employee" ? "Sign in to Employee Portal" : "Sign in"}
       </Button>
     </form>
   );
 }
 
 function ClerkSignUpForm({ redirectTo }: { redirectTo: string }) {
-  const { isLoaded, signUp, setActive } = useSignUp();
+  const { signUp, errors, fetchStatus } = useSignUp();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -179,32 +184,36 @@ function ClerkSignUpForm({ redirectTo }: { redirectTo: string }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password.length < 8) return toast.error("Password must be at least 8 characters.");
-    if (!isLoaded || !signUp) return; // wait for SDK hydration
-    setBusy(true);
-    try {
-      const firstSpace = name.indexOf(" ");
-      const firstName = firstSpace === -1 ? name : name.slice(0, firstSpace);
-      const result = await signUp.create({ emailAddress: email, password, firstName });
-      const sessionId = result?.createdSessionId;
-      if (!sessionId) {
-        setBusy(false);
-        // Clerk sign-up often requires email verification before session can be activated.
-        return toast.success("Check your inbox to confirm your email, then sign in.");
-      }
-      await setActive?.({ session: sessionId });
-      const dest = await resolveMyPortal({
-        data: { portal: "candidate", requested: redirectTo === "/" ? "/" : redirectTo },
+
+    const firstSpace = name.indexOf(" ");
+    const firstName = firstSpace === -1 ? name : name.slice(0, firstSpace);
+
+    const { error } = await signUp.password({ emailAddress: email, password, firstName });
+    if (error) {
+      toast.error(
+        errors?.fields?.emailAddress?.message ??
+          errors?.fields?.password?.message ??
+          "Sign-up blocked.",
+      );
+      return;
+    }
+
+    if (signUp.status === "complete") {
+      await signUp.finalize({
+        navigate: async () => {
+          const dest = await resolveMyPortal({
+            data: { portal: "candidate", requested: redirectTo },
+          });
+          toast.success("Account created. You can apply now.");
+          navigate({ to: dest });
+        },
       });
-      toast.success("Account created. You can apply now.");
-      navigate({ to: dest });
-    } catch (err) {
-      const msg =
-        (err as { errors?: Array<{ message?: string }>; message?: string })?.errors?.[0]?.message ??
-        (err as { message?: string })?.message ??
-        "Sign-up blocked.";
-      toast.error(msg);
-    } finally {
-      setBusy(false);
+    } else {
+      // Dashboard requires verification (e.g. email code) before completion.
+      // NOTE: this is new behavior, not present in your old flow — you need
+      // an actual verification-code UI step here, this isn't a rename fix.
+      await signUp.verifications.sendEmailCode();
+      toast.success("Check your inbox to confirm your email, then sign in.");
     }
   }
 
@@ -246,10 +255,10 @@ function ClerkSignUpForm({ redirectTo }: { redirectTo: string }) {
       </div>
       <Button
         type="submit"
-        disabled={busy || !isLoaded}
+        disabled={busy}
         className="w-full bg-brand text-brand-foreground hover:bg-brand-glow"
       >
-        {busy ? "Creating…" : !isLoaded ? "Loading…" : "Create account"}
+        {busy ? "Creating…" : "Create account"}
       </Button>
     </form>
   );
@@ -266,42 +275,57 @@ function ClerkSocialButton({
   busy: boolean;
   setBusy: (v: boolean) => void;
 }) {
-  const { isLoaded, signIn } = useSignIn();
-  const sdkReady = isLoaded && !!signIn;
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
+
   async function onClick() {
-    if (!isLoaded || !signIn) {
-      // Clerk SDK is still hydrating. The button itself will re-render
-      // with `disabled` once isLoaded flips; for now skip the click.
-      return;
-    }
     setBusy(true);
     try {
-      await signIn.authenticateWithRedirect({
+      const { error } = await signIn.sso({
         strategy: CLERK_STRATEGY[provider],
         redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
-        redirectUrlComplete: `${window.location.origin}/auth?clerk_redirect=complete`,
+        redirectCallbackUrl: `${window.location.origin}/auth/sso-callback`,
       });
-      // The browser will follow the OAuth redirect; we don't need to do
-      // anything else here. After successful OAuth, Clerk auto-activates the
-      // session and the AuthPage useEffect navigates to the redirect target.
+
+      const nestedError = signIn.firstFactorVerification?.error;
+
+      if (nestedError?.code === "external_account_not_found") {
+        // No existing Clerk user for this Google identity — transfer to sign-up.
+        const { error: suError } = await signUp.sso({
+          strategy: CLERK_STRATEGY[provider],
+          redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
+          redirectCallbackUrl: `${window.location.origin}/auth/sso-callback`,
+        });
+        if (suError) {
+          setBusy(false);
+          toast.error(formatSocialError(suError, provider));
+        }
+        return;
+      }
+
+      if (error || nestedError) {
+        setBusy(false);
+        toast.error(formatSocialError(error ?? nestedError, provider));
+        return;
+      }
+
+      setBusy(false);
+      toast.error(`Sign-in incomplete (${signIn.status}). Try email instead.`);
     } catch (err) {
       setBusy(false);
       toast.error(formatSocialError(err, provider));
     }
   }
+
   return (
     <Button
       type="button"
       variant="outline"
       onClick={onClick}
-      disabled={busy || !sdkReady}
+      disabled={busy}
       className="w-full justify-center"
     >
-      {busy
-        ? "Opening…"
-        : !sdkReady
-          ? "Loading…"
-          : label}
+      {busy ? "Opening…" : label}
     </Button>
   );
 }
@@ -325,11 +349,13 @@ function handlePortalError(err: unknown, navigate: ReturnType<typeof useNavigate
 // string leaves users stuck; this maps known failure shapes to copy that
 // points at the actual fix.
 function formatSocialError(err: unknown, provider: SocialProvider): string {
-  const pretty = (provider === "google" ? "Google" : provider === "apple" ? "Apple" : "GitHub") + " sign-in";
-  const raw = (err as { errors?: Array<{ code?: string; message?: string }>; message?: string })
-    .errors?.[0]?.message
-    ?? (err as { message?: string })?.message
-    ?? "";
+  const pretty =
+    (provider === "google" ? "Google" : provider === "apple" ? "Apple" : "GitHub") + " sign-in";
+  const raw =
+    (err as { errors?: Array<{ code?: string; message?: string }>; message?: string }).errors?.[0]
+      ?.message ??
+    (err as { message?: string })?.message ??
+    "";
   const lower = raw.toLowerCase();
   if (lower.includes("unsupported provider") || lower.includes("missing oauth secret")) {
     return `${pretty} isn't configured on this Clerk app yet. Ask an admin to enable ${provider === "google" ? "Google" : provider === "apple" ? "Apple" : "GitHub"} under Configure → SSO Connections in the Clerk Dashboard.`;
