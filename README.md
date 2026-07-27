@@ -1,4 +1,4 @@
-# Ciago Spark
+# Ciago Technologies
 
 > Official website for **Ciago Technologies**.
 
