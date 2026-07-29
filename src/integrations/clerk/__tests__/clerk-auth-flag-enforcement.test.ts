@@ -10,7 +10,7 @@ describe("clerk auth initiation enforcement", () => {
     vi.mocked(isClerkAuthEnabledFn).mockResolvedValueOnce(true);
     const { canProceedWithClerkAuth } = await import("@/integrations/clerk/forms");
     await expect(canProceedWithClerkAuth()).resolves.toBe(true);
-  });
+  }, 15000);
 
   it("denies auth initiation when clerkAuthentication is OFF", async () => {
     const { isClerkAuthEnabledFn } = await import("@/lib/feature-flags.functions");

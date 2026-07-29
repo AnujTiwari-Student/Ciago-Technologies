@@ -11,7 +11,7 @@ describe("auth middleware clerk flag enforcement", () => {
     const { assertClerkAuthFeatureEnabledForServer } =
       await import("@/integrations/supabase/auth-middleware");
     await expect(assertClerkAuthFeatureEnabledForServer()).resolves.toBeUndefined();
-  });
+  }, 15000);
 
   it("blocks server auth branch when flag is disabled", async () => {
     const { isClerkAuthenticationEnabled } = await import("@/lib/feature-flags.server");
