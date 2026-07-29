@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   getAllFeatureFlags,
   getDefaultCapabilities,
+  isClerkAuthenticationEnabled,
   isDashboardEnabled,
   isFlagOn,
 } from "@/lib/feature-flags.server";
@@ -63,5 +64,12 @@ export const isMaintenanceModeOn = createServerFn({ method: "GET" }).handler(
 export const isDashboardEnabledFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<boolean> => {
     return isDashboardEnabled();
+  },
+);
+
+/** Security-critical runtime gate for Clerk auth paths. */
+export const isClerkAuthEnabledFn = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => {
+    return isClerkAuthenticationEnabled();
   },
 );

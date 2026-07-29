@@ -32,6 +32,7 @@ import {
   FORBIDDEN_CORPORATE_ERROR,
   STAFF_ON_CANDIDATE_ERROR,
 } from "@/lib/portal.functions";
+import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 
 type Portal = "candidate" | "employee";
 
@@ -44,6 +45,15 @@ const CLERK_STRATEGY: Record<SocialProvider, OAuthStrategy> = {
   apple: "oauth_apple",
   github: "oauth_github",
 };
+
+export async function canProceedWithClerkAuth(): Promise<boolean> {
+  try {
+    return await isClerkAuthEnabledFn();
+  } catch (error) {
+    console.error("[auth] Failed to evaluate clerkAuthentication flag", error);
+    return false;
+  }
+}
 
 // Public surface that auth.tsx imports as `ClerkForms`.
 export function ClerkForms({
@@ -106,6 +116,10 @@ function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: s
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!(await canProceedWithClerkAuth())) {
+      toast.error("Authentication is temporarily disabled.");
+      return;
+    }
     const { error } = await signIn.password({ identifier: email, password });
     if (error) {
       toast.error(
@@ -183,6 +197,10 @@ function ClerkSignUpForm({ redirectTo }: { redirectTo: string }) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!(await canProceedWithClerkAuth())) {
+      toast.error("Authentication is temporarily disabled.");
+      return;
+    }
     if (password.length < 8) return toast.error("Password must be at least 8 characters.");
 
     const firstSpace = name.indexOf(" ");
@@ -281,6 +299,11 @@ function ClerkSocialButton({
   async function onClick() {
     setBusy(true);
     try {
+      if (!(await canProceedWithClerkAuth())) {
+        setBusy(false);
+        toast.error("Authentication is temporarily disabled.");
+        return;
+      }
       const { error } = await signIn.sso({
         strategy: CLERK_STRATEGY[provider],
         redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,

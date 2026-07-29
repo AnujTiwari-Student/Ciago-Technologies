@@ -1,6 +1,7 @@
 import { redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { FLAGS } from "@/lib/feature-flags";
+import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 import { getMyAuthUserId, getMyRoles, type MyRolesPayload } from "@/lib/roles.functions";
 import { isDashboardEnabled } from "@/lib/feature-flags.server";
 
@@ -33,6 +34,11 @@ export async function requireAuthenticated(
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth", search: { redirect: redirectPath } });
     return { userId: data.user.id };
+  }
+
+  const clerkAuthEnabled = await isClerkAuthEnabledFn();
+  if (!clerkAuthEnabled) {
+    throw redirect({ to: "/forbidden", search: { reason: "clerk_auth_disabled" } });
   }
 
   if (!readClerkToken()) {

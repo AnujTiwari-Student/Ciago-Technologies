@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Briefcase, ShieldCheck } from "lucide-react";
@@ -7,6 +7,7 @@ import { Briefcase, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { FLAGS } from "@/lib/feature-flags";
+import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 import { FORBIDDEN_CORPORATE_ERROR, STAFF_ON_CANDIDATE_ERROR } from "@/lib/portal.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,13 +118,50 @@ function handlePortalError(err: unknown, navigate: ReturnType<typeof useNavigate
 function AuthPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/auth" });
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const redirectTo = safePath(search.redirect);
   const [portal, setPortal] = useState<Portal>(search.portal ?? "candidate");
+  const [clerkAuthEnabled, setClerkAuthEnabled] = useState(!FLAGS.USE_CLERK_AUTH);
+  const [clerkAuthLoading, setClerkAuthLoading] = useState(FLAGS.USE_CLERK_AUTH);
+  const disabledSignOutAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!loading && user) navigate({ to: redirectTo });
-  }, [loading, user, navigate, redirectTo]);
+    if (!FLAGS.USE_CLERK_AUTH) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const enabled = await isClerkAuthEnabledFn();
+        if (!cancelled) setClerkAuthEnabled(enabled);
+      } catch (error) {
+        console.error("[auth] Failed to evaluate clerkAuthentication flag", error);
+        if (!cancelled) setClerkAuthEnabled(false);
+      } finally {
+        if (!cancelled) setClerkAuthLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!FLAGS.USE_CLERK_AUTH) {
+      if (user) navigate({ to: redirectTo });
+      return;
+    }
+    if (clerkAuthLoading) return;
+    if (!clerkAuthEnabled) {
+      if (user && !disabledSignOutAttemptedRef.current) {
+        disabledSignOutAttemptedRef.current = true;
+        void signOut().catch((error) => {
+          console.error("[auth] Clerk sign-out failed while auth was disabled", error);
+        });
+      }
+      return;
+    }
+    if (user) navigate({ to: redirectTo });
+  }, [loading, user, navigate, redirectTo, clerkAuthEnabled, clerkAuthLoading, signOut]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -149,14 +187,22 @@ function AuthPage() {
               <p className="mb-4 text-xs text-muted-foreground">
                 Apply for roles and track your applications.
               </p>
-              <CandidateForms redirectTo={redirectTo} />
+              <CandidateForms
+                redirectTo={redirectTo}
+                clerkAuthEnabled={clerkAuthEnabled}
+                clerkAuthLoading={clerkAuthLoading}
+              />
             </TabsContent>
 
             <TabsContent value="employee" className="mt-6">
               <div className="mb-4 rounded-lg border border-brand/30 bg-brand/5 p-3 text-xs text-foreground/80">
                 Restricted to Ciago Technologies staff. Use your corporate email.
               </div>
-              <EmployeeSignIn redirectTo={redirectTo === "/" ? "/employee" : redirectTo} />
+              <EmployeeSignIn
+                redirectTo={redirectTo === "/" ? "/employee" : redirectTo}
+                clerkAuthEnabled={clerkAuthEnabled}
+                clerkAuthLoading={clerkAuthLoading}
+              />
             </TabsContent>
           </Tabs>
 
@@ -165,11 +211,31 @@ function AuthPage() {
             <span className="h-px flex-1 bg-border" />
           </div>
 
-          <SocialButton provider="google" label="Continue with Google" />
+          <SocialButton
+            provider="google"
+            label="Continue with Google"
+            clerkAuthEnabled={clerkAuthEnabled}
+            clerkAuthLoading={clerkAuthLoading}
+          />
           <div className="h-2" />
-          <SocialButton provider="apple" label="Continue with Apple" />
+          <SocialButton
+            provider="apple"
+            label="Continue with Apple"
+            clerkAuthEnabled={clerkAuthEnabled}
+            clerkAuthLoading={clerkAuthLoading}
+          />
           <div className="h-2" />
-          <SocialButton provider="github" label="Continue with GitHub" />
+          <SocialButton
+            provider="github"
+            label="Continue with GitHub"
+            clerkAuthEnabled={clerkAuthEnabled}
+            clerkAuthLoading={clerkAuthLoading}
+          />
+          {FLAGS.USE_CLERK_AUTH && !clerkAuthLoading && !clerkAuthEnabled ? (
+            <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+              Authentication is currently disabled by feature flag. Please contact support.
+            </div>
+          ) : null}
         </div>
 
         <p className="mt-6 text-xs text-muted-foreground">
@@ -201,10 +267,20 @@ function AuthPage() {
 //     (the Clerk fragment is lazy-loaded, see `ClerkFormsLazy`).
 // ---------------------------------------------------------------------------
 
-function CandidateForms({ redirectTo }: { redirectTo: string }) {
+function CandidateForms({
+  redirectTo,
+  clerkAuthEnabled,
+  clerkAuthLoading,
+}: {
+  redirectTo: string;
+  clerkAuthEnabled: boolean;
+  clerkAuthLoading: boolean;
+}) {
   if (!FLAGS.USE_CLERK_AUTH) {
     return <LegacyCandidateForms redirectTo={redirectTo} />;
   }
+  if (clerkAuthLoading) return <FormsSkeleton />;
+  if (!clerkAuthEnabled) return <AuthDisabledCard />;
   return (
     <Suspense fallback={<FormsSkeleton />}>
       <ClerkCandidateForms redirectTo={redirectTo} />
@@ -212,8 +288,18 @@ function CandidateForms({ redirectTo }: { redirectTo: string }) {
   );
 }
 
-function EmployeeSignIn({ redirectTo }: { redirectTo: string }) {
+function EmployeeSignIn({
+  redirectTo,
+  clerkAuthEnabled,
+  clerkAuthLoading,
+}: {
+  redirectTo: string;
+  clerkAuthEnabled: boolean;
+  clerkAuthLoading: boolean;
+}) {
   if (!FLAGS.USE_CLERK_AUTH) return <LegacyEmployeeSignIn redirectTo={redirectTo} />;
+  if (clerkAuthLoading) return <FormsSkeleton />;
+  if (!clerkAuthEnabled) return <AuthDisabledCard />;
   return (
     <Suspense fallback={<FormsSkeleton />}>
       <ClerkEmployeeSignIn redirectTo={redirectTo} />
@@ -399,10 +485,28 @@ function LegacySignUpForm({ redirectTo }: { redirectTo: string }) {
 // ---------------------------------------------------------------------------
 // Social auth — flag-aware button using the same Clerk branch dispatcher.
 // ---------------------------------------------------------------------------
-function SocialButton({ provider, label }: { provider: SocialProvider; label: string }) {
+function SocialButton({
+  provider,
+  label,
+  clerkAuthEnabled,
+  clerkAuthLoading,
+}: {
+  provider: SocialProvider;
+  label: string;
+  clerkAuthEnabled: boolean;
+  clerkAuthLoading: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   if (!FLAGS.USE_CLERK_AUTH) {
     return <LegacySocialButton provider={provider} label={label} setBusy={setBusy} busy={busy} />;
+  }
+  if (clerkAuthLoading) return <ButtonSkeleton label={label} />;
+  if (!clerkAuthEnabled) {
+    return (
+      <Button type="button" variant="outline" disabled className="w-full justify-center">
+        {label}
+      </Button>
+    );
   }
   return (
     <Suspense fallback={<ButtonSkeleton label={label} />}>
@@ -494,6 +598,14 @@ function ButtonSkeleton({ label }: { label: string }) {
     <Button type="button" variant="outline" disabled className="w-full justify-center">
       {label}
     </Button>
+  );
+}
+
+function AuthDisabledCard() {
+  return (
+    <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+      Authentication is currently disabled by feature flag.
+    </div>
   );
 }
 

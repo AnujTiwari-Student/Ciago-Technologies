@@ -19,6 +19,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { FLAGS } from "@/lib/feature-flags";
+import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 
 declare global {
   interface Window {
@@ -36,6 +37,11 @@ export const Route = createFileRoute("/_authenticated")({
         throw redirect({ to: "/auth", search: { redirect: location.pathname } });
       }
       return { user: data.user };
+    }
+
+    const clerkAuthEnabled = await isClerkAuthEnabledFn();
+    if (!clerkAuthEnabled) {
+      throw redirect({ to: "/forbidden", search: { reason: "clerk_auth_disabled" } });
     }
 
     // Clerk branch: read the published token.

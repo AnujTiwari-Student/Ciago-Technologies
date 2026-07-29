@@ -67,6 +67,22 @@ export async function isFlagOn(
   }
 }
 
+async function isCriticalFlagOn(
+  key: FeatureKey,
+  target?: FlagTargetContext,
+  defaultValue = getCapabilityDefault(key),
+): Promise<boolean> {
+  const client = getConfigCatClient();
+  if (!client) return defaultValue;
+  try {
+    await client.forceRefreshAsync();
+    return await client.getValueAsync<boolean>(key, defaultValue, toTargetUser(target));
+  } catch (error) {
+    console.error("[configcat] Critical flag evaluation failed", key, error);
+    return defaultValue;
+  }
+}
+
 export async function getAllFeatureFlags(target?: FlagTargetContext): Promise<Capabilities> {
   const entries = await Promise.all(
     FEATURE_KEYS.map(async (key) => [key, await isFlagOn(key, target)] as const),
@@ -84,4 +100,12 @@ export function getDefaultCapabilities(): Capabilities {
  */
 export async function isDashboardEnabled(target?: FlagTargetContext): Promise<boolean> {
   return isFlagOn("dashboardEnabled", target, DEFAULT_CAPABILITIES.dashboardEnabled);
+}
+
+/**
+ * Authentication is security-critical. We force-refresh before evaluating it and
+ * deny by default when evaluation fails.
+ */
+export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isCriticalFlagOn("clerkAuthentication", target, DEFAULT_CAPABILITIES.clerkAuthentication);
 }

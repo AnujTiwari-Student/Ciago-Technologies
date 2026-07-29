@@ -28,6 +28,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { FLAGS } from "@/lib/feature-flags";
+import { isClerkAuthenticationEnabled } from "@/lib/feature-flags.server";
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
@@ -88,11 +89,19 @@ function buildUserClient(token: string) {
 export const requireSupabaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
     if (FLAGS.USE_CLERK_AUTH) {
+      await assertClerkAuthFeatureEnabledForServer();
       return clerkAuthBranch(next);
     }
     return legacySupabaseAuthBranch(next);
   },
 );
+
+export async function assertClerkAuthFeatureEnabledForServer(): Promise<void> {
+  const enabled = await isClerkAuthenticationEnabled();
+  if (!enabled) {
+    throw new Error("Unauthorized: Clerk authentication is disabled by feature flag");
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Legacy branch — USE_CLERK_AUTH is false. Identical behaviour to the

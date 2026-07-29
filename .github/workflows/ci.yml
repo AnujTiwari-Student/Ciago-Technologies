@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck, Lint, Test, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        # Pinned major; update intentionally.
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        # Needed for toolchain compatibility and future JS tooling.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.20"
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript type check
+        run: bunx tsc --noEmit
+
+      - name: ESLint
+        run: bun run lint
+
+      - name: Unit and integration tests
+        run: bun run test
+
+      - name: Build application
+        run: bun run build
+
+      - name: Upload build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build-output
+          path: |
+            .output
+          if-no-files-found: ignore
+
+      # Docker Build
+      # - name: Build Docker image
+      #   run: docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+      #
+      # - name: Tag Docker image (latest on main)
+      #   if: github.ref == 'refs/heads/main'
+      #   run: docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
+      #
+      # - name: Push Docker image
+      #   env:
+      #     CR_PAT: ${{ secrets.GITHUB_TOKEN }}
+      #   run: |
+      #     echo "$CR_PAT" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      #     docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+      #     if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+      #       docker push ghcr.io/${{ github.repository }}:latest
+      #     fi
+      #
+      # Deployment
+      # - name: Deploy to staging
+      #   if: github.ref == 'refs/heads/main'
+      #   env:
+      #     DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+      #   run: ./scripts/deploy-staging.sh
+      #
+      # - name: Deploy to production
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   env:
+      #     DEPLOY_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+      #   run: ./scripts/deploy-production.sh
