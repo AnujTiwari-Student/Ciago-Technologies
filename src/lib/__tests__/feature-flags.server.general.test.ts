@@ -28,7 +28,8 @@ describe("feature-flags.server general behavior", () => {
   it("evaluates dashboardEnabled using ConfigCat", async () => {
     const client: MockClient = {
       forceRefreshAsync: vi.fn(async () => {}),
-      getValueAsync: async <T>(key: string, _defaultValue: T) => (key === "dashboardEnabled" ? false : true) as T,
+      getValueAsync: async <T>(key: string, _defaultValue: T) =>
+        (key === "dashboardEnabled" ? false : true) as T,
     };
     getClientMock.mockReturnValue(client);
 

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch, Link, redirect } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -24,6 +24,11 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s) => searchSchema.parse(s),
+  beforeLoad: ({ context }) => {
+    if (!context.authButtonEnabled) {
+      throw redirect({ to: "/forbidden", search: { reason: "authentication_button_disabled" } });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Sign In — Ciago Technologies" },

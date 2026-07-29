@@ -37,6 +37,7 @@ export const FEATURE_FLAGS = {
   // -- Authentication --------------------------------------------------------
   // ConfigCat key: clerkAuthentication (confirmed ON in ConfigCat dashboard)
   clerkAuthentication: "clerkAuthentication",
+  authenticationButton: "authenticationButtonEnabled",
   // -- Dashboard -------------------------------------------------------------
   // Controls whether the authenticated dashboard UI surfaces are accessible.
   // When false, authenticated users are redirected to a maintenance/splash page.
@@ -70,6 +71,7 @@ export type Capabilities = Record<FeatureKey, boolean>;
 export const DEFAULT_CAPABILITIES: Capabilities = {
   // Authentication
   clerkAuthentication: false,
+  authenticationButtonEnabled: false,
   // Dashboard — on by default; flip off to show maintenance screen
   dashboardEnabled: true,
   // Portals

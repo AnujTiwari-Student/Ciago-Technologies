@@ -2,12 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   getAllFeatureFlags,
   getDefaultCapabilities,
+  isAuthenticationButtonEnabled,
   isClerkAuthenticationEnabled,
   isDashboardEnabled,
   isFlagOn,
 } from "@/lib/feature-flags.server";
 import { FEATURE_FLAGS, type Capabilities } from "@/lib/feature-flags";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { SupabaseClient } from "@supabase/supabase-js";
 
 /** Public � returns flags evaluated without a user context (global defaults + targeting). */
 export const getFeatureFlags = createServerFn({ method: "GET" }).handler(
@@ -23,15 +25,27 @@ export const getFeatureFlags = createServerFn({ method: "GET" }).handler(
 export const getMyFeatureFlags = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Capabilities> => {
-    const { data: roleRows, error } = await context.supabase
+    const ctx = context as unknown as
+      | {
+          supabase: SupabaseClient;
+          userId: string;
+          claims?: { email?: string };
+        }
+      | undefined;
+
+    if (!ctx) {
+      throw new Error("getMyFeatureFlags: missing auth context — middleware did not run");
+    }
+
+    const { data: roleRows, error } = await ctx.supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", context.userId);
+      .eq("user_id", ctx.userId);
     if (error) {
       throw new Error(`getMyFeatureFlags role lookup failed: ${error.message}`);
     }
 
-    const roles = new Set((roleRows ?? []).map((r) => (r as { role: string }).role));
+    const roles = new Set((roleRows ?? []).map((r: { role: string }) => r.role));
     const role =
       (roles.has("admin") && "admin") ||
       (roles.has("hr") && "hr") ||
@@ -39,10 +53,9 @@ export const getMyFeatureFlags = createServerFn({ method: "GET" })
       (roles.has("employee") && "employee") ||
       "user";
 
-    const claims = context.claims as { email?: string } | undefined;
     return getAllFeatureFlags({
-      identifier: context.userId,
-      email: claims?.email,
+      identifier: ctx.userId,
+      email: ctx.claims?.email,
       role,
       custom: { hasStaffAccess: role !== "user" },
     });
@@ -71,5 +84,12 @@ export const isDashboardEnabledFn = createServerFn({ method: "GET" }).handler(
 export const isClerkAuthEnabledFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<boolean> => {
     return isClerkAuthenticationEnabled();
+  },
+);
+
+/** Public server-side evaluation for the sign-in entry point. */
+export const isAuthButtonEnabledFn = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => {
+    return isAuthenticationButtonEnabled();
   },
 );

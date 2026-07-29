@@ -14,6 +14,7 @@ import { ThemeProvider } from "../lib/theme";
 import { AuthProvider } from "../lib/auth";
 import { ClerkProviderBoundary } from "@/integrations/clerk/client";
 import { useEnsureUserMapped } from "@/hooks/use-ensure-user-mapped";
+import { isAuthButtonEnabledFn } from "@/lib/feature-flags.functions";
 
 function NotFoundComponent() {
   return (
@@ -73,6 +74,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  beforeLoad: async () => ({
+    authButtonEnabled: await isAuthButtonEnabledFn(),
+  }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },

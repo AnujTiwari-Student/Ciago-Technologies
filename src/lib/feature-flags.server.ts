@@ -6,6 +6,7 @@ import {
   type Capabilities,
   type FeatureKey,
 } from "@/lib/feature-flags";
+import type { IUser } from "@configcat/sdk";
 
 type FlagTargetContext = {
   identifier?: string;
@@ -38,12 +39,12 @@ export function getConfigCatClient(): ReturnType<typeof getClient> | null {
   return clientSingleton;
 }
 
-function toTargetUser(target?: FlagTargetContext): Record<string, unknown> | undefined {
+function toTargetUser(target?: FlagTargetContext): IUser | undefined {
   if (!target) return undefined;
-  const identifier = target.identifier || target.email;
+  const identifier = target.identifier || target.email || "anonymous";
   if (!identifier && !target.custom && !target.role) return undefined;
   return {
-    identifier: identifier ?? "anonymous",
+    identifier: identifier,
     email: target.email,
     custom: {
       ...(target.custom ?? {}),
@@ -108,4 +109,17 @@ export async function isDashboardEnabled(target?: FlagTargetContext): Promise<bo
  */
 export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): Promise<boolean> {
   return isCriticalFlagOn("clerkAuthentication", target, DEFAULT_CAPABILITIES.clerkAuthentication);
+}
+
+/**
+ * Controls whether unauthenticated visitors can enter the sign-in flow.
+ * This is evaluated on the server so SSR never imports the browser-only
+ * ConfigCat React provider.
+ */
+export async function isAuthenticationButtonEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "authenticationButtonEnabled",
+    target,
+    DEFAULT_CAPABILITIES.authenticationButtonEnabled,
+  );
 }

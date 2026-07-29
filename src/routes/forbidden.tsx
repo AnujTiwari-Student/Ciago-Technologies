@@ -7,7 +7,16 @@ import { SiteFooter } from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 
 const searchSchema = z.object({
-  reason: z.enum(["corporate", "role", "doj"]).optional(),
+  reason: z
+    .enum([
+      "corporate",
+      "role",
+      "doj",
+      "dashboard_disabled",
+      "clerk_auth_disabled",
+      "authentication_button_disabled",
+    ])
+    .optional(),
 });
 
 export const Route = createFileRoute("/forbidden")({

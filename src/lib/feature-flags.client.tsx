@@ -63,6 +63,10 @@ export function useClerkAuthFlag(): readonly [boolean, boolean] {
   return useFlagSafe(FEATURE_FLAGS.clerkAuthentication);
 }
 
+export function useAuthenticationButtonFlag(): readonly [boolean, boolean] {
+  return useFlagSafe(FEATURE_FLAGS.authenticationButton);
+}
+
 export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Capabilities {
   return {
     clerkAuthentication:
@@ -93,5 +97,7 @@ export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Cap
     advancedAnalyticsEnabled:
       flags.advancedAnalyticsEnabled ?? getCapabilityDefault(FEATURE_FLAGS.advancedAnalytics),
     maintenanceMode: flags.maintenanceMode ?? getCapabilityDefault(FEATURE_FLAGS.maintenanceMode),
+    authenticationButtonEnabled:
+      flags.authenticationButtonEnabled ?? getCapabilityDefault(FEATURE_FLAGS.authenticationButton),
   };
 }

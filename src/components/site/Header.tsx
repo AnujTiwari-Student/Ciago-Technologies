@@ -25,6 +25,7 @@ import { useTheme } from "@/lib/theme";
 import { useAuth, displayName } from "@/lib/auth";
 import { NotificationBell } from "@/components/site/NotificationBell";
 import { useMyRoles } from "@/hooks/use-my-roles";
+import { Route as RootRoute } from "@/routes/__root";
 
 type NavItem = {
   label: string;
@@ -125,16 +126,20 @@ function AuthMenu({
   isHr,
   isManager,
   isEmployee,
+  authButtonEnabled,
 }: {
   isAdmin: boolean;
   isHr: boolean;
   isManager: boolean;
   isEmployee: boolean;
+  authButtonEnabled: boolean;
 }) {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+
   if (loading) return null;
   if (!user) {
+    if (!authButtonEnabled) return null;
     return (
       <Link
         to="/auth"
@@ -147,6 +152,7 @@ function AuthMenu({
   }
   const label = displayName(user);
   const isStaff = isAdmin || isHr || isManager || isEmployee;
+
   return (
     <div className="flex items-center gap-1">
       <NotificationBell />
@@ -173,13 +179,13 @@ function AuthMenu({
             </DropdownMenuItem>
           )}
           {isHr && !isAdmin && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/hr" as any })}>
+            <DropdownMenuItem onClick={() => navigate({ to: "/hr" })}>
               <ShieldCheck className="mr-2 h-4 w-4 text-brand" />
               HR Portal
             </DropdownMenuItem>
           )}
           {isManager && !isAdmin && !isHr && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/manager" as any })}>
+            <DropdownMenuItem onClick={() => navigate({ to: "/manager" })}>
               <ShieldCheck className="mr-2 h-4 w-4 text-brand" />
               Manager Portal
             </DropdownMenuItem>
@@ -224,6 +230,7 @@ function AuthMenu({
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const { authButtonEnabled } = RootRoute.useRouteContext();
   const { user } = useAuth();
   const { isAdmin, isHr, isManager, isEmployee } = useMyRoles();
 
@@ -254,7 +261,7 @@ export function SiteHeader() {
     <header className="glass-nav sticky top-0 z-50 w-full">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link
-          to={homeHref as any}
+          to={homeHref}
           className="flex min-w-0 items-center gap-2"
           aria-label="Ciago Technologies — Home"
         >
@@ -267,8 +274,8 @@ export function SiteHeader() {
             return (
               <Link
                 key={key}
-                to={item.to as any}
-                {...(item.search ? { search: item.search as any } : {})}
+                to={item.to}
+                {...(item.search ? { search: item.search } : {})}
                 className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 activeOptions={{ exact: true, includeSearch: !!item.search }}
                 activeProps={{ className: "text-brand", "aria-current": "page" }}
@@ -281,7 +288,13 @@ export function SiteHeader() {
 
         <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle />
-          <AuthMenu isAdmin={isAdmin} isHr={isHr} isManager={isManager} isEmployee={isEmployee} />
+          <AuthMenu
+            isAdmin={isAdmin}
+            isHr={isHr}
+            isManager={isManager}
+            isEmployee={isEmployee}
+            authButtonEnabled={authButtonEnabled}
+          />
           {!isStaff && (
             <Link
               to="/careers"
@@ -310,8 +323,8 @@ export function SiteHeader() {
               return (
                 <Link
                   key={key}
-                  to={item.to as any}
-                  {...(item.search ? { search: item.search as any } : {})}
+                  to={item.to}
+                  {...(item.search ? { search: item.search } : {})}
                   onClick={() => setOpen(false)}
                   className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-accent"
                   activeOptions={{ exact: true, includeSearch: !!item.search }}
@@ -322,7 +335,7 @@ export function SiteHeader() {
               );
             })}
 
-            {!user && (
+            {!user && authButtonEnabled && (
               <Link
                 to="/auth"
                 onClick={() => setOpen(false)}
