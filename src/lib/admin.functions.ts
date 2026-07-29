@@ -2,7 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const ALLOWED_STATUSES = ["applied", "screening", "interviewing", "offered", "hired", "rejected"] as const;
+const ALLOWED_STATUSES = [
+  "applied",
+  "screening",
+  "interviewing",
+  "offered",
+  "hired",
+  "rejected",
+] as const;
 
 export type AdminApplication = {
   id: string;
@@ -50,7 +57,6 @@ async function assertHrOrAdmin(supabase: any, userId: string) {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden");
 }
-
 
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -144,7 +150,12 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         actor_email: (context.claims as any)?.email ?? null,
         action: "APPLICATION_STATUS_UPDATED",
         target_resource: `job_applications/${data.id}`,
-        details: { from: prior.status, to: data.status, candidate_email: prior.email, role_title: prior.role_title } as any,
+        details: {
+          from: prior.status,
+          to: data.status,
+          candidate_email: prior.email,
+          role_title: prior.role_title,
+        } as any,
       });
 
       // 2) in-app notification (only if candidate has an auth user_id)
@@ -172,7 +183,6 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
-
 
 const deleteSchema = z.object({ id: z.string().uuid() });
 
@@ -221,19 +231,20 @@ export const listAllUsers = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id, role");
-    const adminSet = new Set((roles ?? []).filter((r: any) => r.role === "admin").map((r: any) => r.user_id));
+    const adminSet = new Set(
+      (roles ?? []).filter((r: any) => r.role === "admin").map((r: any) => r.user_id),
+    );
 
-    return usersData.users.map((u): AdminUser => ({
-      id: u.id,
-      email: u.email ?? null,
-      created_at: u.created_at,
-      last_sign_in_at: u.last_sign_in_at ?? null,
-      is_admin: adminSet.has(u.id),
-      full_name:
-        (u.user_metadata as any)?.full_name ||
-        (u.user_metadata as any)?.name ||
-        null,
-    }));
+    return usersData.users.map(
+      (u): AdminUser => ({
+        id: u.id,
+        email: u.email ?? null,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at ?? null,
+        is_admin: adminSet.has(u.id),
+        full_name: (u.user_metadata as any)?.full_name || (u.user_metadata as any)?.name || null,
+      }),
+    );
   });
 
 const roleSchema = z.object({
@@ -273,7 +284,6 @@ export const setUserAdminRole = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-
 // ============ Applicants grouped by role ============
 
 export type ApplicantByRole = {
@@ -305,7 +315,9 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
     await assertHrOrAdmin(context.supabase, context.userId);
     const { data: apps, error } = await context.supabase
       .from("job_applications")
-      .select("id, user_id, role_id, role_title, full_name, email, status, created_at, is_soft_deleted")
+      .select(
+        "id, user_id, role_id, role_title, full_name, email, status, created_at, is_soft_deleted",
+      )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 

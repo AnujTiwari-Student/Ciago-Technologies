@@ -19,7 +19,10 @@ export const Route = createFileRoute("/cookies")({
           "Review the cookies used across the Ciago Technologies website and update your preferences at any time.",
       },
       { property: "og:title", content: "Cookie Settings — Ciago Technologies" },
-      { property: "og:description", content: "Manage your cookie preferences for Ciago Technologies." },
+      {
+        property: "og:description",
+        content: "Manage your cookie preferences for Ciago Technologies.",
+      },
       { property: "og:type", content: "article" },
       { property: "og:url", content: "/cookies" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -40,14 +43,18 @@ function CookiesPage() {
     try {
       const raw = window.localStorage.getItem(KEY);
       if (raw) setPrefs({ ...defaults, ...JSON.parse(raw) });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   function save(next: Prefs) {
     setPrefs(next);
     try {
       window.localStorage.setItem(KEY, JSON.stringify(next));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     toast.success("Cookie preferences saved.");
   }
 
@@ -57,8 +64,9 @@ function CookiesPage() {
       <LegalLayout title="Cookie Settings" updated="July 2026">
         <LegalSection heading="About cookies on this site">
           <p>
-            We use a small number of cookies and equivalent technologies to keep the site working, to
-            remember your theme preference, and — with your consent — to understand aggregate usage.
+            We use a small number of cookies and equivalent technologies to keep the site working,
+            to remember your theme preference, and — with your consent — to understand aggregate
+            usage.
           </p>
         </LegalSection>
 

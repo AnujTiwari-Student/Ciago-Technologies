@@ -30,7 +30,10 @@ export const Route = createFileRoute("/_authenticated/my-applications")({
   head: () => ({
     meta: [
       { title: "My Applications | Ciago Technologies" },
-      { name: "description", content: "Track the status of your Ciago Technologies job applications." },
+      {
+        name: "description",
+        content: "Track the status of your Ciago Technologies job applications.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -38,12 +41,30 @@ export const Route = createFileRoute("/_authenticated/my-applications")({
 });
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  applied: { label: "Applied", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" },
-  screening: { label: "Screening", className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30" },
-  interviewing: { label: "Interviewing", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30" },
-  offered: { label: "Offer Extended", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
-  hired: { label: "Hired", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30" },
-  rejected: { label: "Not Progressing", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
+  applied: {
+    label: "Applied",
+    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  },
+  screening: {
+    label: "Screening",
+    className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
+  },
+  interviewing: {
+    label: "Interviewing",
+    className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+  },
+  offered: {
+    label: "Offer Extended",
+    className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  },
+  hired: {
+    label: "Hired",
+    className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+  },
+  rejected: {
+    label: "Not Progressing",
+    className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+  },
 };
 
 function MyApplicationsPage() {
@@ -66,8 +87,7 @@ function MyApplicationsPage() {
   const onboardingComplete =
     isStaff ||
     (!!onboarding?.onboarding &&
-      (onboarding.onboarding.verification_status === "approved" ||
-        !!onboarding.onboarding.doj));
+      (onboarding.onboarding.verification_status === "approved" || !!onboarding.onboarding.doj));
 
   const withdrawMutation = useMutation({
     mutationFn: (id: string) => withdrawFn({ data: { id } }),
@@ -104,13 +124,21 @@ function MyApplicationsPage() {
                 <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                   🎉 Offer extended
                 </p>
-                <h2 className="mt-1 text-lg font-bold">Complete your onboarding & accept your offer</h2>
+                <h2 className="mt-1 text-lg font-bold">
+                  Complete your onboarding & accept your offer
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Review your offer letter, submit onboarding details and unlock the Employee Portal.
+                  Review your offer letter, submit onboarding details and unlock the Employee
+                  Portal.
                 </p>
               </div>
-              <Button asChild className="shrink-0 bg-brand text-brand-foreground hover:bg-brand-glow">
-                <Link to="/onboarding">Complete onboarding <ArrowUpRight className="ml-1 h-4 w-4" /></Link>
+              <Button
+                asChild
+                className="shrink-0 bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
+                <Link to="/onboarding">
+                  Complete onboarding <ArrowUpRight className="ml-1 h-4 w-4" />
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -129,11 +157,18 @@ function MyApplicationsPage() {
                     : "Awaiting your Date of Joining"}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  HR is verifying your documents. Open the Employee Portal for a live countdown and onboarding status.
+                  HR is verifying your documents. Open the Employee Portal for a live countdown and
+                  onboarding status.
                 </p>
               </div>
-              <Button asChild variant="outline" className="shrink-0 border-brand/40 text-brand hover:bg-brand/10">
-                <Link to="/employee">Open Employee Portal <ArrowUpRight className="ml-1 h-4 w-4" /></Link>
+              <Button
+                asChild
+                variant="outline"
+                className="shrink-0 border-brand/40 text-brand hover:bg-brand/10"
+              >
+                <Link to="/employee">
+                  Open Employee Portal <ArrowUpRight className="ml-1 h-4 w-4" />
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -143,7 +178,10 @@ function MyApplicationsPage() {
           {isLoading ? (
             <div className="grid gap-4">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+                <div
+                  key={i}
+                  className="h-28 animate-pulse rounded-xl border border-border bg-card"
+                />
               ))}
             </div>
           ) : error ? (
@@ -173,7 +211,7 @@ function MyApplicationsPage() {
                 const isSoftDeleted = a.is_soft_deleted;
                 const meta = isSoftDeleted
                   ? STATUS_META.rejected
-                  : STATUS_META[a.status] ?? STATUS_META.applied;
+                  : (STATUS_META[a.status] ?? STATUS_META.applied);
                 const canWithdraw = a.status === "applied" && !isSoftDeleted;
                 const isPendingWithdraw =
                   withdrawMutation.isPending && withdrawMutation.variables === a.id;
@@ -182,8 +220,7 @@ function MyApplicationsPage() {
                       0,
                       90 -
                         Math.floor(
-                          (Date.now() - new Date(a.deleted_at).getTime()) /
-                            (24 * 60 * 60 * 1000),
+                          (Date.now() - new Date(a.deleted_at).getTime()) / (24 * 60 * 60 * 1000),
                         ),
                     )
                   : null;
@@ -218,7 +255,12 @@ function MyApplicationsPage() {
                         )}
                         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Clock className="h-3.5 w-3.5" />
-                          Submitted {new Date(a.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                          Submitted{" "}
+                          {new Date(a.created_at).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
                         </p>
                         {(() => {
                           const cooldownMs = new Date(a.next_eligible_at).getTime() - Date.now();
@@ -226,15 +268,23 @@ function MyApplicationsPage() {
                           const cdDays = Math.max(1, Math.ceil(cooldownMs / (24 * 60 * 60 * 1000)));
                           return (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Re-apply eligible in <span className="font-semibold text-foreground">{cdDays} day{cdDays === 1 ? "" : "s"}</span>
+                              Re-apply eligible in{" "}
+                              <span className="font-semibold text-foreground">
+                                {cdDays} day{cdDays === 1 ? "" : "s"}
+                              </span>
                               {" · "}
-                              {new Date(a.next_eligible_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              {new Date(a.next_eligible_at).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
                             </p>
                           );
                         })()}
                         {isSoftDeleted && daysLeft !== null && (
                           <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
-                            This record will be permanently removed in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
+                            This record will be permanently removed in {daysLeft} day
+                            {daysLeft === 1 ? "" : "s"}.
                           </p>
                         )}
                         {a.portfolio_url && !isSoftDeleted && (
@@ -266,8 +316,11 @@ function MyApplicationsPage() {
                               <AlertDialogTitle>Withdraw your application?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 We'll immediately remove your application for{" "}
-                                <span className="font-semibold text-foreground">{a.role_title}</span>{" "}
-                                and delete your uploaded resume from our storage. You can re-apply anytime while the role is open.
+                                <span className="font-semibold text-foreground">
+                                  {a.role_title}
+                                </span>{" "}
+                                and delete your uploaded resume from our storage. You can re-apply
+                                anytime while the role is open.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

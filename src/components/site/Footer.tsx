@@ -50,7 +50,6 @@ const cols: Col[] = [
   },
 ];
 
-
 const socials: { label: string; href: string; Icon: typeof Github }[] = [
   { label: "GitHub", href: "https://github.com/", Icon: Github },
   { label: "LinkedIn", href: "https://www.linkedin.com/", Icon: Linkedin },

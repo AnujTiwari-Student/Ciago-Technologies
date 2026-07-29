@@ -1,6 +1,6 @@
 # ConfigCat Feature Flag Architecture & Implementation Plan
 
-> **Project:** Ciago Spark
+> **Project:** Ciago Technologies
 > **Phase:** 3 — ConfigCat Feature Flag Planning
 > **Deliverable:** `feature-flags.md`
 > **Status:** Configuration packages installed (`@configcat/sdk`, `configcat-react`); integration NOT yet implemented. This document is the plan.
@@ -11,7 +11,7 @@
 
 # 1. Executive Summary
 
-Ciago Spark has a nascent feature-flag system. The `USE_CLERK_AUTH` boolean flag (an environment-variable-driven runtime toggle) is the only active flag wired through the codebase. A `FEATURE_FLAGS` constant maps 15 named capability keys — but these are **string labels**, not runtime-evaluated toggles: no code reads them from ConfigCat, no component gates on them. The `@configcat/sdk` and `configcat-react` packages are installed but not integrated; `src/lib/feature-flags.server.ts` is an empty file intended for server-side evaluation.
+Ciago Technologies has a nascent feature-flag system. The `USE_CLERK_AUTH` boolean flag (an environment-variable-driven runtime toggle) is the only active flag wired through the codebase. A `FEATURE_FLAGS` constant maps 15 named capability keys — but these are **string labels**, not runtime-evaluated toggles: no code reads them from ConfigCat, no component gates on them. The `@configcat/sdk` and `configcat-react` packages are installed but not integrated; `src/lib/feature-flags.server.ts` is an empty file intended for server-side evaluation.
 
 This document covers:
 - the existing flag surface and its limitations

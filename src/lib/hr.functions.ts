@@ -138,12 +138,12 @@ export const listOnboardingQueue = createServerFn({ method: "GET" })
     const appMap = new Map((apps ?? []).map((a: any) => [a.id, a]));
     const roleIds = Array.from(new Set((apps ?? []).map((a: any) => a.role_id).filter(Boolean)));
     const postings = roleIds.length
-      ? (
+      ? ((
           await context.supabase
             .from("job_postings")
             .select("id, job_code, track_type, employment_type")
             .in("id", roleIds)
-        ).data ?? []
+        ).data ?? [])
       : [];
     const postingMap = new Map(postings.map((p: any) => [p.id, p]));
 
@@ -154,7 +154,10 @@ export const listOnboardingQueue = createServerFn({ method: "GET" })
       .select("onboarding_id, status")
       .in("onboarding_id", ids)
       .is("superseded_at", null);
-    const docsAgg = new Map<string, { total: number; approved: number; pending: number; issues: number }>();
+    const docsAgg = new Map<
+      string,
+      { total: number; approved: number; pending: number; issues: number }
+    >();
     for (const d of (docs ?? []) as any[]) {
       const agg = docsAgg.get(d.onboarding_id) ?? { total: 0, approved: 0, pending: 0, issues: 0 };
       agg.total++;
@@ -233,7 +236,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
 
     // Signed URLs for HR review (private bucket, valid 15 minutes).
     const documents: OnboardingDocDetail[] = [];
-    for (const d of ((docs ?? []) as any[])) {
+    for (const d of (docs ?? []) as any[]) {
       let signed: string | null = null;
       try {
         const { data: s } = await context.supabase.storage
@@ -293,8 +296,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
         full_name: (app as any)?.full_name ?? null,
         job_code: (posting as any)?.job_code ?? null,
       },
-      required_docs:
-        ((posting as any)?.required_onboarding_docs as string[] | null) ?? [],
+      required_docs: ((posting as any)?.required_onboarding_docs as string[] | null) ?? [],
       documents,
       audit: (audit ?? []) as OnboardingAuditEntry[],
     };
@@ -310,7 +312,11 @@ function docStatusEmail(
   feedback: string | null,
 ) {
   const label =
-    status === "approved" ? "Approved" : status === "changes_requested" ? "Changes requested" : "Rejected";
+    status === "approved"
+      ? "Approved"
+      : status === "changes_requested"
+        ? "Changes requested"
+        : "Rejected";
   const intro =
     status === "approved"
       ? `Good news — your <strong>${docName}</strong> has been approved by our HR team.`
@@ -441,7 +447,7 @@ export const reviewOnboardingDocument = createServerFn({ method: "POST" })
         to: data.status,
         feedback: data.feedback ?? null,
         candidate_email: (app as any)?.email ?? null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     });
 
@@ -564,7 +570,8 @@ export const bulkReviewOnboardingDocuments = createServerFn({ method: "POST" })
         feedback: data.feedback ?? null,
         document_ids: list.map((d) => d.id),
         doc_keys: list.map((d) => d.doc_key),
-        candidate_email: (appMap.get((recMap.get(onbId) as any)?.application_id) as any)?.email ?? null,
+        candidate_email:
+          (appMap.get((recMap.get(onbId) as any)?.application_id) as any)?.email ?? null,
       } as any,
     }));
     if (auditPayload.length > 0) {
@@ -681,7 +688,7 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
         from: priorDoj,
         to: data.doj,
         candidate_email: (app as any)?.email ?? null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     });
 
@@ -740,7 +747,7 @@ export const setOnboardingVerification = createServerFn({ method: "POST" })
       .from("onboarding_records")
       .update({
         verification_status: data.status,
-        rejection_feedback: data.status === "approved" ? null : data.feedback ?? null,
+        rejection_feedback: data.status === "approved" ? null : (data.feedback ?? null),
         verified_by: data.status === "approved" ? context.userId : null,
         verified_at: data.status === "approved" ? new Date().toISOString() : null,
       })
@@ -765,7 +772,7 @@ export const setOnboardingVerification = createServerFn({ method: "POST" })
         to: data.status,
         feedback: data.feedback ?? null,
         candidate_email: (app as any)?.email ?? null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     });
 
@@ -853,12 +860,14 @@ export const listDocumentVersions = createServerFn({ method: "POST" })
     await assertHrOrAdmin(context.supabase, context.userId);
     const { data: rows } = await (context.supabase as any)
       .from("onboarding_documents")
-      .select("id, version, status, feedback, original_filename, storage_path, created_at, superseded_at")
+      .select(
+        "id, version, status, feedback, original_filename, storage_path, created_at, superseded_at",
+      )
       .eq("onboarding_id", data.onboarding_id)
       .eq("doc_key", data.doc_key)
       .order("version", { ascending: false });
     const out: OnboardingDocVersion[] = [];
-    for (const r of ((rows ?? []) as any[])) {
+    for (const r of (rows ?? []) as any[]) {
       let signed: string | null = null;
       try {
         const { data: s } = await context.supabase.storage

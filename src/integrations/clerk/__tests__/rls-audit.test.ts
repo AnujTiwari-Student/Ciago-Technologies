@@ -86,7 +86,10 @@ describe("Step 13 — RLS preservation invariant", () => {
     }
     if (findings.length > 0) {
       const summary = findings
-        .map((f) => `  - ${f.file} :: "${f.policy}"\n      USING: ${f.using ?? "(none)"}\n      WITH CHECK: ${f.check ?? "(none)"}`)
+        .map(
+          (f) =>
+            `  - ${f.file} :: "${f.policy}"\n      USING: ${f.using ?? "(none)"}\n      WITH CHECK: ${f.check ?? "(none)"}`,
+        )
         .join("\n");
       throw new Error(
         `${findings.length} RLS policies don't route through auth.uid() —\n` +

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -27,25 +27,32 @@ import {
   updateOnboardingStep,
   type OnboardingDocument,
 } from "@/lib/onboarding.functions";
+import { requireAuthenticated } from "./-guard";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   ssr: false,
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth", search: { redirect: "/onboarding" } });
-    return { userId: data.user.id };
+    const { userId } = await requireAuthenticated("/onboarding");
+    return { userId: userId! };
   },
   head: () => ({
     meta: [
       { title: "Onboarding | Ciago Technologies" },
-      { name: "description", content: "Complete your offer acceptance and onboarding paperwork with Ciago Technologies." },
+      {
+        name: "description",
+        content: "Complete your offer acceptance and onboarding paperwork with Ciago Technologies.",
+      },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
   component: OnboardingPage,
 });
 
-const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+const inr = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
 
 function OnboardingPage() {
   const qc = useQueryClient();
@@ -84,9 +91,11 @@ function OnboardingPage() {
 
     // Restore emergency contact from either the persisted column or the draft form_state.
     const fs = (rec.form_state ?? {}) as Record<string, unknown>;
-    const ec = (rec.emergency_contact ?? (fs.emergency_contact as any)) as
-      | { name?: string; relation?: string; phone?: string }
-      | null;
+    const ec = (rec.emergency_contact ?? (fs.emergency_contact as any)) as {
+      name?: string;
+      relation?: string;
+      phone?: string;
+    } | null;
     if (ec) {
       setEmergencyName(ec.name ?? "");
       setEmergencyRelation(ec.relation ?? "");
@@ -139,7 +148,15 @@ function OnboardingPage() {
     }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emergencyName, emergencyRelation, emergencyPhone, idAck, codeAck, hydrated, offer?.onboarding?.id]);
+  }, [
+    emergencyName,
+    emergencyRelation,
+    emergencyPhone,
+    idAck,
+    codeAck,
+    hydrated,
+    offer?.onboarding?.id,
+  ]);
 
   const acceptM = useMutation({
     mutationFn: () => acceptFn({ data: { application_id: offer!.application_id } }),
@@ -165,7 +182,11 @@ function OnboardingPage() {
       paperworkFn({
         data: {
           onboarding_id: offer!.onboarding!.id,
-          emergency_contact: { name: emergencyName, relation: emergencyRelation, phone: emergencyPhone },
+          emergency_contact: {
+            name: emergencyName,
+            relation: emergencyRelation,
+            phone: emergencyPhone,
+          },
           id_ack: true as const,
           code_of_conduct_ack: true as const,
         },
@@ -190,7 +211,8 @@ function OnboardingPage() {
   });
 
   const compensation = useMemo(() => {
-    const seed = (offer?.application_id ?? "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) || 1;
+    const seed =
+      (offer?.application_id ?? "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) || 1;
     return 600000 + (seed % 220) * 10000;
   }, [offer?.application_id]);
 
@@ -219,11 +241,20 @@ function OnboardingPage() {
 
   const trackBadge =
     offer?.track_type === "hr_track"
-      ? { label: "HR Track", cls: "bg-fuchsia-500/15 text-fuchsia-600 border-fuchsia-500/30 dark:text-fuchsia-300" }
+      ? {
+          label: "HR Track",
+          cls: "bg-fuchsia-500/15 text-fuchsia-600 border-fuchsia-500/30 dark:text-fuchsia-300",
+        }
       : offer?.track_type === "manager_track"
-        ? { label: "Manager Track", cls: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30 dark:text-indigo-300" }
+        ? {
+            label: "Manager Track",
+            cls: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30 dark:text-indigo-300",
+          }
         : offer?.track_type === "standard"
-          ? { label: "Standard Track", cls: "bg-sky-500/15 text-sky-600 border-sky-500/30 dark:text-sky-300" }
+          ? {
+              label: "Standard Track",
+              cls: "bg-sky-500/15 text-sky-600 border-sky-500/30 dark:text-sky-300",
+            }
           : null;
   const employmentBadge = offer?.employment_type
     ? offer.employment_type.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -234,7 +265,9 @@ function OnboardingPage() {
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <p className="text-sm font-semibold uppercase tracking-widest text-brand">Onboarding</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Welcome — let's get you set up</h1>
+        <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+          Welcome — let's get you set up
+        </h1>
         <p className="mt-2 text-muted-foreground">
           Review your offer, upload your documents, and unlock the Employee Portal.
         </p>
@@ -298,10 +331,14 @@ function OnboardingPage() {
                 {step === 1 && (
                   <div className="space-y-6">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-widest text-brand">Offer Letter</p>
+                      <p className="text-xs font-semibold uppercase tracking-widest text-brand">
+                        Offer Letter
+                      </p>
                       <h2 className="mt-1 text-2xl font-bold">{offer.role_title}</h2>
                       {offer.job_code && (
-                        <Badge variant="outline" className="mt-2 font-mono text-[11px]">{offer.job_code}</Badge>
+                        <Badge variant="outline" className="mt-2 font-mono text-[11px]">
+                          {offer.job_code}
+                        </Badge>
                       )}
                     </div>
                     <div className="grid gap-4 rounded-xl border border-border bg-muted/30 p-5 sm:grid-cols-2">
@@ -339,7 +376,11 @@ function OnboardingPage() {
                         <FileSignature className="mr-2 h-4 w-4" />
                         {acceptM.isPending ? "Signing…" : "Accept & Sign"}
                       </Button>
-                      <Button variant="outline" onClick={() => declineM.mutate()} disabled={declineM.isPending}>
+                      <Button
+                        variant="outline"
+                        onClick={() => declineM.mutate()}
+                        disabled={declineM.isPending}
+                      >
                         <XCircle className="mr-2 h-4 w-4" /> Decline
                       </Button>
                     </div>
@@ -365,7 +406,9 @@ function OnboardingPage() {
                               : ""}
                         </span>
                       </div>
-                      <h2 className="mt-1 text-xl font-bold">Upload documents and share your details</h2>
+                      <h2 className="mt-1 text-xl font-bold">
+                        Upload documents and share your details
+                      </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
                         Every field is saved automatically — come back any time to finish.
                       </p>

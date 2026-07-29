@@ -95,6 +95,9 @@ import {
 } from "@/lib/resignation.functions";
 import { getMyOnboarding } from "@/lib/onboarding.functions";
 import { DojHoldingScreen, shouldShowDojHold } from "@/components/site/DojHoldingScreen";
+import { FLAGS } from "@/lib/feature-flags";
+import { getMyEmployeeAccess } from "@/lib/roles.functions";
+import { requireRoles } from "./-guard";
 
 // ============================================================
 // Route + access gate (employee OR admin)
@@ -104,41 +107,58 @@ export const Route = createFileRoute("/_authenticated/employee")({
   validateSearch: zodValidator(
     z.object({
       tab: fallback(
-        z.enum(["overview", "tasks", "timesheets", "attendance", "leave", "payroll", "referrals", "mobility", "exit", "settings"]).optional(),
+        z
+          .enum([
+            "overview",
+            "tasks",
+            "timesheets",
+            "attendance",
+            "leave",
+            "payroll",
+            "referrals",
+            "mobility",
+            "exit",
+            "settings",
+          ])
+          .optional(),
         undefined,
       ),
     }),
   ),
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth", search: { redirect: "/employee" } });
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
-    const set = new Set((roles ?? []).map((r: any) => r.role));
-    // Elevated staff never see the plain employee view — bounce them to their own portal.
-    if (set.has("admin")) throw redirect({ to: "/admin" });
-    if (set.has("hr")) throw redirect({ to: "/hr" as any });
-    if (set.has("manager")) throw redirect({ to: "/manager" as any });
-    // Pre-DOJ candidates (offer accepted / paperwork submitted, no staff role yet)
-    // are permitted through so we can render the DOJ holding screen inside the
-    // component. If they have neither role nor onboarding, forbid.
-    if (!set.has("employee")) {
+    if (FLAGS.USE_CLERK_AUTH) {
+      const access = await getMyEmployeeAccess();
+      if (access.isAdmin) throw redirect({ to: "/admin" });
+      if (access.isHr) throw redirect({ to: "/hr" as any });
+      if (access.isManager) throw redirect({ to: "/manager" as any });
+      if (!access.isEmployee && !access.hasPreDojOnboarding) {
+        throw redirect({ to: "/forbidden", search: { reason: "role" } });
+      }
+      return { currentUserId: access.userId };
+    }
+
+    const { userId, roles } = await requireRoles("/employee");
+    if (roles.has("admin")) throw redirect({ to: "/admin" });
+    if (roles.has("hr")) throw redirect({ to: "/hr" as any });
+    if (roles.has("manager")) throw redirect({ to: "/manager" as any });
+    if (!roles.has("employee")) {
       const { data: onb } = await supabase
         .from("onboarding_records")
         .select("id, status")
-        .eq("user_id", data.user.id)
+        .eq("user_id", userId)
         .in("status", ["accepted", "submitted"])
         .maybeSingle();
       if (!onb) throw redirect({ to: "/forbidden", search: { reason: "role" } });
     }
-    return { currentUserId: data.user.id };
+    return { currentUserId: userId };
   },
   head: () => ({
     meta: [
       { title: "Employee Portal | Ciago Technologies" },
-      { name: "description", content: "Ciago Technologies internal staff portal — tasks, timesheets, referrals." },
+      {
+        name: "description",
+        content: "Ciago Technologies internal staff portal — tasks, timesheets, referrals.",
+      },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -146,10 +166,22 @@ export const Route = createFileRoute("/_authenticated/employee")({
 });
 
 const TASK_STATUS: Record<EmployeeTask["status"], { label: string; className: string }> = {
-  to_do: { label: "To Do", className: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30" },
-  in_progress: { label: "In Progress", className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30" },
-  blocked: { label: "Blocked", className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30" },
-  done: { label: "Done", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
+  to_do: {
+    label: "To Do",
+    className: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
+  },
+  in_progress: {
+    label: "In Progress",
+    className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
+  },
+  blocked: {
+    label: "Blocked",
+    className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+  },
+  done: {
+    label: "Done",
+    className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  },
 };
 
 const PRIORITY_STYLE: Record<EmployeeTask["priority"], string> = {
@@ -167,16 +199,66 @@ const REFERRAL_STYLE: Record<Referral["referral_status"], string> = {
 };
 
 const NAV = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard, desc: "Today's schedule and pending work at a glance." },
-  { key: "tasks", label: "My Tasks", icon: ClipboardList, desc: "Active deliverables and Kanban workspace." },
-  { key: "timesheets", label: "Timesheets", icon: CalendarClock, desc: "Log hours against active projects." },
-  { key: "attendance", label: "Attendance", icon: Clock, desc: "Daily check-in / out and regularization." },
-  { key: "leave", label: "Leave & PTO", icon: CalendarDays, desc: "Request time off and track approvals." },
-  { key: "payroll", label: "Payroll", icon: Receipt, desc: "Monthly salary slips and compensation." },
-  { key: "referrals", label: "Referral Hub", icon: UserPlus, desc: "Refer candidates for open roles." },
-  { key: "mobility", label: "Internal Careers", icon: Briefcase, desc: "Explore open roles across Ciago." },
-  { key: "exit", label: "Resignation", icon: LogOut, desc: "Submit or track your last working day request." },
-  { key: "settings", label: "Settings", icon: Settings, desc: "Professional profile and preferences." },
+  {
+    key: "overview",
+    label: "Overview",
+    icon: LayoutDashboard,
+    desc: "Today's schedule and pending work at a glance.",
+  },
+  {
+    key: "tasks",
+    label: "My Tasks",
+    icon: ClipboardList,
+    desc: "Active deliverables and Kanban workspace.",
+  },
+  {
+    key: "timesheets",
+    label: "Timesheets",
+    icon: CalendarClock,
+    desc: "Log hours against active projects.",
+  },
+  {
+    key: "attendance",
+    label: "Attendance",
+    icon: Clock,
+    desc: "Daily check-in / out and regularization.",
+  },
+  {
+    key: "leave",
+    label: "Leave & PTO",
+    icon: CalendarDays,
+    desc: "Request time off and track approvals.",
+  },
+  {
+    key: "payroll",
+    label: "Payroll",
+    icon: Receipt,
+    desc: "Monthly salary slips and compensation.",
+  },
+  {
+    key: "referrals",
+    label: "Referral Hub",
+    icon: UserPlus,
+    desc: "Refer candidates for open roles.",
+  },
+  {
+    key: "mobility",
+    label: "Internal Careers",
+    icon: Briefcase,
+    desc: "Explore open roles across Ciago.",
+  },
+  {
+    key: "exit",
+    label: "Resignation",
+    icon: LogOut,
+    desc: "Submit or track your last working day request.",
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    icon: Settings,
+    desc: "Professional profile and preferences.",
+  },
 ] as const;
 
 type TabKey = (typeof NAV)[number]["key"];
@@ -226,7 +308,9 @@ function EmployeePage() {
             <div>
               <div className="flex items-center gap-2 text-brand">
                 <Sparkles className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-[0.2em]">Employee Portal</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.2em]">
+                  Employee Portal
+                </span>
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 Welcome back{user ? `, ${displayName(user).split(" ")[0]}` : ""}
@@ -241,7 +325,10 @@ function EmployeePage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[240px_1fr]">
           {/* Sidebar */}
           <aside className="lg:sticky lg:top-24 lg:self-start">
-            <nav className="grid gap-1 rounded-2xl border border-border bg-card p-2" aria-label="Employee">
+            <nav
+              className="grid gap-1 rounded-2xl border border-border bg-card p-2"
+              aria-label="Employee"
+            >
               {NAV.map((item) => {
                 const isActive = active === item.key;
                 const Icon = item.icon;
@@ -258,7 +345,6 @@ function EmployeePage() {
                 );
               })}
             </nav>
-
           </aside>
 
           {/* Panel */}
@@ -267,7 +353,9 @@ function EmployeePage() {
               <h2 className="text-xl font-bold tracking-tight">
                 {NAV.find((n) => n.key === active)?.label}
               </h2>
-              <p className="text-sm text-muted-foreground">{NAV.find((n) => n.key === active)?.desc}</p>
+              <p className="text-sm text-muted-foreground">
+                {NAV.find((n) => n.key === active)?.desc}
+              </p>
             </div>
 
             {active === "overview" ? (
@@ -310,9 +398,13 @@ function OverviewPanel() {
   const ts = useQuery({ queryKey: ["emp-timesheets"], queryFn: () => fetchTs() });
 
   const pending = (tasks.data ?? []).filter((t) => t.status !== "done").length;
-  const urgent = (tasks.data ?? []).filter((t) => t.priority === "urgent" && t.status !== "done").length;
+  const urgent = (tasks.data ?? []).filter(
+    (t) => t.priority === "urgent" && t.status !== "done",
+  ).length;
   const today = new Date().toISOString().slice(0, 10);
-  const todayHours = (ts.data ?? []).filter((t) => t.date === today).reduce((a, b) => a + Number(b.hours_logged), 0);
+  const todayHours = (ts.data ?? [])
+    .filter((t) => t.date === today)
+    .reduce((a, b) => a + Number(b.hours_logged), 0);
   const weekHours = (ts.data ?? [])
     .filter((t) => {
       const d = new Date(t.date);
@@ -326,7 +418,12 @@ function OverviewPanel() {
     { label: "Pending Tasks", value: pending, icon: ClipboardList, accent: "text-sky-500" },
     { label: "Urgent Tasks", value: urgent, icon: Sparkles, accent: "text-rose-500" },
     { label: "Hours Today", value: todayHours.toFixed(1), icon: Clock, accent: "text-brand" },
-    { label: "Hours (7d)", value: weekHours.toFixed(1), icon: CalendarClock, accent: "text-emerald-500" },
+    {
+      label: "Hours (7d)",
+      value: weekHours.toFixed(1),
+      icon: CalendarClock,
+      accent: "text-emerald-500",
+    },
   ];
   const isLoading = tasks.isLoading || ts.isLoading;
 
@@ -335,12 +432,17 @@ function OverviewPanel() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {metrics.map((m) =>
           isLoading ? (
-            <div key={m.label} className="h-24 animate-pulse rounded-2xl border border-border bg-card" />
+            <div
+              key={m.label}
+              className="h-24 animate-pulse rounded-2xl border border-border bg-card"
+            />
           ) : (
             <Card key={m.label} className="border-border bg-card">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{m.label}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {m.label}
+                  </p>
                   <m.icon className={`h-4 w-4 ${m.accent}`} />
                 </div>
                 <p className="mt-3 text-3xl font-black leading-none tracking-tight">{m.value}</p>
@@ -353,21 +455,31 @@ function OverviewPanel() {
       <Card className="border-border">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Today's Schedule</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+              Today's Schedule
+            </h3>
             <Badge variant="outline">{today}</Badge>
           </div>
           {isLoading ? (
             <div className="mt-4 h-16 animate-pulse rounded-lg bg-muted" />
           ) : (tasks.data ?? []).filter((t) => t.due_date === today).length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">Nothing due today — a clean canvas. Great time for deep work.</p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Nothing due today — a clean canvas. Great time for deep work.
+            </p>
           ) : (
             <ul className="mt-4 grid gap-2">
               {(tasks.data ?? [])
                 .filter((t) => t.due_date === today)
                 .map((t) => (
-                  <li key={t.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <li
+                    key={t.id}
+                    className="flex items-center justify-between rounded-lg border border-border p-3"
+                  >
                     <span className="text-sm font-medium">{t.title}</span>
-                    <Badge variant="outline" className={`border ${TASK_STATUS[t.status].className}`}>
+                    <Badge
+                      variant="outline"
+                      className={`border ${TASK_STATUS[t.status].className}`}
+                    >
                       {TASK_STATUS[t.status].label}
                     </Badge>
                   </li>
@@ -379,10 +491,13 @@ function OverviewPanel() {
 
       <Card className="border-border">
         <CardContent className="p-6">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Company Announcements</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Company Announcements
+          </h3>
           <ul className="mt-4 grid gap-3 text-sm">
             <li className="rounded-lg border border-border bg-muted/30 p-3">
-              🎉 <strong>Welcome to the Ciago team.</strong> Check the referral hub — we're hiring across engineering.
+              🎉 <strong>Welcome to the Ciago team.</strong> Check the referral hub — we're hiring
+              across engineering.
             </li>
             <li className="rounded-lg border border-border bg-muted/30 p-3">
               📚 Learning stipend reminder — 2026 budget refreshes on Jan 1.
@@ -429,8 +544,7 @@ function TasksPanel() {
 
   // Optimistic status update
   const statusMut = useMutation({
-    mutationFn: (v: { id: string; status: EmployeeTask["status"] }) =>
-      statusFn({ data: v }),
+    mutationFn: (v: { id: string; status: EmployeeTask["status"] }) => statusFn({ data: v }),
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: ["emp-tasks"] });
       const prev = qc.getQueryData<EmployeeTask[]>(["emp-tasks"]);
@@ -468,7 +582,9 @@ function TasksPanel() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{data?.length ?? 0} task{(data?.length ?? 0) === 1 ? "" : "s"}</p>
+        <p className="text-sm text-muted-foreground">
+          {data?.length ?? 0} task{(data?.length ?? 0) === 1 ? "" : "s"}
+        </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="bg-brand text-brand-foreground hover:bg-brand-glow">
@@ -495,17 +611,31 @@ function TasksPanel() {
             >
               <div className="grid gap-2">
                 <Label htmlFor="t-title">Title</Label>
-                <Input id="t-title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+                <Input
+                  id="t-title"
+                  required
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="t-desc">Description</Label>
-                <Textarea id="t-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                <Textarea
+                  id="t-desc"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label>Priority</Label>
-                  <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.priority}
+                    onValueChange={(v) => setForm({ ...form, priority: v as any })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
@@ -516,11 +646,20 @@ function TasksPanel() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="t-due">Due date</Label>
-                  <Input id="t-due" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
+                  <Input
+                    id="t-due"
+                    type="date"
+                    value={form.due_date}
+                    onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                  />
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={upsert.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+                <Button
+                  type="submit"
+                  disabled={upsert.isPending}
+                  className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                >
                   {upsert.isPending ? "Saving…" : "Create task"}
                 </Button>
               </DialogFooter>
@@ -540,8 +679,12 @@ function TasksPanel() {
           {TASK_STATUSES.map((s) => (
             <div key={s} className="rounded-2xl border border-border bg-muted/20 p-3">
               <div className="mb-3 flex items-center justify-between px-1">
-                <h4 className="text-xs font-bold uppercase tracking-widest">{TASK_STATUS[s].label}</h4>
-                <Badge variant="outline" className="h-5 border-border text-[10px]">{grouped[s].length}</Badge>
+                <h4 className="text-xs font-bold uppercase tracking-widest">
+                  {TASK_STATUS[s].label}
+                </h4>
+                <Badge variant="outline" className="h-5 border-border text-[10px]">
+                  {grouped[s].length}
+                </Badge>
               </div>
               <div className="grid gap-2">
                 {grouped[s].length === 0 ? (
@@ -563,14 +706,21 @@ function TasksPanel() {
                           </button>
                         </div>
                         {t.description && (
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {t.description}
+                          </p>
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className={`border text-[10px] ${PRIORITY_STYLE[t.priority]}`}>
+                          <Badge
+                            variant="outline"
+                            className={`border text-[10px] ${PRIORITY_STYLE[t.priority]}`}
+                          >
                             {t.priority}
                           </Badge>
                           {t.due_date && (
-                            <span className="text-[10px] text-muted-foreground">Due {new Date(t.due_date).toLocaleDateString()}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              Due {new Date(t.due_date).toLocaleDateString()}
+                            </span>
                           )}
                         </div>
                         <Select
@@ -644,7 +794,9 @@ function TimesheetsPanel() {
     <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
       <Card className="border-border">
         <CardContent className="p-6">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Log hours</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Log hours
+          </h3>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -664,21 +816,51 @@ function TimesheetsPanel() {
           >
             <div className="grid gap-2">
               <Label htmlFor="ts-date">Date</Label>
-              <Input id="ts-date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+              <Input
+                id="ts-date"
+                type="date"
+                required
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ts-hours">Hours</Label>
-              <Input id="ts-hours" type="number" min="0.25" max="24" step="0.25" required value={form.hours_logged} onChange={(e) => setForm({ ...form, hours_logged: e.target.value })} />
+              <Input
+                id="ts-hours"
+                type="number"
+                min="0.25"
+                max="24"
+                step="0.25"
+                required
+                value={form.hours_logged}
+                onChange={(e) => setForm({ ...form, hours_logged: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ts-proj">Project</Label>
-              <Input id="ts-proj" required placeholder="e.g. CGT-INT-001 or Client X" value={form.project_reference} onChange={(e) => setForm({ ...form, project_reference: e.target.value })} />
+              <Input
+                id="ts-proj"
+                required
+                placeholder="e.g. CGT-INT-001 or Client X"
+                value={form.project_reference}
+                onChange={(e) => setForm({ ...form, project_reference: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ts-notes">Notes</Label>
-              <Textarea id="ts-notes" placeholder="Optional summary" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              <Textarea
+                id="ts-notes"
+                placeholder="Optional summary"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
             </div>
-            <Button type="submit" disabled={create.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+            <Button
+              type="submit"
+              disabled={create.isPending}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
               {create.isPending ? "Saving…" : "Submit"}
             </Button>
           </form>
@@ -687,7 +869,9 @@ function TimesheetsPanel() {
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Recent entries</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Recent entries
+          </h3>
           <Badge variant="outline" className="border-brand/40 text-brand">
             <Clock className="mr-1 h-3 w-3" />
             {totalWeek.toFixed(1)}h this week
@@ -695,26 +879,41 @@ function TimesheetsPanel() {
         </div>
         {isLoading ? (
           <div className="grid gap-2">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg border border-border bg-card" />)}
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-lg border border-border bg-card" />
+            ))}
           </div>
         ) : (data ?? []).length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">No hours logged yet.</CardContent>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No hours logged yet.
+            </CardContent>
           </Card>
         ) : (
           <ul className="grid gap-2">
             {(data ?? []).map((t: Timesheet) => (
-              <li key={t.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
+              <li
+                key={t.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
+              >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{t.project_reference}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(t.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    {new Date(t.date).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                     {t.notes ? ` · ${t.notes}` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-black">{Number(t.hours_logged).toFixed(1)}h</span>
-                  <button onClick={() => del.mutate(t.id)} className="text-muted-foreground hover:text-rose-500" aria-label="Delete entry">
+                  <button
+                    onClick={() => del.mutate(t.id)}
+                    className="text-muted-foreground hover:text-rose-500"
+                    aria-label="Delete entry"
+                  >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -738,7 +937,12 @@ function ReferralsPanel() {
   const refs = useQuery({ queryKey: ["emp-referrals"], queryFn: () => fetchRefs() });
   const jobs = useQuery({ queryKey: ["public-postings"], queryFn: () => fetchJobs() });
 
-  const [form, setForm] = useState({ candidate_name: "", candidate_email: "", job_posting_id: "", notes: "" });
+  const [form, setForm] = useState({
+    candidate_name: "",
+    candidate_email: "",
+    job_posting_id: "",
+    notes: "",
+  });
 
   const create = useMutation({
     mutationFn: (p: any) => createFn({ data: p }),
@@ -754,7 +958,9 @@ function ReferralsPanel() {
     <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
       <Card className="border-border">
         <CardContent className="p-6">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Refer a candidate</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Refer a candidate
+          </h3>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -769,16 +975,32 @@ function ReferralsPanel() {
           >
             <div className="grid gap-2">
               <Label htmlFor="r-name">Candidate name</Label>
-              <Input id="r-name" required value={form.candidate_name} onChange={(e) => setForm({ ...form, candidate_name: e.target.value })} />
+              <Input
+                id="r-name"
+                required
+                value={form.candidate_name}
+                onChange={(e) => setForm({ ...form, candidate_name: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="r-email">Candidate email</Label>
-              <Input id="r-email" type="email" required value={form.candidate_email} onChange={(e) => setForm({ ...form, candidate_email: e.target.value })} />
+              <Input
+                id="r-email"
+                type="email"
+                required
+                value={form.candidate_email}
+                onChange={(e) => setForm({ ...form, candidate_email: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Role</Label>
-              <Select value={form.job_posting_id} onValueChange={(v) => setForm({ ...form, job_posting_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Select an open role" /></SelectTrigger>
+              <Select
+                value={form.job_posting_id}
+                onValueChange={(v) => setForm({ ...form, job_posting_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an open role" />
+                </SelectTrigger>
                 <SelectContent>
                   {(jobs.data ?? []).map((j) => (
                     <SelectItem key={j.id} value={j.id}>
@@ -790,9 +1012,17 @@ function ReferralsPanel() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="r-notes">Why they'd be great</Label>
-              <Textarea id="r-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              <Textarea
+                id="r-notes"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
             </div>
-            <Button type="submit" disabled={create.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+            <Button
+              type="submit"
+              disabled={create.isPending}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
               {create.isPending ? "Submitting…" : "Submit referral"}
             </Button>
           </form>
@@ -800,10 +1030,14 @@ function ReferralsPanel() {
       </Card>
 
       <div>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Your referrals</h3>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+          Your referrals
+        </h3>
         {refs.isLoading ? (
           <div className="grid gap-2">
-            {[0, 1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />)}
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />
+            ))}
           </div>
         ) : (refs.data ?? []).length === 0 ? (
           <Card className="border-dashed">
@@ -814,7 +1048,10 @@ function ReferralsPanel() {
         ) : (
           <ul className="grid gap-2">
             {(refs.data ?? []).map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+              >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{r.candidate_name}</p>
                   <p className="truncate text-xs text-muted-foreground">
@@ -907,7 +1144,9 @@ function LeavePanel() {
     <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
       <Card className="border-border">
         <CardContent className="p-6">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Request leave</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Request leave
+          </h3>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -926,8 +1165,13 @@ function LeavePanel() {
           >
             <div className="grid gap-2">
               <Label>Leave type</Label>
-              <Select value={form.leave_type} onValueChange={(v) => setForm({ ...form, leave_type: v as any })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={form.leave_type}
+                onValueChange={(v) => setForm({ ...form, leave_type: v as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="casual">Casual</SelectItem>
                   <SelectItem value="sick">Sick</SelectItem>
@@ -939,22 +1183,45 @@ function LeavePanel() {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="lv-from">From</Label>
-                <Input id="lv-from" type="date" required value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+                <Input
+                  id="lv-from"
+                  type="date"
+                  required
+                  value={form.start_date}
+                  onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="lv-to">To</Label>
-                <Input id="lv-to" type="date" required value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+                <Input
+                  id="lv-to"
+                  type="date"
+                  required
+                  value={form.end_date}
+                  onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                />
               </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="lv-reason">Reason (optional)</Label>
-              <Textarea id="lv-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Add context for your manager" />
+              <Textarea
+                id="lv-reason"
+                value={form.reason}
+                onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                placeholder="Add context for your manager"
+              />
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               <span>Duration</span>
-              <span className="font-semibold text-foreground">{daysBetween(form.start_date, form.end_date)} day(s)</span>
+              <span className="font-semibold text-foreground">
+                {daysBetween(form.start_date, form.end_date)} day(s)
+              </span>
             </div>
-            <Button type="submit" disabled={submit.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+            <Button
+              type="submit"
+              disabled={submit.isPending}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
               {submit.isPending ? "Submitting…" : "Submit request"}
             </Button>
           </form>
@@ -963,31 +1230,49 @@ function LeavePanel() {
 
       <div>
         <div className="mb-3 grid grid-cols-3 gap-2">
-          <Card className="border-border"><CardContent className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Pending</p>
-            <p className="mt-2 text-2xl font-black">{summary.pending}</p>
-          </CardContent></Card>
-          <Card className="border-border"><CardContent className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Approved days</p>
-            <p className="mt-2 text-2xl font-black text-emerald-500">{summary.days}</p>
-          </CardContent></Card>
-          <Card className="border-border"><CardContent className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Rejected</p>
-            <p className="mt-2 text-2xl font-black text-rose-500">{summary.rejected}</p>
-          </CardContent></Card>
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Pending
+              </p>
+              <p className="mt-2 text-2xl font-black">{summary.pending}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Approved days
+              </p>
+              <p className="mt-2 text-2xl font-black text-emerald-500">{summary.days}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Rejected
+              </p>
+              <p className="mt-2 text-2xl font-black text-rose-500">{summary.rejected}</p>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">My requests</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            My requests
+          </h3>
           <Badge variant="outline">{rows.length} total</Badge>
         </div>
         {isLoading ? (
           <div className="grid gap-2">
-            {[0, 1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />)}
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />
+            ))}
           </div>
         ) : rows.length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">No leave requests yet.</CardContent>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No leave requests yet.
+            </CardContent>
           </Card>
         ) : (
           <ul className="grid gap-2">
@@ -997,12 +1282,16 @@ function LeavePanel() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold capitalize">{r.leave_type}</span>
-                      <Badge variant="outline" className={`border text-[10px] ${LEAVE_STATUS_STYLE[r.status] ?? ""}`}>
+                      <Badge
+                        variant="outline"
+                        className={`border text-[10px] ${LEAVE_STATUS_STYLE[r.status] ?? ""}`}
+                      >
                         {r.status}
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()} ·{" "}
+                      {new Date(r.start_date).toLocaleDateString()} →{" "}
+                      {new Date(r.end_date).toLocaleDateString()} ·{" "}
                       {daysBetween(r.start_date, r.end_date)} day(s)
                     </p>
                     {r.reason && <p className="mt-1 text-xs text-foreground/80">"{r.reason}"</p>}
@@ -1034,7 +1323,9 @@ function SettingsPanel() {
   return (
     <Card className="border-border">
       <CardContent className="p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Professional profile</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+          Professional profile
+        </h3>
         <p className="mt-2 text-sm text-muted-foreground">
           Manage your account, avatar, and appearance preferences from the main profile settings.
         </p>
@@ -1070,103 +1361,191 @@ function AttendancePanel() {
   const todayRow = (list.data ?? []).find((r) => r.work_date === today) ?? null;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["my-attendance"] });
-  const inM = useMutation({ mutationFn: () => inFn(), onSuccess: () => { toast.success("Checked in"); invalidate(); }, onError: (e: any) => toast.error(e.message) });
-  const outM = useMutation({ mutationFn: () => outFn(), onSuccess: () => { toast.success("Checked out"); invalidate(); }, onError: (e: any) => toast.error(e.message) });
+  const inM = useMutation({
+    mutationFn: () => inFn(),
+    onSuccess: () => {
+      toast.success("Checked in");
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const outM = useMutation({
+    mutationFn: () => outFn(),
+    onSuccess: () => {
+      toast.success("Checked out");
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const [regDate, setRegDate] = useState("");
   const [regReason, setRegReason] = useState("");
   const regM = useMutation({
     mutationFn: (v: { work_date: string; reason: string }) => regFn({ data: v }),
-    onSuccess: () => { toast.success("Regularization requested"); setRegDate(""); setRegReason(""); invalidate(); },
+    onSuccess: () => {
+      toast.success("Regularization requested");
+      setRegDate("");
+      setRegReason("");
+      invalidate();
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
-  const totalPresent = (list.data ?? []).filter((r) => r.status === "present" || r.status === "regularized").length;
+  const totalPresent = (list.data ?? []).filter(
+    (r) => r.status === "present" || r.status === "regularized",
+  ).length;
   const totalHours = (list.data ?? []).reduce((sum, r) => sum + Number(r.hours ?? 0), 0);
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-border"><CardContent className="p-5">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Today</div>
-          <div className="mt-2 flex items-center gap-2">
-            <Badge variant="outline" className={ATT_STATUS[todayRow?.status ?? "absent"]}>
-              {todayRow?.status ?? "not marked"}
-            </Badge>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={() => inM.mutate()} disabled={inM.isPending || !!todayRow?.check_in} className="bg-brand text-brand-foreground hover:bg-brand-glow">
-              <LogIn className="mr-1.5 h-4 w-4" /> Check in
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => outM.mutate()} disabled={outM.isPending || !todayRow?.check_in || !!todayRow?.check_out}>
-              <LogOut className="mr-1.5 h-4 w-4" /> Check out
-            </Button>
-          </div>
-        </CardContent></Card>
-        <Card className="border-border"><CardContent className="p-5">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Days present</div>
-          <div className="mt-2 text-3xl font-bold">{totalPresent}</div>
-          <div className="text-xs text-muted-foreground">across the last 400 entries</div>
-        </CardContent></Card>
-        <Card className="border-border"><CardContent className="p-5">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Hours logged</div>
-          <div className="mt-2 text-3xl font-bold">{totalHours.toFixed(1)}h</div>
-        </CardContent></Card>
+        <Card className="border-border">
+          <CardContent className="p-5">
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">Today</div>
+            <div className="mt-2 flex items-center gap-2">
+              <Badge variant="outline" className={ATT_STATUS[todayRow?.status ?? "absent"]}>
+                {todayRow?.status ?? "not marked"}
+              </Badge>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => inM.mutate()}
+                disabled={inM.isPending || !!todayRow?.check_in}
+                className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
+                <LogIn className="mr-1.5 h-4 w-4" /> Check in
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => outM.mutate()}
+                disabled={outM.isPending || !todayRow?.check_in || !!todayRow?.check_out}
+              >
+                <LogOut className="mr-1.5 h-4 w-4" /> Check out
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border">
+          <CardContent className="p-5">
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">
+              Days present
+            </div>
+            <div className="mt-2 text-3xl font-bold">{totalPresent}</div>
+            <div className="text-xs text-muted-foreground">across the last 400 entries</div>
+          </CardContent>
+        </Card>
+        <Card className="border-border">
+          <CardContent className="p-5">
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">
+              Hours logged
+            </div>
+            <div className="mt-2 text-3xl font-bold">{totalHours.toFixed(1)}h</div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card className="border-border"><CardContent className="p-5 space-y-3">
-        <div className="text-sm font-semibold">Attendance calendar</div>
-        <p className="text-xs text-muted-foreground">
-          Colour-coded month view. Click a date to see punches, or use the regularization form below for missed days.
-        </p>
-        <AttendanceCalendar rows={list.data ?? []} />
-        <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Present</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Regularized</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Pending</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> Leave</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Absent</span>
-        </div>
-      </CardContent></Card>
+      <Card className="border-border">
+        <CardContent className="p-5 space-y-3">
+          <div className="text-sm font-semibold">Attendance calendar</div>
+          <p className="text-xs text-muted-foreground">
+            Colour-coded month view. Click a date to see punches, or use the regularization form
+            below for missed days.
+          </p>
+          <AttendanceCalendar rows={list.data ?? []} />
+          <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Present
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Regularized
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Pending
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> Leave
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Absent
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
-      <Card className="border-border"><CardContent className="p-5 space-y-3">
-        <div className="text-sm font-semibold">Request regularization</div>
-        <div className="grid gap-3 sm:grid-cols-[160px_1fr_auto]">
-          <Input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} max={today} />
-          <Input placeholder="Reason (client meeting, WFH, VPN issue…)" value={regReason} onChange={(e) => setRegReason(e.target.value)} />
-          <Button onClick={() => regM.mutate({ work_date: regDate, reason: regReason })} disabled={!regDate || regReason.length < 4 || regM.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
-            Submit
-          </Button>
-        </div>
-      </CardContent></Card>
+      <Card className="border-border">
+        <CardContent className="p-5 space-y-3">
+          <div className="text-sm font-semibold">Request regularization</div>
+          <div className="grid gap-3 sm:grid-cols-[160px_1fr_auto]">
+            <Input
+              type="date"
+              value={regDate}
+              onChange={(e) => setRegDate(e.target.value)}
+              max={today}
+            />
+            <Input
+              placeholder="Reason (client meeting, WFH, VPN issue…)"
+              value={regReason}
+              onChange={(e) => setRegReason(e.target.value)}
+            />
+            <Button
+              onClick={() => regM.mutate({ work_date: regDate, reason: regReason })}
+              disabled={!regDate || regReason.length < 4 || regM.isPending}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
+              Submit
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-
-      <Card className="border-border"><CardContent className="p-5">
-        <div className="mb-3 text-sm font-semibold">Recent attendance</div>
-        {list.isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : (list.data ?? []).length === 0 ? (
-          <div className="text-sm text-muted-foreground">No attendance records yet — check in to start tracking.</div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {(list.data ?? []).slice(0, 30).map((r: AttendanceRecord) => (
-              <li key={r.id} className="flex items-center justify-between py-2 text-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-24 font-mono text-xs">{r.work_date}</div>
-                  <Badge variant="outline" className={ATT_STATUS[r.status] ?? ""}>{r.status.replace("_", " ")}</Badge>
-                  {r.regularization_reason ? <span className="text-xs text-muted-foreground truncate max-w-[220px]">— {r.regularization_reason}</span> : null}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {r.check_in ? new Date(r.check_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                  {" → "}
-                  {r.check_out ? new Date(r.check_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                  {r.hours ? ` · ${Number(r.hours).toFixed(1)}h` : ""}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent></Card>
+      <Card className="border-border">
+        <CardContent className="p-5">
+          <div className="mb-3 text-sm font-semibold">Recent attendance</div>
+          {list.isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : (list.data ?? []).length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No attendance records yet — check in to start tracking.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {(list.data ?? []).slice(0, 30).map((r: AttendanceRecord) => (
+                <li key={r.id} className="flex items-center justify-between py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-24 font-mono text-xs">{r.work_date}</div>
+                    <Badge variant="outline" className={ATT_STATUS[r.status] ?? ""}>
+                      {r.status.replace("_", " ")}
+                    </Badge>
+                    {r.regularization_reason ? (
+                      <span className="text-xs text-muted-foreground truncate max-w-[220px]">
+                        — {r.regularization_reason}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.check_in
+                      ? new Date(r.check_in).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "—"}
+                    {" → "}
+                    {r.check_out
+                      ? new Date(r.check_out).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "—"}
+                    {r.hours ? ` · ${Number(r.hours).toFixed(1)}h` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1189,30 +1568,51 @@ function AttendanceCalendar({ rows }: { rows: Array<{ work_date: string; status:
     cells.push({ date: iso, day: d, status: map.get(iso) });
   }
   const dot = (s?: string) =>
-    s === "present" ? "bg-emerald-500"
-    : s === "regularized" ? "bg-sky-500"
-    : s === "pending_regularization" ? "bg-amber-500"
-    : s === "leave" ? "bg-slate-400"
-    : s === "absent" ? "bg-rose-500"
-    : "";
+    s === "present"
+      ? "bg-emerald-500"
+      : s === "regularized"
+        ? "bg-sky-500"
+        : s === "pending_regularization"
+          ? "bg-amber-500"
+          : s === "leave"
+            ? "bg-slate-400"
+            : s === "absent"
+              ? "bg-rose-500"
+              : "";
   const label = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <Button size="sm" variant="outline" onClick={() => setCursor(new Date(year, month - 1, 1))}>‹</Button>
+        <Button size="sm" variant="outline" onClick={() => setCursor(new Date(year, month - 1, 1))}>
+          ‹
+        </Button>
         <div className="text-sm font-semibold">{label}</div>
-        <Button size="sm" variant="outline" onClick={() => setCursor(new Date(year, month + 1, 1))}>›</Button>
+        <Button size="sm" variant="outline" onClick={() => setCursor(new Date(year, month + 1, 1))}>
+          ›
+        </Button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        {["S","M","T","W","T","F","S"].map((d, i) => <div key={i} className="py-1">{d}</div>)}
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <div key={i} className="py-1">
+            {d}
+          </div>
+        ))}
       </div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((c, i) => (
-          <div key={i} className={`aspect-square rounded-md border ${c.date ? "border-border/70 bg-card" : "border-transparent"} p-1 text-left`}>
+          <div
+            key={i}
+            className={`aspect-square rounded-md border ${c.date ? "border-border/70 bg-card" : "border-transparent"} p-1 text-left`}
+          >
             {c.day && (
               <div className="flex h-full flex-col justify-between">
                 <span className="text-[11px] font-medium">{c.day}</span>
-                {c.status && <span className={`ml-auto h-2 w-2 rounded-full ${dot(c.status)}`} title={c.status} />}
+                {c.status && (
+                  <span
+                    className={`ml-auto h-2 w-2 rounded-full ${dot(c.status)}`}
+                    title={c.status}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -1222,12 +1622,11 @@ function AttendanceCalendar({ rows }: { rows: Array<{ work_date: string; status:
   );
 }
 
-
 // ============================================================
 // PAYROLL
 // ============================================================
 const inrFmt = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function PayrollPanel() {
   const strucFn = useServerFn(getMySalaryStructure);
@@ -1274,56 +1673,94 @@ function PayrollPanel() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-border"><CardContent className="p-5">
-        <div className="text-sm font-semibold">Compensation summary</div>
-        {struc.isLoading ? (
-          <div className="mt-2 text-sm text-muted-foreground">Loading…</div>
-        ) : !s ? (
-          <div className="mt-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Your salary structure has not been set yet. Please contact HR.
-          </div>
-        ) : (
-          <div className="mt-3 grid gap-3 sm:grid-cols-4">
-            <div><div className="text-xs uppercase tracking-widest text-muted-foreground">Annual CTC</div><div className="text-xl font-bold">₹ {inrFmt.format(s.ctc_annual_inr)}</div></div>
-            <div><div className="text-xs uppercase tracking-widest text-muted-foreground">Basic / mo</div><div className="text-xl font-bold">₹ {inrFmt.format(s.basic_monthly)}</div></div>
-            <div><div className="text-xs uppercase tracking-widest text-muted-foreground">HRA / mo</div><div className="text-xl font-bold">₹ {inrFmt.format(s.hra_monthly)}</div></div>
-            <div><div className="text-xs uppercase tracking-widest text-muted-foreground">Special / mo</div><div className="text-xl font-bold">₹ {inrFmt.format(s.special_monthly)}</div></div>
-          </div>
-        )}
-      </CardContent></Card>
+      <Card className="border-border">
+        <CardContent className="p-5">
+          <div className="text-sm font-semibold">Compensation summary</div>
+          {struc.isLoading ? (
+            <div className="mt-2 text-sm text-muted-foreground">Loading…</div>
+          ) : !s ? (
+            <div className="mt-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+              Your salary structure has not been set yet. Please contact HR.
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                  Annual CTC
+                </div>
+                <div className="text-xl font-bold">₹ {inrFmt.format(s.ctc_annual_inr)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                  Basic / mo
+                </div>
+                <div className="text-xl font-bold">₹ {inrFmt.format(s.basic_monthly)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                  HRA / mo
+                </div>
+                <div className="text-xl font-bold">₹ {inrFmt.format(s.hra_monthly)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                  Special / mo
+                </div>
+                <div className="text-xl font-bold">₹ {inrFmt.format(s.special_monthly)}</div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      <Card className="border-border"><CardContent className="p-5">
-        <div className="mb-3 text-sm font-semibold">Salary slips</div>
-        {slips.isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : (slips.data ?? []).length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            No salary slips generated yet.
-          </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {(slips.data ?? []).map((slip) => (
-              <li key={slip.id} className="flex items-center justify-between py-3 text-sm">
-                <div>
-                  <div className="font-medium">{MONTHS[slip.period_month - 1]} {slip.period_year}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Gross ₹{inrFmt.format(slip.gross)} · Deductions ₹{inrFmt.format(slip.total_deductions)} · LWP {slip.lwp_days}d
+      <Card className="border-border">
+        <CardContent className="p-5">
+          <div className="mb-3 text-sm font-semibold">Salary slips</div>
+          {slips.isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : (slips.data ?? []).length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+              No salary slips generated yet.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {(slips.data ?? []).map((slip) => (
+                <li key={slip.id} className="flex items-center justify-between py-3 text-sm">
+                  <div>
+                    <div className="font-medium">
+                      {MONTHS[slip.period_month - 1]} {slip.period_year}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Gross ₹{inrFmt.format(slip.gross)} · Deductions ₹
+                      {inrFmt.format(slip.total_deductions)} · LWP {slip.lwp_days}d
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Net</div>
-                    <div className="text-base font-bold text-brand">₹ {inrFmt.format(slip.net_pay)}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                        Net
+                      </div>
+                      <div className="text-base font-bold text-brand">
+                        ₹ {inrFmt.format(slip.net_pay)}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelected(slip);
+                        download(slip);
+                      }}
+                    >
+                      <Download className="mr-1.5 h-4 w-4" /> PDF
+                    </Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => { setSelected(slip); download(slip); }}>
-                    <Download className="mr-1.5 h-4 w-4" /> PDF
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent></Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1338,11 +1775,19 @@ function MobilityPanel() {
   const rows = jobs.data ?? [];
   return (
     <div className="space-y-4">
-      <Input placeholder="Search by title, department or job code" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Input
+        placeholder="Search by title, department or job code"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
       {jobs.isLoading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : rows.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="p-8 text-center text-sm text-muted-foreground">No open roles right now.</CardContent></Card>
+        <Card className="border-dashed">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            No open roles right now.
+          </CardContent>
+        </Card>
       ) : (
         <ul className="grid gap-3">
           {rows.map((j: any) => (
@@ -1351,15 +1796,26 @@ function MobilityPanel() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold">{j.title}</p>
-                    {j.job_code && <Badge variant="outline" className="font-mono text-[10px]">{j.job_code}</Badge>}
-                    {j.internal_only && <Badge className="bg-brand/15 text-brand border-brand/30 text-[10px]">Internal only</Badge>}
+                    {j.job_code && (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {j.job_code}
+                      </Badge>
+                    )}
+                    {j.internal_only && (
+                      <Badge className="bg-brand/15 text-brand border-brand/30 text-[10px]">
+                        Internal only
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {j.department ?? "—"} · {j.employment_type ?? "Full time"} · {j.is_remote ? "Remote" : (j.location ?? "On-site")}
+                    {j.department ?? "—"} · {j.employment_type ?? "Full time"} ·{" "}
+                    {j.is_remote ? "Remote" : (j.location ?? "On-site")}
                   </p>
                   {j.summary && <p className="mt-2 text-xs">{j.summary}</p>}
                 </div>
-                <Link to="/careers" className="text-xs font-semibold text-brand hover:underline">Apply →</Link>
+                <Link to="/careers" className="text-xs font-semibold text-brand hover:underline">
+                  Apply →
+                </Link>
               </div>
             </li>
           ))}
@@ -1382,12 +1838,20 @@ function ResignationPanel() {
   const [reason, setReason] = useState("");
   const submit = useMutation({
     mutationFn: () => submitFn({ data: { last_working_day: lwd, reason: reason || undefined } }),
-    onSuccess: () => { toast.success("Resignation submitted"); setLwd(""); setReason(""); qc.invalidateQueries({ queryKey: ["my-resignation"] }); },
+    onSuccess: () => {
+      toast.success("Resignation submitted");
+      setLwd("");
+      setReason("");
+      qc.invalidateQueries({ queryKey: ["my-resignation"] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
   const withdraw = useMutation({
     mutationFn: (id: string) => withdrawFn({ data: { id } }),
-    onSuccess: () => { toast.success("Withdrawn"); qc.invalidateQueries({ queryKey: ["my-resignation"] }); },
+    onSuccess: () => {
+      toast.success("Withdrawn");
+      qc.invalidateQueries({ queryKey: ["my-resignation"] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
   const r = current.data;
@@ -1395,35 +1859,72 @@ function ResignationPanel() {
   return (
     <div className="space-y-4">
       {r && (
-        <Card className="border-border"><CardContent className="p-5 space-y-2 text-sm">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">Current request</div>
-            <Badge variant="outline" className="capitalize">{r.status}</Badge>
-          </div>
-          <div>Submitted: {new Date(r.submitted_on).toLocaleDateString()}</div>
-          <div>Last working day: <strong>{new Date(r.last_working_day).toLocaleDateString()}</strong></div>
-          {r.reason && <p className="text-muted-foreground">"{r.reason}"</p>}
-          {r.decision_note && <p className="text-muted-foreground"><strong>HR note:</strong> {r.decision_note}</p>}
-          {r.status === "pending" && (
-            <Button size="sm" variant="outline" onClick={() => withdraw.mutate(r.id)} disabled={withdraw.isPending}>Withdraw</Button>
-          )}
-        </CardContent></Card>
+        <Card className="border-border">
+          <CardContent className="p-5 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Current request</div>
+              <Badge variant="outline" className="capitalize">
+                {r.status}
+              </Badge>
+            </div>
+            <div>Submitted: {new Date(r.submitted_on).toLocaleDateString()}</div>
+            <div>
+              Last working day: <strong>{new Date(r.last_working_day).toLocaleDateString()}</strong>
+            </div>
+            {r.reason && <p className="text-muted-foreground">"{r.reason}"</p>}
+            {r.decision_note && (
+              <p className="text-muted-foreground">
+                <strong>HR note:</strong> {r.decision_note}
+              </p>
+            )}
+            {r.status === "pending" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => withdraw.mutate(r.id)}
+                disabled={withdraw.isPending}
+              >
+                Withdraw
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
       {!active && (
-        <Card className="border-border"><CardContent className="p-5 space-y-3">
-          <div className="text-sm font-semibold">Submit resignation</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><Label htmlFor="rz-lwd">Last working day</Label><Input id="rz-lwd" type="date" value={lwd} onChange={(e) => setLwd(e.target.value)} min={new Date().toISOString().slice(0,10)} /></div>
-          </div>
-          <div><Label htmlFor="rz-reason">Reason (optional)</Label><Textarea id="rz-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Anything you'd like HR to know" /></div>
-          <Button onClick={() => submit.mutate()} disabled={!lwd || submit.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
-            {submit.isPending ? "Submitting…" : "Submit resignation"}
-          </Button>
-        </CardContent></Card>
+        <Card className="border-border">
+          <CardContent className="p-5 space-y-3">
+            <div className="text-sm font-semibold">Submit resignation</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="rz-lwd">Last working day</Label>
+                <Input
+                  id="rz-lwd"
+                  type="date"
+                  value={lwd}
+                  onChange={(e) => setLwd(e.target.value)}
+                  min={new Date().toISOString().slice(0, 10)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="rz-reason">Reason (optional)</Label>
+              <Textarea
+                id="rz-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Anything you'd like HR to know"
+              />
+            </div>
+            <Button
+              onClick={() => submit.mutate()}
+              disabled={!lwd || submit.isPending}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
+              {submit.isPending ? "Submitting…" : "Submit resignation"}
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 }
-
-
-

@@ -37,7 +37,10 @@ export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
     meta: [
       { title: "Your profile | Ciago Technologies" },
-      { name: "description", content: "Manage your Ciago Technologies profile, security, and appearance." },
+      {
+        name: "description",
+        content: "Manage your Ciago Technologies profile, security, and appearance.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -63,7 +66,11 @@ function ProfilePage() {
         <p className="text-sm font-semibold uppercase tracking-widest text-brand">Account</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Settings</h1>
         <p className="mt-2 text-muted-foreground">
-          {user?.email && <>Signed in as <span className="font-medium text-foreground">{user.email}</span></>}
+          {user?.email && (
+            <>
+              Signed in as <span className="font-medium text-foreground">{user.email}</span>
+            </>
+          )}
         </p>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[220px_1fr]">
@@ -142,8 +149,7 @@ function PublicProfileSection() {
     onError: (e: any) => toast.error(e?.message || "Save failed"),
   });
 
-  const set = <K extends keyof ProfileRow>(k: K, v: string) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof ProfileRow>(k: K, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,7 +267,15 @@ function PublicProfileSection() {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid gap-2">
       <Label className="text-sm font-semibold">{label}</Label>
@@ -336,7 +350,11 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
             className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-foreground shadow hover:bg-muted"
             aria-label="Change avatar"
           >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Camera className="h-4 w-4" />
+            )}
           </button>
           <input
             ref={fileRef}
@@ -353,9 +371,7 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
           <p className="mt-1 flex items-center justify-center gap-1.5 truncate text-sm text-muted-foreground sm:justify-start">
             <Mail className="h-3.5 w-3.5" /> {user?.email}
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            PNG, JPG, WEBP or GIF. Max 2 MB.
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">PNG, JPG, WEBP or GIF. Max 2 MB.</p>
         </div>
       </CardContent>
     </Card>
@@ -368,8 +384,7 @@ function AccountSection() {
   const [pw, setPw] = useState("");
   const [saving, setSaving] = useState(false);
   const provider =
-    (user?.app_metadata as any)?.provider ||
-    (user?.identities?.[0]?.provider ?? "email");
+    (user?.app_metadata as any)?.provider || (user?.identities?.[0]?.provider ?? "email");
   const isPasswordProvider = provider === "email";
 
   const sendReset = async () => {
@@ -449,7 +464,10 @@ function AccountSection() {
               : `You currently sign in with ${provider}. Add a password to enable email sign-in as a fallback.`}
           </p>
           <Separator className="my-6" />
-          <form onSubmit={updatePassword} className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+          <form
+            onSubmit={updatePassword}
+            className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
+          >
             <Field label="New password" hint="At least 8 characters.">
               <Input
                 type="password"
@@ -488,9 +506,7 @@ function AccountSection() {
       <Card>
         <CardContent className="p-6 sm:p-8">
           <h2 className="text-lg font-bold">Session</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sign out of this device.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Sign out of this device.</p>
           <Separator className="my-6" />
           <Button variant="outline" onClick={() => signOut()}>
             <LogOut className="mr-2 h-4 w-4" />
@@ -534,16 +550,16 @@ function AppearanceSection() {
                 }}
                 className={cn(
                   "flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-colors",
-                  active
-                    ? "border-brand bg-brand/5"
-                    : "border-border hover:border-brand/50",
+                  active ? "border-brand bg-brand/5" : "border-border hover:border-brand/50",
                 )}
               >
                 <Icon className={cn("h-5 w-5", active ? "text-brand" : "text-muted-foreground")} />
                 <div>
                   <p className="font-semibold">{o.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    {o.value === "light" ? "Bright interface for daytime." : "Dimmed interface for low light."}
+                    {o.value === "light"
+                      ? "Bright interface for daytime."
+                      : "Dimmed interface for low light."}
                   </p>
                 </div>
               </button>

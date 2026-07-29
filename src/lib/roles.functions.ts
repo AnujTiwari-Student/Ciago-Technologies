@@ -34,6 +34,15 @@ export type MyRolesPayload = {
   departmentId: string | null;
 };
 
+export type MyEmployeeAccessPayload = {
+  userId: string;
+  isAdmin: boolean;
+  isHr: boolean;
+  isManager: boolean;
+  isEmployee: boolean;
+  hasPreDojOnboarding: boolean;
+};
+
 export type MY_ROLES_KEY = "admin" | "hr" | "manager" | "employee" | string;
 const ROLE_PRIORITY: Record<string, number> = {
   admin: 4,
@@ -72,5 +81,49 @@ export const getMyRoles = createServerFn({ method: "GET" })
       isEmployee,
       isStaff: isAdmin || isHr || isManager || isEmployee,
       departmentId,
+    };
+  });
+
+export const getMyAuthUserId = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<string> => {
+    return context.userId;
+  });
+
+export const getMyEmployeeAccess = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<MyEmployeeAccessPayload> => {
+    const sb = context.supabase;
+    const { data: roleRows, error: roleError } = await sb
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (roleError) {
+      throw new Error(`getMyEmployeeAccess role lookup failed: ${roleError.message}`);
+    }
+
+    const roles = new Set((roleRows ?? []).map((r) => (r as { role: string }).role));
+    const isAdmin = roles.has("admin");
+    const isHr = roles.has("hr");
+    const isManager = roles.has("manager");
+    const isEmployee = roles.has("employee");
+
+    const { data: onboarding, error: onboardingError } = await sb
+      .from("onboarding_records")
+      .select("id")
+      .eq("user_id", context.userId)
+      .in("status", ["accepted", "submitted"])
+      .maybeSingle();
+    if (onboardingError) {
+      throw new Error(`getMyEmployeeAccess onboarding lookup failed: ${onboardingError.message}`);
+    }
+
+    return {
+      userId: context.userId,
+      isAdmin,
+      isHr,
+      isManager,
+      isEmployee,
+      hasPreDojOnboarding: Boolean(onboarding),
     };
   });

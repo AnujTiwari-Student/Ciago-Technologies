@@ -51,7 +51,6 @@ export const Route = createFileRoute("/what-we-think")({
   component: WhatWeThink,
 });
 
-
 function WhatWeThink() {
   useAdminRedirect();
   return (
@@ -64,13 +63,16 @@ function WhatWeThink() {
             className="absolute inset-0 -z-10 opacity-60 [background:radial-gradient(60%_50%_at_50%_0%,color-mix(in_oklab,var(--brand)_20%,transparent),transparent_70%)]"
           />
           <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 lg:py-28">
-            <p className="text-sm font-semibold uppercase tracking-widest text-brand">What we think</p>
+            <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+              What we think
+            </p>
             <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-              A point of view on the <span className="brand-gradient-text">future of software.</span>
+              A point of view on the{" "}
+              <span className="brand-gradient-text">future of software.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-base text-muted-foreground sm:text-lg">
-              We believe the next decade belongs to teams who treat their platform as a product — not a
-              cost center.
+              We believe the next decade belongs to teams who treat their platform as a product —
+              not a cost center.
             </p>
           </div>
         </section>
@@ -86,9 +88,9 @@ function WhatWeThink() {
                 A world where every ambitious idea has infrastructure worthy of it.
               </h2>
               <p className="mt-6 text-base leading-relaxed text-muted-foreground sm:text-lg">
-                We envision digital platforms that scale without friction, adapt without rewrites, and
-                stay resilient under real-world load. Not lock-in. Not fragility. Just software that keeps
-                up with the businesses that depend on it.
+                We envision digital platforms that scale without friction, adapt without rewrites,
+                and stay resilient under real-world load. Not lock-in. Not fragility. Just software
+                that keeps up with the businesses that depend on it.
               </p>
             </div>
             <div className="relative">
@@ -117,9 +119,9 @@ function WhatWeThink() {
                 To architect scalable, future-proof digital infrastructure.
               </h2>
               <p className="mt-6 text-base leading-relaxed text-muted-foreground sm:text-lg">
-                We pair senior engineering with pragmatic delivery — Go, Kubernetes, AWS, Three.js — to
-                ship systems that stay understandable, observable and cheap to change five years from
-                now.
+                We pair senior engineering with pragmatic delivery — Go, Kubernetes, AWS, Three.js —
+                to ship systems that stay understandable, observable and cheap to change five years
+                from now.
               </p>
             </div>
           </div>

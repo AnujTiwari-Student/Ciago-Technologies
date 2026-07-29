@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogIn, LogOut, Menu, Moon, Settings, ShieldCheck, Sun, User as UserIcon, X } from "lucide-react";
+import {
+  LogIn,
+  LogOut,
+  Menu,
+  Moon,
+  Settings,
+  ShieldCheck,
+  Sun,
+  User as UserIcon,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +91,13 @@ export const navItems = publicNavItems;
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="rounded-full">
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggle}
+      aria-label="Toggle theme"
+      className="rounded-full"
+    >
       {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
     </Button>
   );
@@ -90,8 +106,16 @@ function ThemeToggle() {
 export function BrandLogo({ className = "h-14 w-auto sm:h-16" }: { className?: string }) {
   return (
     <>
-      <img src="/logo-light.svg" alt="Ciago Technologies" className={`${className} block dark:hidden`} />
-      <img src="/logo-dark.svg" alt="Ciago Technologies" className={`${className} hidden dark:block`} />
+      <img
+        src="/logo-light.svg"
+        alt="Ciago Technologies"
+        className={`${className} block dark:hidden`}
+      />
+      <img
+        src="/logo-dark.svg"
+        alt="Ciago Technologies"
+        className={`${className} hidden dark:block`}
+      />
     </>
   );
 }
@@ -229,7 +253,11 @@ export function SiteHeader() {
   return (
     <header className="glass-nav sticky top-0 z-50 w-full">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link to={homeHref as any} className="flex min-w-0 items-center gap-2" aria-label="Ciago Technologies — Home">
+        <Link
+          to={homeHref as any}
+          className="flex min-w-0 items-center gap-2"
+          aria-label="Ciago Technologies — Home"
+        >
           <BrandLogo />
         </Link>
 

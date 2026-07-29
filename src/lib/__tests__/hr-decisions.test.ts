@@ -11,17 +11,19 @@ import {
 
 type Table = "onboarding_documents" | "audit_logs" | "in_app_notifications";
 
-function makeMockSupabase(opts: {
-  document?: {
-    id: string;
-    onboarding_id: string;
-    user_id: string;
-    doc_key: string;
-    status: string;
-  } | null;
-  loadError?: string;
-  updateError?: string;
-} = {}) {
+function makeMockSupabase(
+  opts: {
+    document?: {
+      id: string;
+      onboarding_id: string;
+      user_id: string;
+      doc_key: string;
+      status: string;
+    } | null;
+    loadError?: string;
+    updateError?: string;
+  } = {},
+) {
   const calls: Record<string, unknown[]> = {
     updates: [],
     audits: [],
@@ -43,9 +45,7 @@ function makeMockSupabase(opts: {
         update: (payload: unknown) => ({
           eq: async () => {
             calls.updates.push(payload);
-            return opts.updateError
-              ? { error: { message: opts.updateError } }
-              : { error: null };
+            return opts.updateError ? { error: { message: opts.updateError } } : { error: null };
           },
         }),
       };
@@ -102,9 +102,9 @@ describe("assertHrOrAdmin", () => {
 
 describe("validateDecisionInput", () => {
   it("requires feedback for changes_requested", () => {
-    expect(() =>
-      validateDecisionInput({ document_id: "d", status: "changes_requested" }),
-    ).toThrow(/Feedback is required/);
+    expect(() => validateDecisionInput({ document_id: "d", status: "changes_requested" })).toThrow(
+      /Feedback is required/,
+    );
   });
   it("requires feedback for rejected", () => {
     expect(() =>
@@ -112,9 +112,7 @@ describe("validateDecisionInput", () => {
     ).toThrow(/Feedback is required/);
   });
   it("allows approve with no feedback", () => {
-    expect(() =>
-      validateDecisionInput({ document_id: "d", status: "approved" }),
-    ).not.toThrow();
+    expect(() => validateDecisionInput({ document_id: "d", status: "approved" })).not.toThrow();
   });
 });
 
@@ -231,10 +229,9 @@ describe("applyBulkDocumentDecisions", () => {
   it("rejects the whole batch when caller is not HR", async () => {
     const { supabase } = makeMockSupabase();
     await expect(
-      applyBulkDocumentDecisions(
-        { supabase, actorId: "u", roles: new Set(["user"]) },
-        [{ document_id: "d1", status: "approved" }],
-      ),
+      applyBulkDocumentDecisions({ supabase, actorId: "u", roles: new Set(["user"]) }, [
+        { document_id: "d1", status: "approved" },
+      ]),
     ).rejects.toThrow(/Forbidden/);
   });
 });

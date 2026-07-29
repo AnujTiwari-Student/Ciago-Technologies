@@ -34,7 +34,10 @@ export const Route = createFileRoute("/estimate")({
       { property: "og:url", content: "/estimate" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Project Estimator — Ciago Technologies" },
-      { name: "twitter:description", content: "Get a tailored budget and timeline range for your project in under a minute." },
+      {
+        name: "twitter:description",
+        content: "Get a tailored budget and timeline range for your project in under a minute.",
+      },
     ],
     links: [{ rel: "canonical", href: "/estimate" }],
   }),
@@ -42,16 +45,41 @@ export const Route = createFileRoute("/estimate")({
 });
 
 const projectTypes = [
-  { id: "custom", label: "Custom Software / ERP", icon: Layers, base: [3_300_000, 6_600_000] as [number, number] },
-  { id: "cloud", label: "Cloud Infrastructure & DevOps", icon: Cloud, base: [2_500_000, 5_800_000] as [number, number] },
-  { id: "mobile", label: "Mobile App", icon: Smartphone, base: [2_900_000, 7_500_000] as [number, number] },
-  { id: "industry", label: "Core Industry Solution", icon: Cpu, base: [4_100_000, 10_000_000] as [number, number] },
+  {
+    id: "custom",
+    label: "Custom Software / ERP",
+    icon: Layers,
+    base: [3_300_000, 6_600_000] as [number, number],
+  },
+  {
+    id: "cloud",
+    label: "Cloud Infrastructure & DevOps",
+    icon: Cloud,
+    base: [2_500_000, 5_800_000] as [number, number],
+  },
+  {
+    id: "mobile",
+    label: "Mobile App",
+    icon: Smartphone,
+    base: [2_900_000, 7_500_000] as [number, number],
+  },
+  {
+    id: "industry",
+    label: "Core Industry Solution",
+    icon: Cpu,
+    base: [4_100_000, 10_000_000] as [number, number],
+  },
 ];
 
 const scales = [
   { id: "mvp", label: "Startup / MVP", mult: 1, months: [1, 3] as [number, number] },
   { id: "mid", label: "Mid-Growth Scale", mult: 1.8, months: [3, 6] as [number, number] },
-  { id: "enterprise", label: "Enterprise Infrastructure", mult: 3.2, months: [6, 12] as [number, number] },
+  {
+    id: "enterprise",
+    label: "Enterprise Infrastructure",
+    mult: 3.2,
+    months: [6, 12] as [number, number],
+  },
 ];
 
 const timelines = [
@@ -144,7 +172,8 @@ function EstimatePage() {
             Estimate your <span className="brand-gradient-text">project.</span>
           </h1>
           <p className="mt-4 max-w-2xl text-muted-foreground">
-            Four quick questions. Real budget and timeline ranges from our senior team — no sales calls required to see the number.
+            Four quick questions. Real budget and timeline ranges from our senior team — no sales
+            calls required to see the number.
           </p>
 
           <div className="mt-10 rounded-2xl border border-border bg-card p-6 shadow-xl shadow-brand/5 sm:p-8">
@@ -162,7 +191,8 @@ function EstimatePage() {
                 </div>
                 <h2 className="mt-4 text-2xl font-bold">Request received.</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                  We've logged your estimate. A senior engineer will reach out within one business day to walk through scope, dependencies, and next steps.
+                  We've logged your estimate. A senior engineer will reach out within one business
+                  day to walk through scope, dependencies, and next steps.
                 </p>
                 {estimate && (
                   <div className="mx-auto mt-6 max-w-sm rounded-xl border border-border bg-muted/40 p-5">
@@ -212,7 +242,8 @@ function EstimatePage() {
                     <div>
                       <h2 className="text-xl font-bold">Get your detailed breakdown.</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Enter your details to unlock your estimate and receive a written scope proposal.
+                        Enter your details to unlock your estimate and receive a written scope
+                        proposal.
                       </p>
                     </div>
                     {estimate && (
@@ -231,21 +262,51 @@ function EstimatePage() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label htmlFor="est-name">Full name</Label>
-                        <Input id="est-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+                        <Input
+                          id="est-name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          required
+                          maxLength={120}
+                        />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="est-email">Work email</Label>
-                        <Input id="est-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={200} />
+                        <Input
+                          id="est-email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          maxLength={200}
+                        />
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label htmlFor="est-company">Company</Label>
-                        <Input id="est-company" value={company} onChange={(e) => setCompany(e.target.value)} required maxLength={200} />
+                        <Input
+                          id="est-company"
+                          value={company}
+                          onChange={(e) => setCompany(e.target.value)}
+                          required
+                          maxLength={200}
+                        />
                       </div>
                     </div>
                     {/* Honeypot */}
-                    <div aria-hidden className="hidden" style={{ position: "absolute", left: "-10000px" }}>
-                      <label>Website (leave blank)
-                        <input type="text" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />
+                    <div
+                      aria-hidden
+                      className="hidden"
+                      style={{ position: "absolute", left: "-10000px" }}
+                    >
+                      <label>
+                        Website (leave blank)
+                        <input
+                          type="text"
+                          tabIndex={-1}
+                          autoComplete="off"
+                          value={hp}
+                          onChange={(e) => setHp(e.target.value)}
+                        />
                       </label>
                     </div>
                     <Turnstile onToken={setTurnstileToken} />
@@ -253,7 +314,11 @@ function EstimatePage() {
                       <Button type="button" variant="outline" onClick={() => setStep(2)}>
                         <ArrowLeft className="mr-1 h-4 w-4" /> Back
                       </Button>
-                      <Button type="submit" disabled={submitting} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+                      <Button
+                        type="submit"
+                        disabled={submitting}
+                        className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                      >
                         {submitting ? "Sending…" : "Unlock my estimate"}
                       </Button>
                     </div>
@@ -279,7 +344,11 @@ function EstimatePage() {
                           </span>
                         </p>
                       )}
-                      <Button type="button" onClick={next} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+                      <Button
+                        type="button"
+                        onClick={next}
+                        className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                      >
                         Continue <ArrowRight className="ml-1 h-4 w-4" />
                       </Button>
                     </div>
@@ -332,7 +401,9 @@ function StepGrid({
               }`}
             >
               {Icon && (
-                <span className={`grid h-10 w-10 place-items-center rounded-lg ${active ? "bg-brand text-brand-foreground" : "bg-brand/10 text-brand"}`}>
+                <span
+                  className={`grid h-10 w-10 place-items-center rounded-lg ${active ? "bg-brand text-brand-foreground" : "bg-brand/10 text-brand"}`}
+                >
                   <Icon className="h-5 w-5" />
                 </span>
               )}

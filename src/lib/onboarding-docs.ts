@@ -49,7 +49,11 @@ export function computeDocRequirements(
         reason: "Required for interns — all-semester marksheets in one PDF.",
       });
     }
-    if (!configured.has("ug_degree") && !configured.has("degree_final") && !configured.has("degree_provisional")) {
+    if (
+      !configured.has("ug_degree") &&
+      !configured.has("degree_final") &&
+      !configured.has("degree_provisional")
+    ) {
       out.push({ key: "ug_degree", mandatory: false, reason: "Optional for interns." });
     }
     return out;

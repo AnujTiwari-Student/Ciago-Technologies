@@ -46,9 +46,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
       setScriptReady(true);
       return;
     }
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-turnstile="true"]',
-    );
+    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile="true"]');
     if (existing) {
       existing.addEventListener("load", () => setScriptReady(true), { once: true });
       return;

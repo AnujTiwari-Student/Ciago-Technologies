@@ -56,7 +56,9 @@ export const submitApplication = createServerFn({ method: "POST" })
       _resume_link: data.resumeLink || "",
     });
     if (rpcErr) throw new Error(rpcErr.message);
-    const insertedId = Array.isArray(rpcData) ? rpcData[0]?.application_id : (rpcData as any)?.application_id;
+    const insertedId = Array.isArray(rpcData)
+      ? rpcData[0]?.application_id
+      : (rpcData as any)?.application_id;
     if (!insertedId) throw new Error("Failed to record application");
     const inserted = { id: insertedId as string };
 
@@ -116,7 +118,10 @@ function renderEmail(a: {
   applicationId: string;
 }): string {
   const esc = (s: string) =>
-    s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+    s.replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+    );
   return `<!doctype html><html><body style="font-family:Inter,Arial,sans-serif;background:#f8fafc;padding:24px">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
       <h1 style="margin:0 0 4px;font-size:20px;color:#0f172a">New application received</h1>

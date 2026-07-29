@@ -7,8 +7,5 @@ export function escapeCsvCell(value: unknown): string {
 }
 
 export function toCsv(headers: string[], rows: unknown[][]): string {
-  return [
-    headers.join(","),
-    ...rows.map((r) => r.map(escapeCsvCell).join(",")),
-  ].join("\n");
+  return [headers.join(","), ...rows.map((r) => r.map(escapeCsvCell).join(","))].join("\n");
 }

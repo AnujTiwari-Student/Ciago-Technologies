@@ -4,7 +4,16 @@ import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Users, ClipboardList, CalendarClock, Briefcase, CheckCircle2, XCircle, Clock, LogOut } from "lucide-react";
+import {
+  Users,
+  ClipboardList,
+  CalendarClock,
+  Briefcase,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  LogOut,
+} from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -29,14 +38,10 @@ import {
   listPendingLeaveRequests,
   type PendingLeaveRow,
 } from "@/lib/leave.functions";
-import {
-  decideRegularization,
-  listPendingRegularizations,
-} from "@/lib/attendance.functions";
+import { decideRegularization, listPendingRegularizations } from "@/lib/attendance.functions";
 import { listMyReports, listInternalJobs, type InternalJob } from "@/lib/mobility.functions";
 import { listAllResignations, decideResignation } from "@/lib/resignation.functions";
-
-
+import { requireRoles } from "./-guard";
 
 const searchSchema = z.object({
   tab: z.enum(["team", "tasks", "approvals", "internal-careers", "resignations"]).optional(),
@@ -46,21 +51,19 @@ export const Route = createFileRoute("/_authenticated/manager")({
   ssr: false,
   validateSearch: searchSchema,
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth", search: { redirect: "/manager" } });
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
-    const set = new Set((roles ?? []).map((r: any) => r.role));
-    if (!set.has("manager") && !set.has("admin")) {
+    const { roles } = await requireRoles("/manager");
+    if (!roles.has("manager") && !roles.has("admin")) {
       throw redirect({ to: "/forbidden", search: { reason: "role" } });
     }
   },
   head: () => ({
     meta: [
       { title: "Manager Portal | Ciago Technologies" },
-      { name: "description", content: "Ciago Technologies manager portal — team leadership, leave approvals, and delegation." },
+      {
+        name: "description",
+        content:
+          "Ciago Technologies manager portal — team leadership, leave approvals, and delegation.",
+      },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -100,21 +103,34 @@ function ManagerPortal() {
           className="mt-8"
         >
           <TabsList className="portal-tablist w-full justify-start">
-            <TabsTrigger value="team" className="portal-tab"><Users /> Team</TabsTrigger>
-            <TabsTrigger value="approvals" className="portal-tab"><CalendarClock /> Approvals</TabsTrigger>
-            <TabsTrigger value="tasks" className="portal-tab"><ClipboardList /> Tasks</TabsTrigger>
-            <TabsTrigger value="internal-careers" className="portal-tab"><Briefcase /> Internal Careers</TabsTrigger>
-            <TabsTrigger value="resignations" className="portal-tab"><LogOut /> Resignations</TabsTrigger>
+            <TabsTrigger value="team" className="portal-tab">
+              <Users /> Team
+            </TabsTrigger>
+            <TabsTrigger value="approvals" className="portal-tab">
+              <CalendarClock /> Approvals
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="portal-tab">
+              <ClipboardList /> Tasks
+            </TabsTrigger>
+            <TabsTrigger value="internal-careers" className="portal-tab">
+              <Briefcase /> Internal Careers
+            </TabsTrigger>
+            <TabsTrigger value="resignations" className="portal-tab">
+              <LogOut /> Resignations
+            </TabsTrigger>
           </TabsList>
-
 
           <TabsContent value="team" className="mt-6">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold tracking-tight">Team</h2>
-                <p className="text-sm text-muted-foreground">Direct reports and peers in your department.</p>
+                <p className="text-sm text-muted-foreground">
+                  Direct reports and peers in your department.
+                </p>
               </div>
-              <Badge variant="outline" className="border-brand/40 text-brand"><Users className="mr-1 h-3 w-3" /> Directory</Badge>
+              <Badge variant="outline" className="border-brand/40 text-brand">
+                <Users className="mr-1 h-3 w-3" /> Directory
+              </Badge>
             </div>
             <TeamPanel />
           </TabsContent>
@@ -124,7 +140,9 @@ function ManagerPortal() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">Leave Approvals</h2>
-                  <p className="text-sm text-muted-foreground">Pending PTO requests from your department.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Pending PTO requests from your department.
+                  </p>
                 </div>
                 <Badge variant="outline" className="border-brand/40 text-brand">
                   <CalendarClock className="mr-1 h-3 w-3" /> Live queue
@@ -136,7 +154,9 @@ function ManagerPortal() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">Attendance Regularizations</h2>
-                  <p className="text-sm text-muted-foreground">Approve or reject missed-punch requests from your team.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Approve or reject missed-punch requests from your team.
+                  </p>
                 </div>
                 <Badge variant="outline" className="border-brand/40 text-brand">
                   <Clock className="mr-1 h-3 w-3" /> Pending
@@ -160,18 +180,23 @@ function ManagerPortal() {
             <ManagerInternalCareersPanel />
           </TabsContent>
 
-
           <TabsContent value="resignations" className="mt-6">
             <div className="mb-3">
               <h2 className="text-xl font-bold tracking-tight">Resignations</h2>
-              <p className="text-sm text-muted-foreground">Read-only view — HR takes the final decision.</p>
+              <p className="text-sm text-muted-foreground">
+                Read-only view — HR takes the final decision.
+              </p>
             </div>
             <ResignationsListPanel readOnly />
           </TabsContent>
         </Tabs>
 
         <p className="mt-10 text-xs text-muted-foreground">
-          Need a different area? Go to your <Link to="/profile" className="underline hover:text-brand">Profile</Link>.
+          Need a different area? Go to your{" "}
+          <Link to="/profile" className="underline hover:text-brand">
+            Profile
+          </Link>
+          .
         </p>
       </main>
       <SiteFooter />
@@ -199,7 +224,9 @@ function ManagerPortalStub({
         <h3 className="text-lg font-semibold">{title}</h3>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
         <Button asChild className="mt-4 bg-brand text-brand-foreground hover:bg-brand-glow">
-          <Link to={ctaTo as any} search={ctaSearch as any}>{ctaLabel}</Link>
+          <Link to={ctaTo as any} search={ctaSearch as any}>
+            {ctaLabel}
+          </Link>
         </Button>
       </CardContent>
     </Card>
@@ -211,20 +238,28 @@ function TeamPanel() {
   const q = useQuery({ queryKey: ["my-reports"], queryFn: () => listFn() });
   const rows = q.data ?? [];
   if (q.isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
-  if (rows.length === 0) return (
-    <Card className="border-dashed"><CardContent className="p-6 text-center text-sm text-muted-foreground">
-      No department teammates found. Ask an admin to assign you a department.
-    </CardContent></Card>
-  );
+  if (rows.length === 0)
+    return (
+      <Card className="border-dashed">
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">
+          No department teammates found. Ask an admin to assign you a department.
+        </CardContent>
+      </Card>
+    );
   return (
     <ul className="grid gap-2 sm:grid-cols-2">
       {rows.map((r: any) => (
-        <li key={r.user_id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
+        <li
+          key={r.user_id}
+          className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
+        >
           <div>
             <p className="text-sm font-semibold">{r.full_name ?? r.user_id.slice(0, 8)}</p>
             <p className="text-xs text-muted-foreground capitalize">{r.role}</p>
           </div>
-          <Badge variant="outline" className="text-[10px]">Dept</Badge>
+          <Badge variant="outline" className="text-[10px]">
+            Dept
+          </Badge>
         </li>
       ))}
     </ul>
@@ -235,17 +270,33 @@ export function ResignationsListPanel({ readOnly = false }: { readOnly?: boolean
   const qc = useQueryClient();
   const listFn = useServerFn(listAllResignations);
   const { data, isLoading } = useQuery({ queryKey: ["all-resignations"], queryFn: () => listFn() });
-  const [pick, setPick] = useState<{ id: string; decision: "accepted" | "rejected"; name: string } | null>(null);
+  const [pick, setPick] = useState<{
+    id: string;
+    decision: "accepted" | "rejected";
+    name: string;
+  } | null>(null);
   const [note, setNote] = useState("");
   const decideFn = useServerFn(decideResignation);
   const decide = useMutation({
     mutationFn: (p: any) => decideFn({ data: p }),
-    onSuccess: () => { toast.success("Decision recorded"); qc.invalidateQueries({ queryKey: ["all-resignations"] }); setPick(null); setNote(""); },
+    onSuccess: () => {
+      toast.success("Decision recorded");
+      qc.invalidateQueries({ queryKey: ["all-resignations"] });
+      setPick(null);
+      setNote("");
+    },
     onError: (e: any) => toast.error(e?.message || "Failed"),
   });
   const rows = (data ?? []) as any[];
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
-  if (rows.length === 0) return <Card className="border-dashed"><CardContent className="p-6 text-center text-sm text-muted-foreground">No resignations on file.</CardContent></Card>;
+  if (rows.length === 0)
+    return (
+      <Card className="border-dashed">
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">
+          No resignations on file.
+        </CardContent>
+      </Card>
+    );
   return (
     <div>
       <ul className="grid gap-2">
@@ -254,22 +305,44 @@ export function ResignationsListPanel({ readOnly = false }: { readOnly?: boolean
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{r.applicant_name ?? r.user_id.slice(0, 8)}</p>
-                  <Badge variant="outline" className="capitalize text-[10px]">{r.status}</Badge>
+                  <p className="text-sm font-semibold">
+                    {r.applicant_name ?? r.user_id.slice(0, 8)}
+                  </p>
+                  <Badge variant="outline" className="capitalize text-[10px]">
+                    {r.status}
+                  </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Submitted {new Date(r.submitted_on).toLocaleDateString()} · LWD <strong>{new Date(r.last_working_day).toLocaleDateString()}</strong>
+                  Submitted {new Date(r.submitted_on).toLocaleDateString()} · LWD{" "}
+                  <strong>{new Date(r.last_working_day).toLocaleDateString()}</strong>
                 </p>
                 {r.reason && <p className="mt-1 text-xs">"{r.reason}"</p>}
-                {r.decision_note && <p className="mt-1 text-xs text-muted-foreground"><strong>HR note:</strong> {r.decision_note}</p>}
+                {r.decision_note && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <strong>HR note:</strong> {r.decision_note}
+                  </p>
+                )}
               </div>
               {!readOnly && r.status === "pending" && (
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => { setPick({ id: r.id, decision: "rejected", name: r.applicant_name ?? "" }); setNote(""); }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setPick({ id: r.id, decision: "rejected", name: r.applicant_name ?? "" });
+                      setNote("");
+                    }}
+                  >
                     <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
                   </Button>
-                  <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand-glow"
-                    onClick={() => { setPick({ id: r.id, decision: "accepted", name: r.applicant_name ?? "" }); setNote(""); }}>
+                  <Button
+                    size="sm"
+                    className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                    onClick={() => {
+                      setPick({ id: r.id, decision: "accepted", name: r.applicant_name ?? "" });
+                      setNote("");
+                    }}
+                  >
                     <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept
                   </Button>
                 </div>
@@ -281,18 +354,42 @@ export function ResignationsListPanel({ readOnly = false }: { readOnly?: boolean
       <Dialog open={!!pick} onOpenChange={(o) => !o && setPick(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{pick?.decision === "accepted" ? "Accept resignation" : "Reject resignation"}</DialogTitle>
+            <DialogTitle>
+              {pick?.decision === "accepted" ? "Accept resignation" : "Reject resignation"}
+            </DialogTitle>
             <DialogDescription>{pick?.name}</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-2"><label className="text-sm font-medium">Note (optional)</label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Context for the employee" /></div>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">Note (optional)</label>
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Context for the employee"
+            />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPick(null)}>Cancel</Button>
-            <Button disabled={decide.isPending}
+            <Button variant="outline" onClick={() => setPick(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={decide.isPending}
               variant={pick?.decision === "rejected" ? "destructive" : "default"}
-              className={pick?.decision === "accepted" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""}
-              onClick={() => pick && decide.mutate({ id: pick.id, decision: pick.decision, decision_note: note.trim() || null })}
-            >{decide.isPending ? "Saving…" : pick?.decision === "accepted" ? "Accept" : "Reject"}</Button>
+              className={
+                pick?.decision === "accepted"
+                  ? "bg-brand text-brand-foreground hover:bg-brand-glow"
+                  : ""
+              }
+              onClick={() =>
+                pick &&
+                decide.mutate({
+                  id: pick.id,
+                  decision: pick.decision,
+                  decision_note: note.trim() || null,
+                })
+              }
+            >
+              {decide.isPending ? "Saving…" : pick?.decision === "accepted" ? "Accept" : "Reject"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -311,7 +408,10 @@ export function LeaveApprovalsPanel() {
   });
 
   const [statusFilter, setStatusFilter] = useState<"pending" | "all">("pending");
-  const [decisionOpen, setDecisionOpen] = useState<{ row: PendingLeaveRow; decision: "approved" | "rejected" } | null>(null);
+  const [decisionOpen, setDecisionOpen] = useState<{
+    row: PendingLeaveRow;
+    decision: "approved" | "rejected";
+  } | null>(null);
   const [note, setNote] = useState("");
 
   const decide = useMutation({
@@ -325,7 +425,9 @@ export function LeaveApprovalsPanel() {
     onError: (e: any) => toast.error(e?.message || "Failed"),
   });
 
-  const rows = (data ?? []).filter((r) => (statusFilter === "pending" ? r.status === "pending" : true));
+  const rows = (data ?? []).filter((r) =>
+    statusFilter === "pending" ? r.status === "pending" : true,
+  );
 
   return (
     <div>
@@ -334,12 +436,19 @@ export function LeaveApprovalsPanel() {
           size="sm"
           variant={statusFilter === "pending" ? "default" : "outline"}
           onClick={() => setStatusFilter("pending")}
-          className={statusFilter === "pending" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""}
+          className={
+            statusFilter === "pending" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""
+          }
         >
           <Clock className="mr-1 h-3.5 w-3.5" /> Pending only
         </Button>
-        <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}
-          className={statusFilter === "all" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""}
+        <Button
+          size="sm"
+          variant={statusFilter === "all" ? "default" : "outline"}
+          onClick={() => setStatusFilter("all")}
+          className={
+            statusFilter === "all" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""
+          }
         >
           All history
         </Button>
@@ -347,7 +456,9 @@ export function LeaveApprovalsPanel() {
 
       {isLoading ? (
         <div className="grid gap-2">
-          {[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg border border-border bg-card" />)}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-lg border border-border bg-card" />
+          ))}
         </div>
       ) : rows.length === 0 ? (
         <Card className="border-dashed">
@@ -362,29 +473,53 @@ export function LeaveApprovalsPanel() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{r.applicant_name ?? r.applicant_email ?? "Unknown"}</p>
-                    <Badge variant="outline" className={`border text-[10px] ${LEAVE_STATUS_STYLE[r.status] ?? ""}`}>
+                    <p className="text-sm font-semibold">
+                      {r.applicant_name ?? r.applicant_email ?? "Unknown"}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={`border text-[10px] ${LEAVE_STATUS_STYLE[r.status] ?? ""}`}
+                    >
                       {r.status}
                     </Badge>
-                    <Badge variant="outline" className="text-[10px] capitalize">{r.leave_type}</Badge>
+                    <Badge variant="outline" className="text-[10px] capitalize">
+                      {r.leave_type}
+                    </Badge>
                   </div>
-                  {r.applicant_email && <p className="text-xs text-muted-foreground">{r.applicant_email}</p>}
+                  {r.applicant_email && (
+                    <p className="text-xs text-muted-foreground">{r.applicant_email}</p>
+                  )}
                   <p className="mt-1 text-xs">
-                    {new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()} ·{" "}
+                    {new Date(r.start_date).toLocaleDateString()} →{" "}
+                    {new Date(r.end_date).toLocaleDateString()} ·{" "}
                     <strong>{daysBetween(r.start_date, r.end_date)} day(s)</strong>
                   </p>
                   {r.reason && <p className="mt-1 text-xs text-muted-foreground">"{r.reason}"</p>}
                   {r.decision_note && (
-                    <p className="mt-1 text-xs text-muted-foreground"><strong>Decision note:</strong> {r.decision_note}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <strong>Decision note:</strong> {r.decision_note}
+                    </p>
                   )}
                 </div>
                 {r.status === "pending" && (
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => { setDecisionOpen({ row: r, decision: "rejected" }); setNote(""); }}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDecisionOpen({ row: r, decision: "rejected" });
+                        setNote("");
+                      }}
+                    >
                       <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
                     </Button>
-                    <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand-glow"
-                      onClick={() => { setDecisionOpen({ row: r, decision: "approved" }); setNote(""); }}
+                    <Button
+                      size="sm"
+                      className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                      onClick={() => {
+                        setDecisionOpen({ row: r, decision: "approved" });
+                        setNote("");
+                      }}
                     >
                       <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                     </Button>
@@ -414,13 +549,23 @@ export function LeaveApprovalsPanel() {
           </DialogHeader>
           <div className="grid gap-2">
             <label className="text-sm font-medium">Note (optional)</label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Communicate context to the requester" />
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Communicate context to the requester"
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDecisionOpen(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDecisionOpen(null)}>
+              Cancel
+            </Button>
             <Button
               disabled={decide.isPending}
-              className={decisionOpen?.decision === "approved" ? "bg-brand text-brand-foreground hover:bg-brand-glow" : ""}
+              className={
+                decisionOpen?.decision === "approved"
+                  ? "bg-brand text-brand-foreground hover:bg-brand-glow"
+                  : ""
+              }
               variant={decisionOpen?.decision === "rejected" ? "destructive" : "default"}
               onClick={() =>
                 decisionOpen &&
@@ -431,7 +576,11 @@ export function LeaveApprovalsPanel() {
                 })
               }
             >
-              {decide.isPending ? "Saving…" : decisionOpen?.decision === "approved" ? "Approve" : "Reject"}
+              {decide.isPending
+                ? "Saving…"
+                : decisionOpen?.decision === "approved"
+                  ? "Approve"
+                  : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -482,7 +631,8 @@ export function RegularizationApprovalsPanel() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold">
-                {r.applicant_name ?? r.user_id.slice(0, 8)} · <span className="font-mono text-xs">{r.work_date}</span>
+                {r.applicant_name ?? r.user_id.slice(0, 8)} ·{" "}
+                <span className="font-mono text-xs">{r.work_date}</span>
               </p>
               {r.regularization_reason && (
                 <p className="mt-1 text-xs text-muted-foreground">"{r.regularization_reason}"</p>
@@ -549,11 +699,13 @@ function ManagerInternalCareersPanel() {
                   <div>
                     <div className="font-semibold">{job.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {job.department ?? "—"} · {job.is_remote ? "Remote" : job.location ?? "—"}
+                      {job.department ?? "—"} · {job.is_remote ? "Remote" : (job.location ?? "—")}
                     </div>
                   </div>
                   {job.job_code && (
-                    <Badge variant="outline" className="font-mono text-[10px]">{job.job_code}</Badge>
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {job.job_code}
+                    </Badge>
                   )}
                 </div>
                 {job.summary && (
@@ -561,7 +713,9 @@ function ManagerInternalCareersPanel() {
                 )}
                 <div className="mt-3 flex flex-wrap gap-1">
                   {(job.tags ?? []).slice(0, 5).map((t) => (
-                    <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>
+                    <Badge key={t} variant="secondary" className="text-[10px]">
+                      {t}
+                    </Badge>
                   ))}
                 </div>
               </li>
@@ -572,5 +726,3 @@ function ManagerInternalCareersPanel() {
     </Card>
   );
 }
-
-

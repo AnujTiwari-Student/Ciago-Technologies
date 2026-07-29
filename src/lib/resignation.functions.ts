@@ -82,23 +82,30 @@ export const listAllResignations = createServerFn({ method: "GET" })
       .limit(200);
     if (error) throw new Error(error.message);
     const ids = Array.from(new Set((rows ?? []).map((r: any) => r.user_id)));
-    let profileMap: Record<string, { full_name: string | null }> = {};
+    const profileMap: Record<string, { full_name: string | null }> = {};
     if (ids.length) {
       const { data: profs } = await context.supabase
-        .from("profiles").select("user_id, full_name").in("user_id", ids);
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", ids);
       for (const p of profs ?? []) profileMap[p.user_id] = { full_name: p.full_name };
     }
-    return (rows ?? []).map((r: any) => ({ ...r, applicant_name: profileMap[r.user_id]?.full_name ?? null }));
+    return (rows ?? []).map((r: any) => ({
+      ...r,
+      applicant_name: profileMap[r.user_id]?.full_name ?? null,
+    }));
   });
 
 export const decideResignation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: any) =>
-    z.object({
-      id: z.string().uuid(),
-      decision: z.enum(["accepted", "rejected"]),
-      decision_note: z.string().max(1000).nullable().optional(),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid(),
+        decision: z.enum(["accepted", "rejected"]),
+        decision_note: z.string().max(1000).nullable().optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase

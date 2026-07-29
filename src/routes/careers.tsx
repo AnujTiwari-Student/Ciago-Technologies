@@ -221,7 +221,7 @@ function Careers() {
       w.dataLayer = w.dataLayer || [];
       w.dataLayer.push({ event: name, ...payload });
       w.gtag?.("event", name, payload);
-      // eslint-disable-next-line no-console
+
       console.info("[analytics]", name, payload);
     } catch {
       // no-op
