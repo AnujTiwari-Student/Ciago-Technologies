@@ -15,7 +15,8 @@ export const Route = createFileRoute("/security")({
       { property: "og:title", content: "Security — Ciago Technologies" },
       {
         property: "og:description",
-        content: "Security practices, data protection and responsible disclosure at Ciago Technologies.",
+        content:
+          "Security practices, data protection and responsible disclosure at Ciago Technologies.",
       },
       { property: "og:type", content: "article" },
       { property: "og:url", content: "/security" },
@@ -42,7 +43,10 @@ function SecurityPage() {
             <li>All traffic to our services is encrypted with TLS 1.2+.</li>
             <li>Databases and object storage are encrypted at rest.</li>
             <li>Row-level authorization guards applicant and client records.</li>
-            <li>Resume files are stored in a private bucket accessible only via short-lived signed URLs.</li>
+            <li>
+              Resume files are stored in a private bucket accessible only via short-lived signed
+              URLs.
+            </li>
           </ul>
         </LegalSection>
         <LegalSection heading="Access control">
@@ -61,9 +65,10 @@ function SecurityPage() {
         <LegalSection heading="Responsible disclosure">
           <p>
             If you believe you've found a security issue, please email{" "}
-            <a href="mailto:security@ciagotech.com">security@ciagotech.com</a> with a description and
-            reproduction steps. We commit to acknowledge within 2 business days and to keep you informed
-            through resolution. Please do not publicly disclose before we've had a chance to respond.
+            <a href="mailto:security@ciagotech.com">security@ciagotech.com</a> with a description
+            and reproduction steps. We commit to acknowledge within 2 business days and to keep you
+            informed through resolution. Please do not publicly disclose before we've had a chance
+            to respond.
           </p>
         </LegalSection>
       </LegalLayout>

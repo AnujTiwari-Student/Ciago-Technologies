@@ -89,6 +89,7 @@ import {
   type JobPosting,
 } from "@/lib/jobPostings.functions";
 import { useLookups } from "@/hooks/use-lookups";
+import { requireRoles } from "./-guard";
 import {
   assignTaskToEmployee,
   listAllAssignedTasks,
@@ -97,26 +98,20 @@ import {
   type EmployeeOption,
 } from "@/lib/adminTasks.functions";
 
-
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
   validateSearch: zodValidator(
     z.object({
-      tab: fallback(z.enum(["applications", "postings", "users", "audit", "by-role", "tasks"]).optional(), undefined),
+      tab: fallback(
+        z.enum(["applications", "postings", "users", "audit", "by-role", "tasks"]).optional(),
+        undefined,
+      ),
     }),
   ),
   beforeLoad: async () => {
-
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth", search: { redirect: "/admin" } });
-    const { data: role } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw redirect({ to: "/forbidden" });
-    return { currentUserId: data.user.id };
+    const { userId, roles } = await requireRoles("/admin");
+    if (!roles.has("admin")) throw redirect({ to: "/forbidden" });
+    return { currentUserId: userId };
   },
   head: () => ({
     meta: [
@@ -169,12 +164,32 @@ const TAB_META: Record<
   "applications" | "postings" | "users" | "audit" | "by-role" | "tasks",
   { title: string; desc: string; icon: any }
 > = {
-  applications: { title: "Applications", desc: "Review, triage and progress every candidate.", icon: Users },
-  postings: { title: "Job Postings", desc: "Publish, pause and edit roles on the public Careers page.", icon: Briefcase },
+  applications: {
+    title: "Applications",
+    desc: "Review, triage and progress every candidate.",
+    icon: Users,
+  },
+  postings: {
+    title: "Job Postings",
+    desc: "Publish, pause and edit roles on the public Careers page.",
+    icon: Briefcase,
+  },
   users: { title: "Users & Roles", desc: "Manage accounts and grant admin access.", icon: UserCog },
-  audit: { title: "Audit Logs", desc: "Every privileged action, with full metadata.", icon: ScrollText },
-  "by-role": { title: "Applicants by Job", desc: "Every job posting with its applicants, statuses and re-apply windows.", icon: Briefcase },
-  tasks: { title: "Employee Tasks", desc: "Delegate work to employees with deadlines, priorities and project references.", icon: ClipboardList },
+  audit: {
+    title: "Audit Logs",
+    desc: "Every privileged action, with full metadata.",
+    icon: ScrollText,
+  },
+  "by-role": {
+    title: "Applicants by Job",
+    desc: "Every job posting with its applicants, statuses and re-apply windows.",
+    icon: Briefcase,
+  },
+  tasks: {
+    title: "Employee Tasks",
+    desc: "Delegate work to employees with deadlines, priorities and project references.",
+    icon: ClipboardList,
+  },
 };
 
 function AdminPage() {
@@ -193,7 +208,6 @@ function AdminPage() {
     queryFn: () => fetchLogs({ data: { limit: 6 } }),
     enabled: !tab,
   });
-
 
   const metrics = [
     {
@@ -241,7 +255,9 @@ function AdminPage() {
             <div>
               <div className="flex items-center gap-2 text-brand">
                 <ShieldCheck className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-[0.2em]">Command Center</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.2em]">
+                  Command Center
+                </span>
               </div>
               <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 Enterprise control panel
@@ -263,7 +279,10 @@ function AdminPage() {
         <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {metrics.map((m) =>
             isLoadingMetrics ? (
-              <div key={m.label} className="h-[112px] animate-pulse rounded-2xl border border-border bg-card" />
+              <div
+                key={m.label}
+                className="h-[112px] animate-pulse rounded-2xl border border-border bg-card"
+              />
             ) : (
               <Card
                 key={m.label}
@@ -278,11 +297,15 @@ function AdminPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       {m.label}
                     </p>
-                    <div className={`grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br ${m.accent}`}>
+                    <div
+                      className={`grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br ${m.accent}`}
+                    >
                       <m.icon className="h-4 w-4" />
                     </div>
                   </div>
-                  <p className="mt-3 text-3xl font-black leading-none tracking-tight sm:text-4xl">{m.value}</p>
+                  <p className="mt-3 text-3xl font-black leading-none tracking-tight sm:text-4xl">
+                    {m.value}
+                  </p>
                   <p className="mt-2 text-xs text-muted-foreground">{m.hint}</p>
                 </CardContent>
               </Card>
@@ -325,7 +348,6 @@ function AdminPage() {
             />
           )}
         </div>
-
 
         <p className="mt-10 text-xs text-muted-foreground">
           Access controlled by row-level security. See{" "}
@@ -409,11 +431,15 @@ function ApplicationsPanel() {
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">{filtered.length} of {data?.length ?? 0}</p>
+        <p className="text-xs text-muted-foreground">
+          {filtered.length} of {data?.length ?? 0}
+        </p>
       </div>
       {isLoading ? (
         <div className="grid gap-3">
@@ -430,7 +456,9 @@ function ApplicationsPanel() {
       ) : !filtered || filtered.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="p-10 text-center text-muted-foreground">
-            {(data ?? []).length === 0 ? "No applications yet." : "No applications match your filters."}
+            {(data ?? []).length === 0
+              ? "No applications yet."
+              : "No applications match your filters."}
           </CardContent>
         </Card>
       ) : (
@@ -451,7 +479,10 @@ function ApplicationsPanel() {
               >
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{a.full_name}</p>
-                  <a href={`mailto:${a.email}`} className="truncate text-xs text-muted-foreground hover:text-brand">
+                  <a
+                    href={`mailto:${a.email}`}
+                    className="truncate text-xs text-muted-foreground hover:text-brand"
+                  >
                     {a.email}
                   </a>
                 </div>
@@ -459,12 +490,18 @@ function ApplicationsPanel() {
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium">{a.role_title}</p>
                     {a.track_type === "hr_track" && (
-                      <Badge variant="outline" className="border-fuchsia-500/40 bg-fuchsia-500/10 text-[10px] font-semibold uppercase tracking-widest text-fuchsia-600 dark:text-fuchsia-300">
+                      <Badge
+                        variant="outline"
+                        className="border-fuchsia-500/40 bg-fuchsia-500/10 text-[10px] font-semibold uppercase tracking-widest text-fuchsia-600 dark:text-fuchsia-300"
+                      >
                         HR Track
                       </Badge>
                     )}
                     {a.track_type === "manager_track" && (
-                      <Badge variant="outline" className="border-indigo-500/40 bg-indigo-500/10 text-[10px] font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-300">
+                      <Badge
+                        variant="outline"
+                        className="border-indigo-500/40 bg-indigo-500/10 text-[10px] font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-300"
+                      >
                         Manager Track
                       </Badge>
                     )}
@@ -514,7 +551,11 @@ function ApplicationsPanel() {
                   {a.status === "rejected" ? (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-600">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -522,7 +563,8 @@ function ApplicationsPanel() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete rejected application?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This permanently removes {a.full_name}'s application and any uploaded resume file from storage.
+                            This permanently removes {a.full_name}'s application and any uploaded
+                            resume file from storage.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -649,8 +691,14 @@ function JobPostingsPanel() {
       employment_type: form.employment_type.trim(),
       summary: form.summary.trim(),
       description: form.description.trim(),
-      requirements: form.requirements.split("\n").map((s) => s.trim()).filter(Boolean),
-      tags: form.tags.split(",").map((s) => s.trim()).filter(Boolean),
+      requirements: form.requirements
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      tags: form.tags
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
       salary_min_inr: form.salary_min_inr ? Number(form.salary_min_inr) : null,
       salary_max_inr: form.salary_max_inr ? Number(form.salary_max_inr) : null,
       status: form.status,
@@ -665,9 +713,18 @@ function JobPostingsPanel() {
           {data?.length ?? 0} posting{(data?.length ?? 0) === 1 ? "" : "s"} —{" "}
           {data?.filter((p) => p.status === "published").length ?? 0} published
         </p>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyPosting); }}>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) setForm(emptyPosting);
+          }}
+        >
           <DialogTrigger asChild>
-            <Button className="bg-brand text-brand-foreground hover:bg-brand-glow" onClick={() => setForm(emptyPosting)}>
+            <Button
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              onClick={() => setForm(emptyPosting)}
+            >
               <Plus className="mr-1.5 h-4 w-4" />
               New posting
             </Button>
@@ -682,27 +739,46 @@ function JobPostingsPanel() {
             <form onSubmit={submit} className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="p-title">Title</Label>
-                <Input id="p-title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+                <Input
+                  id="p-title"
+                  required
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor="p-dept">Department</Label>
-                  <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v })}>
-                    <SelectTrigger id="p-dept"><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <Select
+                    value={form.department}
+                    onValueChange={(v) => setForm({ ...form, department: v })}
+                  >
+                    <SelectTrigger id="p-dept">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
                     <SelectContent>
                       {lookups.departments.map((d) => (
-                        <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                        <SelectItem key={d.id} value={d.name}>
+                          {d.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="p-type">Employment type</Label>
-                  <Select value={form.employment_type} onValueChange={(v) => setForm({ ...form, employment_type: v })}>
-                    <SelectTrigger id="p-type"><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <Select
+                    value={form.employment_type}
+                    onValueChange={(v) => setForm({ ...form, employment_type: v })}
+                  >
+                    <SelectTrigger id="p-type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
                     <SelectContent>
                       {lookups.employment_types.map((t) => (
-                        <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
+                        <SelectItem key={t.code} value={t.code}>
+                          {t.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -711,53 +787,107 @@ function JobPostingsPanel() {
               <div className="grid grid-cols-[2fr_auto] items-end gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor="p-loc">Location</Label>
-                  <Input id="p-loc" required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                  <Input
+                    id="p-loc"
+                    required
+                    value={form.location}
+                    onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  />
                 </div>
                 <label className="flex items-center gap-2 pb-2 text-sm">
-                  <Switch checked={form.is_remote} onCheckedChange={(v) => setForm({ ...form, is_remote: v })} />
+                  <Switch
+                    checked={form.is_remote}
+                    onCheckedChange={(v) => setForm({ ...form, is_remote: v })}
+                  />
                   Remote
                 </label>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="p-sum">Summary</Label>
-                <Textarea id="p-sum" required rows={2} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
+                <Textarea
+                  id="p-sum"
+                  required
+                  rows={2}
+                  value={form.summary}
+                  onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="p-desc">Description</Label>
-                <Textarea id="p-desc" required rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                <Textarea
+                  id="p-desc"
+                  required
+                  rows={5}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="p-req">Requirements (one per line)</Label>
-                <Textarea id="p-req" rows={4} value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} />
+                <Textarea
+                  id="p-req"
+                  rows={4}
+                  value={form.requirements}
+                  onChange={(e) => setForm({ ...form, requirements: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="p-tags">Tags (comma-separated: Go, Kubernetes, Remote…)</Label>
-                <Input id="p-tags" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+                <Input
+                  id="p-tags"
+                  value={form.tags}
+                  onChange={(e) => setForm({ ...form, tags: e.target.value })}
+                />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor="p-smin">Salary min (₹)</Label>
-                  <Input id="p-smin" type="number" min="0" value={form.salary_min_inr} onChange={(e) => setForm({ ...form, salary_min_inr: e.target.value })} />
+                  <Input
+                    id="p-smin"
+                    type="number"
+                    min="0"
+                    value={form.salary_min_inr}
+                    onChange={(e) => setForm({ ...form, salary_min_inr: e.target.value })}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="p-smax">Salary max (₹)</Label>
-                  <Input id="p-smax" type="number" min="0" value={form.salary_max_inr} onChange={(e) => setForm({ ...form, salary_max_inr: e.target.value })} />
+                  <Input
+                    id="p-smax"
+                    type="number"
+                    min="0"
+                    value={form.salary_max_inr}
+                    onChange={(e) => setForm({ ...form, salary_max_inr: e.target.value })}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label>Status</Label>
-                  <Select value={form.status} onValueChange={(v: any) => setForm({ ...form, status: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.status}
+                    onValueChange={(v: any) => setForm({ ...form, status: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {lookups.statuses.job_posting.map((s) => (
-                        <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
+                        <SelectItem key={s.code} value={s.code}>
+                          {s.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={upsert.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={upsert.isPending}
+                  className="bg-brand text-brand-foreground hover:bg-brand-glow"
+                >
                   {upsert.isPending ? "Saving…" : form.id ? "Save changes" : "Create posting"}
                 </Button>
               </DialogFooter>
@@ -775,7 +905,9 @@ function JobPostingsPanel() {
       ) : !data || data.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="p-10 text-center text-muted-foreground">
-            No job postings yet. Click <span className="font-semibold text-foreground">New posting</span> to create the first one.
+            No job postings yet. Click{" "}
+            <span className="font-semibold text-foreground">New posting</span> to create the first
+            one.
           </CardContent>
         </Card>
       ) : (
@@ -787,7 +919,12 @@ function JobPostingsPanel() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-bold">{p.title}</p>
-                      <Badge variant="outline" className={`border ${POSTING_STATUS_STYLE[p.status]}`}>{p.status}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={`border ${POSTING_STATUS_STYLE[p.status]}`}
+                      >
+                        {p.status}
+                      </Badge>
                       {p.is_remote && <Badge variant="outline">Remote</Badge>}
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -802,29 +939,61 @@ function JobPostingsPanel() {
                       <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
                     </Button>
                     {p.status === "published" ? (
-                      <Button size="sm" variant="outline" onClick={() => upsert.mutate({
-                        id: p.id, title: p.title, department: p.department, location: p.location,
-                        is_remote: p.is_remote, employment_type: p.employment_type, summary: p.summary,
-                        description: p.description, requirements: p.requirements, tags: p.tags,
-                        salary_min_inr: p.salary_min_inr, salary_max_inr: p.salary_max_inr,
-                        status: "draft",
-                      })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          upsert.mutate({
+                            id: p.id,
+                            title: p.title,
+                            department: p.department,
+                            location: p.location,
+                            is_remote: p.is_remote,
+                            employment_type: p.employment_type,
+                            summary: p.summary,
+                            description: p.description,
+                            requirements: p.requirements,
+                            tags: p.tags,
+                            salary_min_inr: p.salary_min_inr,
+                            salary_max_inr: p.salary_max_inr,
+                            status: "draft",
+                          })
+                        }
+                      >
                         <PauseCircle className="mr-1.5 h-3.5 w-3.5" /> Unpublish
                       </Button>
                     ) : (
-                      <Button size="sm" variant="outline" onClick={() => upsert.mutate({
-                        id: p.id, title: p.title, department: p.department, location: p.location,
-                        is_remote: p.is_remote, employment_type: p.employment_type, summary: p.summary,
-                        description: p.description, requirements: p.requirements, tags: p.tags,
-                        salary_min_inr: p.salary_min_inr, salary_max_inr: p.salary_max_inr,
-                        status: "published",
-                      })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          upsert.mutate({
+                            id: p.id,
+                            title: p.title,
+                            department: p.department,
+                            location: p.location,
+                            is_remote: p.is_remote,
+                            employment_type: p.employment_type,
+                            summary: p.summary,
+                            description: p.description,
+                            requirements: p.requirements,
+                            tags: p.tags,
+                            salary_min_inr: p.salary_min_inr,
+                            salary_max_inr: p.salary_max_inr,
+                            status: "published",
+                          })
+                        }
+                      >
                         <PlayCircle className="mr-1.5 h-3.5 w-3.5" /> Publish
                       </Button>
                     )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-600">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -832,12 +1001,16 @@ function JobPostingsPanel() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete posting?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This permanently removes the "{p.title}" posting. Existing applications are unaffected.
+                            This permanently removes the "{p.title}" posting. Existing applications
+                            are unaffected.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction className="bg-rose-600 hover:bg-rose-500" onClick={() => del.mutate(p.id)}>
+                          <AlertDialogAction
+                            className="bg-rose-600 hover:bg-rose-500"
+                            onClick={() => del.mutate(p.id)}
+                          >
                             Delete permanently
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -897,18 +1070,36 @@ function AuditLogsPanel() {
   return (
     <div>
       <div className="mb-4 grid gap-3 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <Input placeholder="Search actor, action, resource…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Input
+          placeholder="Search actor, action, resource…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <Select value={actionFilter} onValueChange={setActionFilter}>
-          <SelectTrigger><SelectValue placeholder="All actions" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="All actions" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All actions</SelectItem>
             {actions.map((a) => (
-              <SelectItem key={a} value={a}>{a}</SelectItem>
+              <SelectItem key={a} value={a}>
+                {a}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
-        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+        <Input
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          aria-label="From date"
+        />
+        <Input
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          aria-label="To date"
+        />
       </div>
 
       {isLoading ? (
@@ -919,11 +1110,15 @@ function AuditLogsPanel() {
         </div>
       ) : error ? (
         <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="p-6 text-sm text-destructive">{(error as Error).message}</CardContent>
+          <CardContent className="p-6 text-sm text-destructive">
+            {(error as Error).message}
+          </CardContent>
         </Card>
       ) : filtered.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="p-10 text-center text-muted-foreground">No audit events for this filter.</CardContent>
+          <CardContent className="p-10 text-center text-muted-foreground">
+            No audit events for this filter.
+          </CardContent>
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -936,17 +1131,33 @@ function AuditLogsPanel() {
           </div>
           <ul>
             {filtered.map((r) => (
-              <li key={r.id} className="grid grid-cols-1 gap-2 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[1.2fr_1.4fr_1.4fr_1.6fr_auto] md:items-center md:gap-4">
+              <li
+                key={r.id}
+                className="grid grid-cols-1 gap-2 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[1.2fr_1.4fr_1.4fr_1.6fr_auto] md:items-center md:gap-4"
+              >
                 <div className="text-xs text-muted-foreground">
-                  {new Date(r.timestamp).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {new Date(r.timestamp).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
-                <div className="min-w-0 truncate text-sm">{r.actor_email ?? r.actor_id?.slice(0, 8) ?? "system"}</div>
+                <div className="min-w-0 truncate text-sm">
+                  {r.actor_email ?? r.actor_id?.slice(0, 8) ?? "system"}
+                </div>
                 <div>
-                  <Badge variant="outline" className={`border ${AUDIT_STYLE[r.action] ?? "border-border"}`}>
+                  <Badge
+                    variant="outline"
+                    className={`border ${AUDIT_STYLE[r.action] ?? "border-border"}`}
+                  >
                     {r.action}
                   </Badge>
                 </div>
-                <div className="truncate font-mono text-xs text-muted-foreground">{r.target_resource ?? "—"}</div>
+                <div className="truncate font-mono text-xs text-muted-foreground">
+                  {r.target_resource ?? "—"}
+                </div>
                 <div className="md:text-right">
                   <Button size="sm" variant="ghost" onClick={() => setInspect(r)}>
                     <FileText className="mr-1 h-3.5 w-3.5" /> View
@@ -970,14 +1181,20 @@ function AuditLogsPanel() {
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-3 gap-2">
                 <p className="text-muted-foreground">Actor</p>
-                <p className="col-span-2 font-medium">{inspect.actor_email ?? inspect.actor_id ?? "system"}</p>
+                <p className="col-span-2 font-medium">
+                  {inspect.actor_email ?? inspect.actor_id ?? "system"}
+                </p>
                 <p className="text-muted-foreground">Action</p>
                 <p className="col-span-2 font-mono text-xs">{inspect.action}</p>
                 <p className="text-muted-foreground">Target</p>
-                <p className="col-span-2 font-mono text-xs break-all">{inspect.target_resource ?? "—"}</p>
+                <p className="col-span-2 font-mono text-xs break-all">
+                  {inspect.target_resource ?? "—"}
+                </p>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Details</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Details
+                </p>
                 <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs">
                   {JSON.stringify(inspect.details, null, 2)}
                 </pre>
@@ -1028,11 +1245,8 @@ function UsersPanel({ currentUserId }: { currentUserId: string }) {
   });
 
   const roleMutation = useMutation({
-    mutationFn: (v: {
-      userId: string;
-      role: StaffUser["role"];
-      departmentId: string | null;
-    }) => setRole({ data: v }),
+    mutationFn: (v: { userId: string; role: StaffUser["role"]; departmentId: string | null }) =>
+      setRole({ data: v }),
     onSuccess: () => {
       toast.success("Role updated");
       qc.invalidateQueries({ queryKey: ["admin-staff-users"] });
@@ -1288,7 +1502,9 @@ function DashboardLanding({
   recentLoading: boolean;
 }) {
   const inQueue = apps.filter((a) => a.status === "applied").length;
-  const underReview = apps.filter((a) => a.status === "screening" || a.status === "interviewing").length;
+  const underReview = apps.filter(
+    (a) => a.status === "screening" || a.status === "interviewing",
+  ).length;
   const activePostings = postings.filter((p) => p.status === "published").length;
   const adminsCount = users.filter((u) => u.is_admin).length;
 
@@ -1331,7 +1547,9 @@ function DashboardLanding({
     <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
       <div>
         <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Quick actions</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Jump straight into the workspace you need.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Jump straight into the workspace you need.
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {quickActions.map((a) => (
             <Link
@@ -1345,7 +1563,9 @@ function DashboardLanding({
                 className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${a.accent} opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
               />
               <div className="relative flex items-start justify-between">
-                <div className={`grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${a.accent}`}>
+                <div
+                  className={`grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${a.accent}`}
+                >
                   <a.icon className="h-5 w-5" />
                 </div>
                 <ExternalLink className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-brand" />
@@ -1361,7 +1581,9 @@ function DashboardLanding({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Recent activity</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Latest privileged actions across the platform.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Latest privileged actions across the platform.
+            </p>
           </div>
           <Button asChild size="sm" variant="ghost">
             <Link to="/admin" search={{ tab: "audit" }}>
@@ -1409,7 +1631,6 @@ function DashboardLanding({
   );
 }
 
-
 // ============ APPLICANTS BY ROLE ============
 
 function ApplicantsByRolePanel() {
@@ -1453,7 +1674,10 @@ function ApplicantsByRolePanel() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-base font-bold">{g.role_title}</h3>
-                  <Badge variant="outline" className={`border ${POSTING_STATUS_STYLE[g.status] ?? ""}`}>
+                  <Badge
+                    variant="outline"
+                    className={`border ${POSTING_STATUS_STYLE[g.status] ?? ""}`}
+                  >
                     {g.status}
                   </Badge>
                   {g.job_code && (
@@ -1474,7 +1698,8 @@ function ApplicantsByRolePanel() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {g.total} applicant{g.total === 1 ? "" : "s"} · {g.active} active · {g.rejected} rejected
+                  {g.total} applicant{g.total === 1 ? "" : "s"} · {g.active} active · {g.rejected}{" "}
+                  rejected
                 </p>
               </div>
               <ChevronDown
@@ -1491,30 +1716,48 @@ function ApplicantsByRolePanel() {
                 </div>
                 <ul className="divide-y divide-border">
                   {g.applicants.map((a) => (
-                    <li key={a.application_id} className="grid grid-cols-[1.4fr_1fr_120px_180px] items-center gap-3 px-4 py-3 text-sm">
+                    <li
+                      key={a.application_id}
+                      className="grid grid-cols-[1.4fr_1fr_120px_180px] items-center gap-3 px-4 py-3 text-sm"
+                    >
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{a.full_name}</p>
                         <p className="truncate text-xs text-muted-foreground">{a.email}</p>
                       </div>
                       <div>
-                        <Badge variant="outline" className={`border ${STATUS_STYLE[a.status] ?? STATUS_STYLE.applied}`}>
+                        <Badge
+                          variant="outline"
+                          className={`border ${STATUS_STYLE[a.status] ?? STATUS_STYLE.applied}`}
+                        >
                           {STATUS_OPTIONS.find((s) => s.value === a.status)?.label ?? a.status}
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {new Date(a.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        {new Date(a.created_at).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </div>
                       <div className="text-xs">
                         {a.cooldown_days_left > 0 ? (
                           <>
-                            <span className="font-semibold text-foreground">in {a.cooldown_days_left}d</span>
+                            <span className="font-semibold text-foreground">
+                              in {a.cooldown_days_left}d
+                            </span>
                             <span className="text-muted-foreground">
                               {" · "}
-                              {new Date(a.next_eligible_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              {new Date(a.next_eligible_at).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
                             </span>
                           </>
                         ) : (
-                          <span className="text-emerald-600 dark:text-emerald-400">Eligible now</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            Eligible now
+                          </span>
                         )}
                       </div>
                     </li>
@@ -1607,17 +1850,30 @@ function EmployeeTasksPanel() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="task-title">Title</Label>
-              <Input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ship the Q1 analytics dashboard" />
+              <Input
+                id="task-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ship the Q1 analytics dashboard"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="task-desc">Description</Label>
-              <Textarea id="task-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="What needs to be delivered, and how will we know it's done?" />
+              <Textarea
+                id="task-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="What needs to be delivered, and how will we know it's done?"
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Priority</Label>
                 <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Low</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
@@ -1628,14 +1884,28 @@ function EmployeeTasksPanel() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-due">Deadline</Label>
-                <Input id="task-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <Input
+                  id="task-due"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="task-proj">Project reference (optional)</Label>
-              <Input id="task-proj" value={projectRef} onChange={(e) => setProjectRef(e.target.value)} placeholder="CGT-PLAT-042" />
+              <Input
+                id="task-proj"
+                value={projectRef}
+                onChange={(e) => setProjectRef(e.target.value)}
+                placeholder="CGT-PLAT-042"
+              />
             </div>
-            <Button onClick={() => assignM.mutate()} disabled={!canSubmit} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+            <Button
+              onClick={() => assignM.mutate()}
+              disabled={!canSubmit}
+              className="bg-brand text-brand-foreground hover:bg-brand-glow"
+            >
               {assignM.isPending ? "Assigning…" : "Assign task"}
             </Button>
           </div>
@@ -1650,9 +1920,15 @@ function EmployeeTasksPanel() {
         </div>
         <div className="mt-4 grid gap-3">
           {tasks.isLoading ? (
-            [0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-card" />)
+            [0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
+            ))
           ) : (tasks.data ?? []).length === 0 ? (
-            <Card className="border-dashed"><CardContent className="p-8 text-center text-sm text-muted-foreground">No tasks assigned yet.</CardContent></Card>
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                No tasks assigned yet.
+              </CardContent>
+            </Card>
           ) : (
             (tasks.data ?? []).map((t: AdminTask) => (
               <Card key={t.id} className="border-border">
@@ -1660,12 +1936,29 @@ function EmployeeTasksPanel() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-sm font-bold">{t.title}</h4>
-                      <Badge variant="outline" className={`border ${TASK_STATUS_STYLE[t.status] ?? ""}`}>{t.status.replace("_", " ")}</Badge>
-                      <Badge variant="outline" className="border-brand/30 text-brand text-[10px] uppercase tracking-widest">{t.priority}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={`border ${TASK_STATUS_STYLE[t.status] ?? ""}`}
+                      >
+                        {t.status.replace("_", " ")}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-brand/30 text-brand text-[10px] uppercase tracking-widest"
+                      >
+                        {t.priority}
+                      </Badge>
                     </div>
-                    {t.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{t.description}</p>}
+                    {t.description && (
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        {t.description}
+                      </p>
+                    )}
                     <p className="mt-2 text-[11px] text-muted-foreground">
-                      Assigned to <span className="font-semibold text-foreground">{t.assignee_name || t.assignee_email}</span>
+                      Assigned to{" "}
+                      <span className="font-semibold text-foreground">
+                        {t.assignee_name || t.assignee_email}
+                      </span>
                       {t.due_date ? <> · Due {new Date(t.due_date).toLocaleDateString()}</> : null}
                       {t.project_reference ? <> · {t.project_reference}</> : null}
                     </p>

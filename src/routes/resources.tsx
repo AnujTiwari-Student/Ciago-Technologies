@@ -42,7 +42,10 @@ export const Route = createFileRoute("/resources")({
       { property: "og:url", content: "/resources" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Resources & Whitepapers — Ciago Technologies" },
-      { name: "twitter:description", content: "Enterprise engineering blueprints from our senior team." },
+      {
+        name: "twitter:description",
+        content: "Enterprise engineering blueprints from our senior team.",
+      },
     ],
     links: [{ rel: "canonical", href: "/resources" }],
   }),
@@ -122,7 +125,8 @@ function ResourcesPage() {
               Engineering <span className="brand-gradient-text">blueprints.</span>
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Field-tested playbooks from platforms we run in production for regulated, high-traffic customers.
+              Field-tested playbooks from platforms we run in production for regulated, high-traffic
+              customers.
             </p>
           </div>
 
@@ -137,7 +141,9 @@ function ResourcesPage() {
                     <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand/10 text-brand">
                       <FileText className="h-5 w-5" />
                     </div>
-                    <Badge variant="secondary" className="uppercase tracking-widest">PDF</Badge>
+                    <Badge variant="secondary" className="uppercase tracking-widest">
+                      PDF
+                    </Badge>
                   </div>
                   <h2 className="mt-5 text-xl font-bold">{r.title}</h2>
                   <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{r.desc}</p>
@@ -154,7 +160,8 @@ function ResourcesPage() {
 
           <p className="mt-10 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-brand" />
-            We only use your email for this download and occasional engineering updates. Unsubscribe anytime.
+            We only use your email for this download and occasional engineering updates. Unsubscribe
+            anytime.
           </p>
         </section>
       </main>
@@ -180,14 +187,27 @@ function ResourcesPage() {
             </div>
             {/* Honeypot */}
             <div aria-hidden className="hidden" style={{ position: "absolute", left: "-10000px" }}>
-              <label>Website (leave blank)
-                <input type="text" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />
+              <label>
+                Website (leave blank)
+                <input
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={hp}
+                  onChange={(e) => setHp(e.target.value)}
+                />
               </label>
             </div>
             <Turnstile onToken={setTurnstileToken} />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setSelected(null)}>Cancel</Button>
-              <Button type="submit" disabled={submitting} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+              <Button type="button" variant="outline" onClick={() => setSelected(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
                 {submitting ? "Preparing…" : "Get download"}
               </Button>
             </DialogFooter>

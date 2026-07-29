@@ -9,43 +9,97 @@ const categories: Category[] = [
     id: "backend",
     label: "Backend & APIs",
     items: [
-      { name: "Go", why: "Concurrent, statically-typed services that scale linearly with cores — ideal for high-throughput APIs." },
-      { name: "Node.js / TypeScript", why: "Shared type contracts with frontends and mature ecosystem for real-time and edge workloads." },
-      { name: "gRPC", why: "Strict schemas, streaming and multiplexing over HTTP/2 — the backbone of our internal microservice fabric." },
-      { name: "GraphQL", why: "One flexible contract for product teams, with schema-first governance and precise field-level auth." },
+      {
+        name: "Go",
+        why: "Concurrent, statically-typed services that scale linearly with cores — ideal for high-throughput APIs.",
+      },
+      {
+        name: "Node.js / TypeScript",
+        why: "Shared type contracts with frontends and mature ecosystem for real-time and edge workloads.",
+      },
+      {
+        name: "gRPC",
+        why: "Strict schemas, streaming and multiplexing over HTTP/2 — the backbone of our internal microservice fabric.",
+      },
+      {
+        name: "GraphQL",
+        why: "One flexible contract for product teams, with schema-first governance and precise field-level auth.",
+      },
     ],
   },
   {
     id: "cloud",
     label: "Cloud & DevOps",
     items: [
-      { name: "Kubernetes", why: "Portable orchestration with rolling updates, autoscaling and blast-radius isolation across regions." },
-      { name: "Docker", why: "Reproducible builds — same artifact from a laptop to production, immutable and auditable." },
-      { name: "AWS", why: "Deep managed services (EKS, RDS, S3, IAM) and multi-account landing zones for regulated workloads." },
-      { name: "Terraform", why: "Declarative, versioned infrastructure with plan/apply reviews — no more click-ops drift." },
-      { name: "ArgoCD", why: "GitOps delivery that keeps clusters in sync with the repo — reversible, auditable, boring." },
+      {
+        name: "Kubernetes",
+        why: "Portable orchestration with rolling updates, autoscaling and blast-radius isolation across regions.",
+      },
+      {
+        name: "Docker",
+        why: "Reproducible builds — same artifact from a laptop to production, immutable and auditable.",
+      },
+      {
+        name: "AWS",
+        why: "Deep managed services (EKS, RDS, S3, IAM) and multi-account landing zones for regulated workloads.",
+      },
+      {
+        name: "Terraform",
+        why: "Declarative, versioned infrastructure with plan/apply reviews — no more click-ops drift.",
+      },
+      {
+        name: "ArgoCD",
+        why: "GitOps delivery that keeps clusters in sync with the repo — reversible, auditable, boring.",
+      },
     ],
   },
   {
     id: "mobile",
     label: "Mobile & Frontend",
     items: [
-      { name: "React", why: "Battle-tested component model with a huge talent pool and mature testing story." },
-      { name: "Next.js", why: "Hybrid rendering, edge runtime and image optimisation — production defaults, not experiments." },
-      { name: "TypeScript", why: "Catches interface drift before it reaches production and doubles as living documentation." },
-      { name: "React Native", why: "One codebase, native performance and shared business logic across iOS and Android." },
-      { name: "Tailwind CSS", why: "Design tokens in code — consistent, themable UI without CSS bloat." },
+      {
+        name: "React",
+        why: "Battle-tested component model with a huge talent pool and mature testing story.",
+      },
+      {
+        name: "Next.js",
+        why: "Hybrid rendering, edge runtime and image optimisation — production defaults, not experiments.",
+      },
+      {
+        name: "TypeScript",
+        why: "Catches interface drift before it reaches production and doubles as living documentation.",
+      },
+      {
+        name: "React Native",
+        why: "One codebase, native performance and shared business logic across iOS and Android.",
+      },
+      {
+        name: "Tailwind CSS",
+        why: "Design tokens in code — consistent, themable UI without CSS bloat.",
+      },
     ],
   },
   {
     id: "security",
     label: "Security & Database",
     items: [
-      { name: "PostgreSQL", why: "ACID, JSONB, partitioning and mature replication — a single engine for OLTP + analytics." },
+      {
+        name: "PostgreSQL",
+        why: "ACID, JSONB, partitioning and mature replication — a single engine for OLTP + analytics.",
+      },
       { name: "Redis", why: "Sub-millisecond caching, pub/sub and rate-limits for hot paths." },
-      { name: "OAuth 2.0 / OIDC", why: "Industry-standard identity, MFA and SSO integration for enterprise customers." },
-      { name: "Vault", why: "Centralized secrets with dynamic credentials and short-lived tokens — no more .env leaks." },
-      { name: "OpenTelemetry", why: "Vendor-neutral traces, metrics and logs so we can debug production in minutes, not hours." },
+      {
+        name: "OAuth 2.0 / OIDC",
+        why: "Industry-standard identity, MFA and SSO integration for enterprise customers.",
+      },
+      {
+        name: "Vault",
+        why: "Centralized secrets with dynamic credentials and short-lived tokens — no more .env leaks.",
+      },
+      {
+        name: "OpenTelemetry",
+        why: "Vendor-neutral traces, metrics and logs so we can debug production in minutes, not hours.",
+      },
     ],
   },
 ];

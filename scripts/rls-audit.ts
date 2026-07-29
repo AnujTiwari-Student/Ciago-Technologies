@@ -40,14 +40,8 @@ function extractPolicies(sql: string): Array<{ name: string; body: string }> {
 // Extracts the contents of `USING (...)` / `WITH CHECK (...)` matching the
 // outer parens (balanced) because policy bodies can themselves contain
 // nested `()` like `auth.uid()` or `public.has_role(...)`.
-function extractBalanced(
-  body: string,
-  keyword: "USING" | "WITH CHECK",
-): string | undefined {
-  const k =
-    keyword === "USING"
-      ? /\bUSING\s*\(/isu
-      : /\bWITH\s+CHECK\s*\(/isu;
+function extractBalanced(body: string, keyword: "USING" | "WITH CHECK"): string | undefined {
+  const k = keyword === "USING" ? /\bUSING\s*\(/isu : /\bWITH\s+CHECK\s*\(/isu;
   const start = k.exec(body);
   if (!start) return undefined;
   // Walk from the opening paren and balance until we find its match.
@@ -116,7 +110,7 @@ function classifyPolicyBody(body: string): "ok" | "review" {
 
 function audit(): { findings: Finding[]; flagged: number; total: number } {
   const findings: Finding[] = [];
-  let files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql"));
+  const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql"));
   for (const f of files) {
     const path = join(MIGRATIONS_DIR, f);
     const sql = readFileSync(path, "utf8");
@@ -158,7 +152,13 @@ if (result.flagged > 0) {
   }
   process.exit(1);
 } else {
-  console.log("Every CREATE POLICY body routes through auth.uid() (or is the 'true' / 'status=active…' public-read case).");
-  console.log("→ Under the Clerk branch, requireSupabaseAuth issues a GoTrue JWT whose `sub` is the mapped auth.users.id,");
-  console.log("  so auth.uid() evaluates to the same UUID the legacy branch saw. All RLS policies fire identically.");
+  console.log(
+    "Every CREATE POLICY body routes through auth.uid() (or is the 'true' / 'status=active…' public-read case).",
+  );
+  console.log(
+    "→ Under the Clerk branch, requireSupabaseAuth issues a GoTrue JWT whose `sub` is the mapped auth.users.id,",
+  );
+  console.log(
+    "  so auth.uid() evaluates to the same UUID the legacy branch saw. All RLS policies fire identically.",
+  );
 }

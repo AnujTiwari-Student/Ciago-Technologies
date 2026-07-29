@@ -105,7 +105,8 @@ export function HrTasksPanel() {
             <ClipboardList className="h-5 w-5 text-brand" /> HR Task Manager
           </h3>
           <p className="text-sm text-muted-foreground">
-            Internal HR duties (offer drafts, verifications, payroll cutoffs). Assignable only to HR/admin.
+            Internal HR duties (offer drafts, verifications, payroll cutoffs). Assignable only to
+            HR/admin.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -126,7 +127,9 @@ export function HrTasksPanel() {
                   value={form.assignee_id}
                   onValueChange={(v) => setForm({ ...form, assignee_id: v })}
                 >
-                  <SelectTrigger><SelectValue placeholder="Pick an HR teammate" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pick an HR teammate" />
+                  </SelectTrigger>
                   <SelectContent>
                     {(peers.data ?? []).map((p) => (
                       <SelectItem key={p.id} value={p.id}>
@@ -159,7 +162,9 @@ export function HrTasksPanel() {
                     value={form.priority}
                     onValueChange={(v) => setForm({ ...form, priority: v as HrTask["priority"] })}
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
@@ -179,7 +184,9 @@ export function HrTasksPanel() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
               <Button
                 onClick={() => create.mutate()}
                 disabled={!form.assignee_id || form.title.trim().length < 2 || create.isPending}
@@ -217,25 +224,38 @@ export function HrTasksPanel() {
                       <CardContent className="space-y-2 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-semibold leading-snug">{t.title}</p>
-                          <Badge variant="outline" className={`${PRIO_TINT[t.priority]} text-[10px]`}>
+                          <Badge
+                            variant="outline"
+                            className={`${PRIO_TINT[t.priority]} text-[10px]`}
+                          >
                             {t.priority}
                           </Badge>
                         </div>
                         {t.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-3">{t.description}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-3">
+                            {t.description}
+                          </p>
                         )}
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                           <span>{t.assignee_name || t.assignee_email || "—"}</span>
-                          {t.due_date && <span>due {new Date(t.due_date).toLocaleDateString()}</span>}
+                          {t.due_date && (
+                            <span>due {new Date(t.due_date).toLocaleDateString()}</span>
+                          )}
                         </div>
                         <Select
                           value={t.status}
-                          onValueChange={(v) => setStatus.mutate({ id: t.id, status: v as HrTask["status"] })}
+                          onValueChange={(v) =>
+                            setStatus.mutate({ id: t.id, status: v as HrTask["status"] })
+                          }
                         >
-                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {COLUMNS.map((c) => (
-                              <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+                              <SelectItem key={c.key} value={c.key}>
+                                {c.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

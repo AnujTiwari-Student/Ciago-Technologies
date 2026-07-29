@@ -62,8 +62,7 @@ function readPublishableKey(): string | undefined {
     typeof process !== "undefined" && process.env
       ? ((process.env as unknown as Record<string, string | undefined>)
           .VITE_CLERK_PUBLISHABLE_KEY ??
-        (process.env as unknown as Record<string, string | undefined>)
-          .CLERK_PUBLISHABLE_KEY)
+        (process.env as unknown as Record<string, string | undefined>).CLERK_PUBLISHABLE_KEY)
       : undefined;
   return fromVite ?? fromEnv ?? undefined;
 }

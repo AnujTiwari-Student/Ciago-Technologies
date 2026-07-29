@@ -144,7 +144,9 @@ export function DojHoldingScreen({
 
         <div className="mt-6 flex justify-center">
           <Badge variant="outline" className="font-mono text-[11px]">
-            {hasDoj ? `Pre-boarding · Locked until ${inrDate.format(dojDate!)}` : "Pre-boarding · Awaiting DOJ"}
+            {hasDoj
+              ? `Pre-boarding · Locked until ${inrDate.format(dojDate!)}`
+              : "Pre-boarding · Awaiting DOJ"}
           </Badge>
         </div>
       </main>

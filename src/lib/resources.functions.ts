@@ -5,7 +5,12 @@ import { verifyTurnstile } from "@/lib/turnstile.server";
 
 const inputSchema = z.object({
   email: z.string().trim().email().max(200),
-  slug: z.string().trim().min(1).max(120).regex(/^[a-z0-9-]+$/i, "Invalid resource"),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[a-z0-9-]+$/i, "Invalid resource"),
   turnstileToken: z.string().max(4096).optional().or(z.literal("")),
   hp: z.string().max(200).optional().or(z.literal("")),
 });

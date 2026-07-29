@@ -44,7 +44,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { LeaveApprovalsPanel, RegularizationApprovalsPanel, ResignationsListPanel } from "@/routes/_authenticated/manager";
+import {
+  LeaveApprovalsPanel,
+  RegularizationApprovalsPanel,
+  ResignationsListPanel,
+} from "@/routes/_authenticated/manager";
 import { HrTasksPanel } from "@/components/hr/HrTasksPanel";
 
 import {
@@ -62,10 +66,7 @@ import {
   SelectValue as UiSelectValue,
 } from "@/components/ui/select";
 import { Toaster } from "@/components/ui/sonner";
-import {
-  listAuditLogs,
-  type AuditLog,
-} from "@/lib/audit.functions";
+import { listAuditLogs, type AuditLog } from "@/lib/audit.functions";
 import {
   bulkReviewOnboardingDocuments,
   getOnboardingDetail,
@@ -102,33 +103,42 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { docLabel } from "@/lib/onboarding.functions";
-
+import { requireRoles } from "./-guard";
 
 const searchSchema = z.object({
-  tab: z.enum(["verification", "audit", "pipeline", "directory", "leave", "regularizations", "tasks", "postings", "resignations"]).optional(),
+  tab: z
+    .enum([
+      "verification",
+      "audit",
+      "pipeline",
+      "directory",
+      "leave",
+      "regularizations",
+      "tasks",
+      "postings",
+      "resignations",
+    ])
+    .optional(),
 });
-
 
 export const Route = createFileRoute("/_authenticated/hr")({
   ssr: false,
   validateSearch: searchSchema,
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth", search: { redirect: "/hr" } });
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
-    const set = new Set((roles ?? []).map((r: any) => r.role));
-    if (!set.has("hr") && !set.has("admin")) {
+    const { userId, roles } = await requireRoles("/hr");
+    if (!roles.has("hr") && !roles.has("admin")) {
       throw redirect({ to: "/forbidden" as any });
     }
-    return { userId: data.user.id };
+    return { userId };
   },
   head: () => ({
     meta: [
       { title: "HR Portal | Ciago Technologies" },
-      { name: "description", content: "Ciago HR Portal — verify onboarding documents, assign Date of Joining, and audit decisions." },
+      {
+        name: "description",
+        content:
+          "Ciago HR Portal — verify onboarding documents, assign Date of Joining, and audit decisions.",
+      },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -170,7 +180,9 @@ function HrPage() {
           <div className="relative flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="portal-eyebrow">HR Portal</p>
-              <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">People Operations</h1>
+              <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
+                People Operations
+              </h1>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
                 Verify onboarding documents, assign Date of Joining, and track every HR decision.
               </p>
@@ -213,8 +225,6 @@ function HrPage() {
             </TabsTrigger>
           </TabsList>
 
-
-
           <TabsContent value="verification" className="mt-6">
             <VerificationPanel onOpen={setSelected} />
           </TabsContent>
@@ -231,7 +241,6 @@ function HrPage() {
             <HrDirectoryPanel />
           </TabsContent>
 
-
           <TabsContent value="leave" className="mt-6">
             <LeaveApprovalsPanel />
           </TabsContent>
@@ -244,7 +253,6 @@ function HrPage() {
             <HrTasksPanel />
           </TabsContent>
 
-
           <TabsContent value="resignations" className="mt-6">
             <ResignationsListPanel />
           </TabsContent>
@@ -253,14 +261,10 @@ function HrPage() {
             <OnboardingAuditPanel />
           </TabsContent>
         </Tabs>
-
       </main>
       <SiteFooter />
 
-      <OnboardingDetailDrawer
-        onboardingId={selected}
-        onClose={() => setSelected(null)}
-      />
+      <OnboardingDetailDrawer onboardingId={selected} onClose={() => setSelected(null)} />
       <Toaster />
     </div>
   );
@@ -281,7 +285,9 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkStatus, setBulkStatus] = useState<"approved" | "changes_requested" | "rejected">("approved");
+  const [bulkStatus, setBulkStatus] = useState<"approved" | "changes_requested" | "rejected">(
+    "approved",
+  );
   const [bulkFeedback, setBulkFeedback] = useState("");
 
   const rows = useMemo(() => {
@@ -315,10 +321,30 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={<ClipboardList className="h-4 w-4" />} label="Pending review" value={counts.pending} tone="sky" />
-        <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Approved" value={counts.approved} tone="emerald" />
-        <Kpi icon={<CalendarDays className="h-4 w-4" />} label="Awaiting DOJ" value={counts.awaiting_doj} tone="amber" />
-        <Kpi icon={<ShieldAlert className="h-4 w-4" />} label="Changes / Rejected" value={counts.issues} tone="rose" />
+        <Kpi
+          icon={<ClipboardList className="h-4 w-4" />}
+          label="Pending review"
+          value={counts.pending}
+          tone="sky"
+        />
+        <Kpi
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          label="Approved"
+          value={counts.approved}
+          tone="emerald"
+        />
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4" />}
+          label="Awaiting DOJ"
+          value={counts.awaiting_doj}
+          tone="amber"
+        />
+        <Kpi
+          icon={<ShieldAlert className="h-4 w-4" />}
+          label="Changes / Rejected"
+          value={counts.issues}
+          tone="rose"
+        />
       </div>
 
       <Card>
@@ -352,16 +378,44 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-brand/40 bg-brand/5 px-3 py-2 text-xs">
               <span className="font-medium">{selectedIds.size} selected</span>
               <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground">Bulk-review all pending docs for selected candidates.</span>
+              <span className="text-muted-foreground">
+                Bulk-review all pending docs for selected candidates.
+              </span>
               <div className="ml-auto flex flex-wrap gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear</Button>
-                <Button size="sm" onClick={() => { setBulkStatus("approved"); setBulkFeedback(""); setBulkOpen(true); }}>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setBulkStatus("approved");
+                    setBulkFeedback("");
+                    setBulkOpen(true);
+                  }}
+                >
                   Bulk approve
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setBulkStatus("changes_requested"); setBulkFeedback(""); setBulkOpen(true); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setBulkStatus("changes_requested");
+                    setBulkFeedback("");
+                    setBulkOpen(true);
+                  }}
+                >
                   Request changes
                 </Button>
-                <Button size="sm" variant="outline" className="border-rose-500/40 text-rose-600 hover:bg-rose-500/10" onClick={() => { setBulkStatus("rejected"); setBulkFeedback(""); setBulkOpen(true); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-rose-500/40 text-rose-600 hover:bg-rose-500/10"
+                  onClick={() => {
+                    setBulkStatus("rejected");
+                    setBulkFeedback("");
+                    setBulkOpen(true);
+                  }}
+                >
                   Reject
                 </Button>
               </div>
@@ -374,7 +428,9 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
                 <tr className="border-b border-border">
                   <th className="w-8 py-2 pr-3">
                     <Checkbox
-                      checked={rows.length > 0 && rows.every((r) => selectedIds.has(r.onboarding_id))}
+                      checked={
+                        rows.length > 0 && rows.every((r) => selectedIds.has(r.onboarding_id))
+                      }
                       onCheckedChange={(v) => {
                         if (v) setSelectedIds(new Set(rows.map((r) => r.onboarding_id)));
                         else setSelectedIds(new Set());
@@ -406,7 +462,10 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <tr key={r.onboarding_id} className="border-b border-border/60 last:border-none">
+                    <tr
+                      key={r.onboarding_id}
+                      className="border-b border-border/60 last:border-none"
+                    >
                       <td className="py-3 pr-3">
                         <Checkbox
                           checked={selectedIds.has(r.onboarding_id)}
@@ -423,33 +482,55 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
                       </td>
                       <td className="py-3 pr-3">
                         <div className="font-medium">{r.candidate_name ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground">{r.candidate_email ?? "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.candidate_email ?? "—"}
+                        </div>
                       </td>
                       <td className="py-3 pr-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span>{r.role_title}</span>
                           {r.track_type === "hr_track" && (
-                            <Badge variant="outline" className="border-fuchsia-500/40 bg-fuchsia-500/10 text-[10px] text-fuchsia-600 dark:text-fuchsia-300">HR Track</Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-fuchsia-500/40 bg-fuchsia-500/10 text-[10px] text-fuchsia-600 dark:text-fuchsia-300"
+                            >
+                              HR Track
+                            </Badge>
                           )}
                           {r.track_type === "manager_track" && (
-                            <Badge variant="outline" className="border-indigo-500/40 bg-indigo-500/10 text-[10px] text-indigo-600 dark:text-indigo-300">Manager Track</Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-indigo-500/40 bg-indigo-500/10 text-[10px] text-indigo-600 dark:text-indigo-300"
+                            >
+                              Manager Track
+                            </Badge>
                           )}
                         </div>
                         {r.job_code && (
-                          <div className="mt-1 font-mono text-[11px] text-muted-foreground">{r.job_code}</div>
+                          <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+                            {r.job_code}
+                          </div>
                         )}
                       </td>
                       <td className="py-3 pr-3 text-xs">
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">{r.docs_approved}</span>
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          {r.docs_approved}
+                        </span>
                         {" / "}
                         <span>{r.docs_total}</span>
                         {r.docs_issues > 0 && (
-                          <span className="ml-2 text-rose-600 dark:text-rose-400">{r.docs_issues} ⚠</span>
+                          <span className="ml-2 text-rose-600 dark:text-rose-400">
+                            {r.docs_issues} ⚠
+                          </span>
                         )}
                       </td>
                       <td className="py-3 pr-3">{statusBadge(r.verification_status)}</td>
                       <td className="py-3 pr-3 text-xs">
-                        {r.doj ? new Date(r.doj).toLocaleDateString("en-IN") : <span className="text-muted-foreground">—</span>}
+                        {r.doj ? (
+                          new Date(r.doj).toLocaleDateString("en-IN")
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="py-3 pr-3 text-xs text-muted-foreground">
                         {new Date(r.updated_at).toLocaleString("en-IN")}
@@ -477,7 +558,10 @@ function VerificationPanel({ onOpen }: { onOpen: (id: string) => void }) {
         onFeedbackChange={setBulkFeedback}
         onConfirm={async () => {
           if (selectedIds.size === 0) return;
-          if ((bulkStatus === "changes_requested" || bulkStatus === "rejected") && !bulkFeedback.trim()) {
+          if (
+            (bulkStatus === "changes_requested" || bulkStatus === "rejected") &&
+            !bulkFeedback.trim()
+          ) {
             toast.error("Feedback is required for this action.");
             return;
           }
@@ -522,15 +606,19 @@ function BulkReviewDialog({
   onConfirm: () => void | Promise<void>;
 }) {
   const label =
-    status === "approved" ? "Approve" : status === "changes_requested" ? "Request changes on" : "Reject";
+    status === "approved"
+      ? "Approve"
+      : status === "changes_requested"
+        ? "Request changes on"
+        : "Reject";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{label} pending documents</DialogTitle>
           <DialogDescription>
-            This will {label.toLowerCase()} every pending document across {count} selected candidate{count === 1 ? "" : "s"}.
-            Each candidate is notified by email and in-app.
+            This will {label.toLowerCase()} every pending document across {count} selected candidate
+            {count === 1 ? "" : "s"}. Each candidate is notified by email and in-app.
           </DialogDescription>
         </DialogHeader>
         {status !== "approved" && (
@@ -546,7 +634,9 @@ function BulkReviewDialog({
           </div>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button onClick={onConfirm}>{label} documents</Button>
         </DialogFooter>
       </DialogContent>
@@ -575,7 +665,9 @@ function Kpi({
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-          <span className={`grid h-6 w-6 place-items-center rounded-md border ${toneCls[tone]}`}>{icon}</span>
+          <span className={`grid h-6 w-6 place-items-center rounded-md border ${toneCls[tone]}`}>
+            {icon}
+          </span>
           {label}
         </div>
         <p className="mt-2 text-2xl font-black tracking-tight">{value}</p>
@@ -640,7 +732,9 @@ function OnboardingDetailDrawer({
     onError: (e: any) => toast.error(e?.message || "Could not set DOJ"),
   });
 
-  const [verifStatus, setVerifStatus] = useState<"approved" | "changes_requested" | "rejected">("approved");
+  const [verifStatus, setVerifStatus] = useState<"approved" | "changes_requested" | "rejected">(
+    "approved",
+  );
   const [verifFeedback, setVerifFeedback] = useState("");
   const verifM = useMutation({
     mutationFn: () =>
@@ -665,7 +759,8 @@ function OnboardingDetailDrawer({
         <SheetHeader className="text-left">
           <SheetTitle>Onboarding review</SheetTitle>
           <SheetDescription>
-            Approve, request changes, or reject each document. Assign a DOJ once paperwork is approved.
+            Approve, request changes, or reject each document. Assign a DOJ once paperwork is
+            approved.
           </SheetDescription>
         </SheetHeader>
 
@@ -712,7 +807,9 @@ function OnboardingDetailDrawer({
                         <span className="font-medium">{docLabel(k)}</span>
                         <span className="ml-2 text-muted-foreground">Not uploaded yet</span>
                       </div>
-                      <Badge variant="outline" className="border-slate-500/30 text-slate-500">Missing</Badge>
+                      <Badge variant="outline" className="border-slate-500/30 text-slate-500">
+                        Missing
+                      </Badge>
                     </div>
                   ))}
               </div>
@@ -765,11 +862,14 @@ function OnboardingDetailDrawer({
               <h3 className="text-sm font-semibold">Date of Joining</h3>
               <p className="text-xs text-muted-foreground">
                 Assign only after paperwork is approved. Candidate is notified by email + in-app.
-                Employee Portal unlocks on this date. Setting a DOJ grants the appropriate staff role.
+                Employee Portal unlocks on this date. Setting a DOJ grants the appropriate staff
+                role.
               </p>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="doj-input" className="text-xs">Effective date</Label>
+                  <Label htmlFor="doj-input" className="text-xs">
+                    Effective date
+                  </Label>
                   <Input
                     id="doj-input"
                     type="date"
@@ -782,9 +882,7 @@ function OnboardingDetailDrawer({
                 <DojConfirmButton
                   doj={doj}
                   disabled={
-                    dojM.isPending ||
-                    !doj ||
-                    data.onboarding.verification_status !== "approved"
+                    dojM.isPending || !doj || data.onboarding.verification_status !== "approved"
                   }
                   saving={dojM.isPending}
                   hasExistingDoj={!!data.onboarding.doj}
@@ -849,7 +947,9 @@ function CandidateHeader({ detail }: { detail: OnboardingDetail }) {
           <p className="mt-1 text-xs">
             <span className="font-medium">{detail.onboarding.role_title}</span>
             {detail.candidate.job_code && (
-              <span className="ml-2 font-mono text-muted-foreground">{detail.candidate.job_code}</span>
+              <span className="ml-2 font-mono text-muted-foreground">
+                {detail.candidate.job_code}
+              </span>
             )}
           </p>
         </div>
@@ -895,7 +995,14 @@ function DojConfirmButton({
   onConfirm: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const pretty = doj ? new Date(doj).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : "";
+  const pretty = doj
+    ? new Date(doj).toLocaleDateString("en-IN", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "";
   return (
     <>
       <Button
@@ -915,7 +1022,9 @@ function DojConfirmButton({
             <DialogTitle>Confirm Date of Joining</DialogTitle>
             <DialogDescription>
               You're about to finalize onboarding for{" "}
-              <span className="font-medium text-foreground">{candidateName || "this candidate"}</span>
+              <span className="font-medium text-foreground">
+                {candidateName || "this candidate"}
+              </span>
               {roleTitle ? <> ({roleTitle})</> : null}.
             </DialogDescription>
           </DialogHeader>
@@ -928,9 +1037,14 @@ function DojConfirmButton({
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
             <Button
-              onClick={() => { setOpen(false); onConfirm(); }}
+              onClick={() => {
+                setOpen(false);
+                onConfirm();
+              }}
               disabled={saving}
               className="bg-brand text-brand-foreground hover:bg-brand-glow"
             >
@@ -962,7 +1076,9 @@ function HrPortalStub({
         <h3 className="text-lg font-semibold">{title}</h3>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
         <Button asChild className="mt-4 bg-brand text-brand-foreground hover:bg-brand-glow">
-          <Link to={ctaTo as any} search={ctaSearch as any}>{ctaLabel}</Link>
+          <Link to={ctaTo as any} search={ctaSearch as any}>
+            {ctaLabel}
+          </Link>
         </Button>
       </div>
     </Card>
@@ -987,9 +1103,13 @@ function DocReviewCard({
   ) => void;
 }) {
   const [feedback, setFeedback] = useState(doc.feedback ?? "");
-  const [pendingStatus, setPendingStatus] = useState<"approved" | "changes_requested" | "rejected" | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<
+    "approved" | "changes_requested" | "rejected" | null
+  >(null);
   const [customize, setCustomize] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<"approved" | "changes_requested" | "rejected">("approved");
+  const [emailStatus, setEmailStatus] = useState<"approved" | "changes_requested" | "rejected">(
+    "approved",
+  );
   const [emailSubject, setEmailSubject] = useState("");
   const [emailHtml, setEmailHtml] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -1043,7 +1163,9 @@ function DocReviewCard({
             <FileText className="h-4 w-4 text-brand" />
             <span className="font-medium">{docLabel(doc.doc_key)}</span>
             {required && (
-              <Badge variant="outline" className="border-brand/40 text-brand">Required</Badge>
+              <Badge variant="outline" className="border-brand/40 text-brand">
+                Required
+              </Badge>
             )}
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -1123,7 +1245,13 @@ function DocReviewCard({
         <div className="mt-3 space-y-2 rounded-md border border-dashed border-border p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Label className="text-xs">Sending as</Label>
-            <Select value={emailStatus} onValueChange={(v) => { setEmailStatus(v as any); previewM.mutate(v as any); }}>
+            <Select
+              value={emailStatus}
+              onValueChange={(v) => {
+                setEmailStatus(v as any);
+                previewM.mutate(v as any);
+              }}
+            >
               <SelectTrigger className="h-8 w-[180px] text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -1142,7 +1270,9 @@ function DocReviewCard({
             </button>
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Subject</Label>
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Subject
+            </Label>
             <Input
               value={emailSubject}
               onChange={(e) => setEmailSubject(e.target.value)}
@@ -1151,7 +1281,9 @@ function DocReviewCard({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">HTML body</Label>
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              HTML body
+            </Label>
             <Textarea
               value={emailHtml}
               onChange={(e) => setEmailHtml(e.target.value)}
@@ -1161,8 +1293,13 @@ function DocReviewCard({
             />
           </div>
           <div className="rounded border border-border bg-muted/30 p-2">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Preview</p>
-            <div className="prose prose-sm dark:prose-invert max-w-none text-xs" dangerouslySetInnerHTML={{ __html: emailHtml || "<em>No content</em>" }} />
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Preview
+            </p>
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none text-xs"
+              dangerouslySetInnerHTML={{ __html: emailHtml || "<em>No content</em>" }}
+            />
           </div>
           <div className="flex justify-end">
             <Button
@@ -1181,7 +1318,9 @@ function DocReviewCard({
 
       {showHistory && (
         <div className="mt-3 rounded-md border border-border p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">Version history</p>
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+            Version history
+          </p>
           {versionsQ.isLoading ? (
             <p className="text-xs text-muted-foreground">Loading…</p>
           ) : (versionsQ.data?.length ?? 0) === 0 ? (
@@ -1193,7 +1332,9 @@ function DocReviewCard({
                   key={v.id}
                   className="flex flex-wrap items-center gap-2 rounded border border-border/60 p-2"
                 >
-                  <Badge variant="outline" className="border-brand/40 text-brand">v{v.version}</Badge>
+                  <Badge variant="outline" className="border-brand/40 text-brand">
+                    v{v.version}
+                  </Badge>
                   {statusBadge(v.status)}
                   <span className="truncate text-muted-foreground">
                     {v.original_filename ?? v.storage_path}
@@ -1261,7 +1402,9 @@ function OnboardingAuditPanel() {
       arr = arr.filter(
         (r) =>
           (r.target_resource ?? "").toLowerCase().includes(q) ||
-          JSON.stringify(r.details ?? "").toLowerCase().includes(q),
+          JSON.stringify(r.details ?? "")
+            .toLowerCase()
+            .includes(q),
       );
     }
     if (fromDate) {
@@ -1286,7 +1429,13 @@ function OnboardingAuditPanel() {
   const exportCsv = () => {
     const csv = toCsv(
       ["timestamp", "actor_email", "action", "target_resource", "details"],
-      rows.map((r) => [r.timestamp, r.actor_email ?? "", r.action, r.target_resource ?? "", r.details]),
+      rows.map((r) => [
+        r.timestamp,
+        r.actor_email ?? "",
+        r.action,
+        r.target_resource ?? "",
+        r.details,
+      ]),
     );
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1302,7 +1451,9 @@ function OnboardingAuditPanel() {
       <CardContent className="p-4 sm:p-6">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <Select value={actionFilter} onValueChange={setActionFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All actions</SelectItem>
               <SelectItem value="ONBOARDING_DOC_REVIEWED">Doc reviewed</SelectItem>
@@ -1310,13 +1461,23 @@ function OnboardingAuditPanel() {
               <SelectItem value="ONBOARDING_DOJ_SET">DOJ assigned</SelectItem>
             </SelectContent>
           </Select>
-          <Input placeholder="Actor email" value={actorQ} onChange={(e) => setActorQ(e.target.value)} />
-          <Input placeholder="Target / candidate / details" value={targetQ} onChange={(e) => setTargetQ(e.target.value)} />
+          <Input
+            placeholder="Actor email"
+            value={actorQ}
+            onChange={(e) => setActorQ(e.target.value)}
+          />
+          <Input
+            placeholder="Target / candidate / details"
+            value={targetQ}
+            onChange={(e) => setTargetQ(e.target.value)}
+          />
           <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={clearFilters}>Clear</Button>
+          <Button size="sm" variant="ghost" onClick={clearFilters}>
+            Clear
+          </Button>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted-foreground">{rows.length} entries</span>
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
@@ -1339,11 +1500,15 @@ function OnboardingAuditPanel() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-muted-foreground">Loading…</td>
+                  <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                    Loading…
+                  </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-muted-foreground">No decisions yet.</td>
+                  <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                    No decisions yet.
+                  </td>
                 </tr>
               ) : (
                 rows.map((r) => (
@@ -1353,7 +1518,9 @@ function OnboardingAuditPanel() {
                     </td>
                     <td className="py-2 pr-3 text-xs">{r.actor_email ?? "—"}</td>
                     <td className="py-2 pr-3 text-xs font-medium">{r.action}</td>
-                    <td className="py-2 pr-3 font-mono text-[11px] text-muted-foreground">{r.target_resource}</td>
+                    <td className="py-2 pr-3 font-mono text-[11px] text-muted-foreground">
+                      {r.target_resource}
+                    </td>
                     <td className="py-2 text-xs">
                       <pre className="max-w-md overflow-x-auto rounded bg-muted/40 p-2 text-[10.5px] leading-snug">
                         {JSON.stringify(r.details, null, 2)}
@@ -1390,91 +1557,226 @@ function PayrollAdminPanel() {
   });
 
   const [struct, setStruct] = useState({
-    ctc_annual_inr: 1200000, basic_monthly: 40000, hra_monthly: 20000, special_monthly: 30000,
-    pf_employee_monthly: 1800, pt_monthly: 200,
+    ctc_annual_inr: 1200000,
+    basic_monthly: 40000,
+    hra_monthly: 20000,
+    special_monthly: 30000,
+    pf_employee_monthly: 1800,
+    pt_monthly: 200,
     effective_from: new Date().toISOString().slice(0, 10),
   });
   const [gen, setGen] = useState({
-    period_month: new Date().getMonth() + 1, period_year: new Date().getFullYear(),
-    working_days: 22, lwp_days: 0, tds: 0,
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+    working_days: 22,
+    lwp_days: 0,
+    tds: 0,
   });
 
   const saveStruc = useMutation({
     mutationFn: () => upsertFn({ data: { user_id: userId, ...struct } }),
-    onSuccess: () => { toast.success("Salary structure saved"); qc.invalidateQueries({ queryKey: ["hr-slips", userId] }); },
+    onSuccess: () => {
+      toast.success("Salary structure saved");
+      qc.invalidateQueries({ queryKey: ["hr-slips", userId] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
   const genSlip = useMutation({
     mutationFn: () => genFn({ data: { user_id: userId, ...gen } }),
-    onSuccess: () => { toast.success("Salary slip generated"); qc.invalidateQueries({ queryKey: ["hr-slips", userId] }); },
+    onSuccess: () => {
+      toast.success("Salary slip generated");
+      qc.invalidateQueries({ queryKey: ["hr-slips", userId] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
   return (
     <div className="space-y-6">
-      <Card className="border-border"><CardContent className="p-5 space-y-3">
-        <Label>Select employee</Label>
-        <UiSelect value={userId} onValueChange={setUserId}>
-          <UiSelectTrigger><UiSelectValue placeholder="Choose an employee" /></UiSelectTrigger>
-          <UiSelectContent>
-            {(dir.data ?? []).map((u: any) => (
-              <UiSelectItem key={u.id} value={u.id}>{u.full_name ?? u.id.slice(0, 8)}</UiSelectItem>
-            ))}
-          </UiSelectContent>
-        </UiSelect>
-      </CardContent></Card>
+      <Card className="border-border">
+        <CardContent className="p-5 space-y-3">
+          <Label>Select employee</Label>
+          <UiSelect value={userId} onValueChange={setUserId}>
+            <UiSelectTrigger>
+              <UiSelectValue placeholder="Choose an employee" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              {(dir.data ?? []).map((u: any) => (
+                <UiSelectItem key={u.id} value={u.id}>
+                  {u.full_name ?? u.id.slice(0, 8)}
+                </UiSelectItem>
+              ))}
+            </UiSelectContent>
+          </UiSelect>
+        </CardContent>
+      </Card>
 
       {userId ? (
         <>
-          <Card className="border-border"><CardContent className="p-5 space-y-4">
-            <div className="text-sm font-semibold">Salary structure (creates a new effective revision)</div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div><Label>Annual CTC (₹)</Label><Input type="number" value={struct.ctc_annual_inr} onChange={(e) => setStruct({ ...struct, ctc_annual_inr: +e.target.value })} /></div>
-              <div><Label>Basic / mo</Label><Input type="number" value={struct.basic_monthly} onChange={(e) => setStruct({ ...struct, basic_monthly: +e.target.value })} /></div>
-              <div><Label>HRA / mo</Label><Input type="number" value={struct.hra_monthly} onChange={(e) => setStruct({ ...struct, hra_monthly: +e.target.value })} /></div>
-              <div><Label>Special / mo</Label><Input type="number" value={struct.special_monthly} onChange={(e) => setStruct({ ...struct, special_monthly: +e.target.value })} /></div>
-              <div><Label>PF Employee / mo</Label><Input type="number" value={struct.pf_employee_monthly} onChange={(e) => setStruct({ ...struct, pf_employee_monthly: +e.target.value })} /></div>
-              <div><Label>PT / mo</Label><Input type="number" value={struct.pt_monthly} onChange={(e) => setStruct({ ...struct, pt_monthly: +e.target.value })} /></div>
-              <div><Label>Effective from</Label><Input type="date" value={struct.effective_from} onChange={(e) => setStruct({ ...struct, effective_from: e.target.value })} /></div>
-            </div>
-            <Button onClick={() => saveStruc.mutate()} disabled={saveStruc.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">Save structure</Button>
-          </CardContent></Card>
+          <Card className="border-border">
+            <CardContent className="p-5 space-y-4">
+              <div className="text-sm font-semibold">
+                Salary structure (creates a new effective revision)
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label>Annual CTC (₹)</Label>
+                  <Input
+                    type="number"
+                    value={struct.ctc_annual_inr}
+                    onChange={(e) => setStruct({ ...struct, ctc_annual_inr: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Basic / mo</Label>
+                  <Input
+                    type="number"
+                    value={struct.basic_monthly}
+                    onChange={(e) => setStruct({ ...struct, basic_monthly: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>HRA / mo</Label>
+                  <Input
+                    type="number"
+                    value={struct.hra_monthly}
+                    onChange={(e) => setStruct({ ...struct, hra_monthly: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Special / mo</Label>
+                  <Input
+                    type="number"
+                    value={struct.special_monthly}
+                    onChange={(e) => setStruct({ ...struct, special_monthly: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>PF Employee / mo</Label>
+                  <Input
+                    type="number"
+                    value={struct.pf_employee_monthly}
+                    onChange={(e) => setStruct({ ...struct, pf_employee_monthly: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>PT / mo</Label>
+                  <Input
+                    type="number"
+                    value={struct.pt_monthly}
+                    onChange={(e) => setStruct({ ...struct, pt_monthly: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Effective from</Label>
+                  <Input
+                    type="date"
+                    value={struct.effective_from}
+                    onChange={(e) => setStruct({ ...struct, effective_from: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => saveStruc.mutate()}
+                disabled={saveStruc.isPending}
+                className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
+                Save structure
+              </Button>
+            </CardContent>
+          </Card>
 
-          <Card className="border-border"><CardContent className="p-5 space-y-4">
-            <div className="text-sm font-semibold">Generate salary slip</div>
-            <div className="grid gap-3 sm:grid-cols-5">
-              <div><Label>Month</Label><Input type="number" min={1} max={12} value={gen.period_month} onChange={(e) => setGen({ ...gen, period_month: +e.target.value })} /></div>
-              <div><Label>Year</Label><Input type="number" min={2020} max={2100} value={gen.period_year} onChange={(e) => setGen({ ...gen, period_year: +e.target.value })} /></div>
-              <div><Label>Working days</Label><Input type="number" min={1} max={31} value={gen.working_days} onChange={(e) => setGen({ ...gen, working_days: +e.target.value })} /></div>
-              <div><Label>LWP days</Label><Input type="number" min={0} max={31} step="0.5" value={gen.lwp_days} onChange={(e) => setGen({ ...gen, lwp_days: +e.target.value })} /></div>
-              <div><Label>TDS (₹)</Label><Input type="number" min={0} value={gen.tds} onChange={(e) => setGen({ ...gen, tds: +e.target.value })} /></div>
-            </div>
-            <Button onClick={() => genSlip.mutate()} disabled={genSlip.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">Generate slip</Button>
-          </CardContent></Card>
+          <Card className="border-border">
+            <CardContent className="p-5 space-y-4">
+              <div className="text-sm font-semibold">Generate salary slip</div>
+              <div className="grid gap-3 sm:grid-cols-5">
+                <div>
+                  <Label>Month</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={gen.period_month}
+                    onChange={(e) => setGen({ ...gen, period_month: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Year</Label>
+                  <Input
+                    type="number"
+                    min={2020}
+                    max={2100}
+                    value={gen.period_year}
+                    onChange={(e) => setGen({ ...gen, period_year: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Working days</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={gen.working_days}
+                    onChange={(e) => setGen({ ...gen, working_days: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>LWP days</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={31}
+                    step="0.5"
+                    value={gen.lwp_days}
+                    onChange={(e) => setGen({ ...gen, lwp_days: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>TDS (₹)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={gen.tds}
+                    onChange={(e) => setGen({ ...gen, tds: +e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => genSlip.mutate()}
+                disabled={genSlip.isPending}
+                className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
+                Generate slip
+              </Button>
+            </CardContent>
+          </Card>
 
-          <Card className="border-border"><CardContent className="p-5">
-            <div className="mb-3 text-sm font-semibold">Existing slips</div>
-            {slips.isLoading ? (
-              <div className="text-sm text-muted-foreground">Loading…</div>
-            ) : (slips.data ?? []).length === 0 ? (
-              <div className="text-sm text-muted-foreground">No slips generated yet.</div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {(slips.data ?? []).map((s: any) => (
-                  <li key={s.id} className="flex items-center justify-between py-2 text-sm">
-                    <span>{String(s.period_month).padStart(2, "0")}/{s.period_year} · LWP {s.lwp_days}d</span>
-                    <span className="font-mono">₹ {inrHR.format(s.net_pay)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent></Card>
+          <Card className="border-border">
+            <CardContent className="p-5">
+              <div className="mb-3 text-sm font-semibold">Existing slips</div>
+              {slips.isLoading ? (
+                <div className="text-sm text-muted-foreground">Loading…</div>
+              ) : (slips.data ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground">No slips generated yet.</div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {(slips.data ?? []).map((s: any) => (
+                    <li key={s.id} className="flex items-center justify-between py-2 text-sm">
+                      <span>
+                        {String(s.period_month).padStart(2, "0")}/{s.period_year} · LWP {s.lwp_days}
+                        d
+                      </span>
+                      <span className="font-mono">₹ {inrHR.format(s.net_pay)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </>
       ) : null}
     </div>
   );
 }
-
 
 // ============================================================
 // HR PIPELINE — ATS view over all applications (HR + Admin)
@@ -1540,11 +1842,15 @@ function HrPipelinePanel() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               {appStatuses.map((s) => (
-                <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
+                <SelectItem key={s.code} value={s.code}>
+                  {s.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Badge variant="outline" className="ml-auto">{rows.length} results</Badge>
+          <Badge variant="outline" className="ml-auto">
+            {rows.length} results
+          </Badge>
         </div>
 
         <div className="mt-4 overflow-x-auto">
@@ -1560,46 +1866,69 @@ function HrPipelinePanel() {
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
-                <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">Loading…</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">No applications match.</td></tr>
-              ) : rows.map((a: AdminApplication) => (
-                <tr key={a.id}>
-                  <td className="py-2 pr-3">
-                    <div className="font-medium">{a.full_name}</div>
-                    <div className="text-xs text-muted-foreground">{a.email}</div>
-                  </td>
-                  <td className="py-2 pr-3">
-                    <div>{a.role_title}</div>
-                    {a.role_id && <div className="font-mono text-[10px] text-muted-foreground">{a.role_id}</div>}
-                  </td>
-                  <td className="py-2 pr-3 text-xs text-muted-foreground">
-                    {new Date(a.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="py-2 pr-3">
-                    <Badge variant="outline" className={APP_STATUS_STYLE[a.status] ?? ""}>
-                      {a.status.replace("_", " ")}
-                    </Badge>
-                  </td>
-                  <td className="py-2 pr-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select value={a.status} onValueChange={(v) => update.mutate({ id: a.id, status: v })}>
-                        <SelectTrigger className="h-8 w-[150px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {appStatuses.map((s) => (
-                            <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {a.resume_link && (
-                        <Button asChild size="sm" variant="ghost">
-                          <a href={a.resume_link} target="_blank" rel="noreferrer">Resume</a>
-                        </Button>
-                      )}
-                    </div>
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                    Loading…
                   </td>
                 </tr>
-              ))}
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                    No applications match.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((a: AdminApplication) => (
+                  <tr key={a.id}>
+                    <td className="py-2 pr-3">
+                      <div className="font-medium">{a.full_name}</div>
+                      <div className="text-xs text-muted-foreground">{a.email}</div>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div>{a.role_title}</div>
+                      {a.role_id && (
+                        <div className="font-mono text-[10px] text-muted-foreground">
+                          {a.role_id}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground">
+                      {new Date(a.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <Badge variant="outline" className={APP_STATUS_STYLE[a.status] ?? ""}>
+                        {a.status.replace("_", " ")}
+                      </Badge>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                          value={a.status}
+                          onValueChange={(v) => update.mutate({ id: a.id, status: v })}
+                        >
+                          <SelectTrigger className="h-8 w-[150px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {appStatuses.map((s) => (
+                              <SelectItem key={s.code} value={s.code}>
+                                {s.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {a.resume_link && (
+                          <Button asChild size="sm" variant="ghost">
+                            <a href={a.resume_link} target="_blank" rel="noreferrer">
+                              Resume
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1655,7 +1984,10 @@ function HrPostingsPanel() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<PostingDraft>(EMPTY_POSTING);
 
-  const openNew = () => { setDraft(EMPTY_POSTING); setOpen(true); };
+  const openNew = () => {
+    setDraft(EMPTY_POSTING);
+    setOpen(true);
+  };
   const openEdit = (p: JobPosting) => {
     setDraft({
       id: p.id,
@@ -1676,23 +2008,30 @@ function HrPostingsPanel() {
   };
 
   const save = useMutation({
-    mutationFn: () => upsertFn({
-      data: {
-        id: draft.id,
-        title: draft.title,
-        department: draft.department,
-        location: draft.location,
-        is_remote: draft.is_remote,
-        employment_type: draft.employment_type,
-        summary: draft.summary,
-        description: draft.description,
-        requirements: draft.requirements.split("\n").map((s) => s.trim()).filter(Boolean),
-        tags: draft.tags.split(",").map((s) => s.trim()).filter(Boolean),
-        salary_min_inr: draft.salary_min_inr ? Number(draft.salary_min_inr) : null,
-        salary_max_inr: draft.salary_max_inr ? Number(draft.salary_max_inr) : null,
-        status: draft.status,
-      } as any,
-    }),
+    mutationFn: () =>
+      upsertFn({
+        data: {
+          id: draft.id,
+          title: draft.title,
+          department: draft.department,
+          location: draft.location,
+          is_remote: draft.is_remote,
+          employment_type: draft.employment_type,
+          summary: draft.summary,
+          description: draft.description,
+          requirements: draft.requirements
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          tags: draft.tags
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          salary_min_inr: draft.salary_min_inr ? Number(draft.salary_min_inr) : null,
+          salary_max_inr: draft.salary_max_inr ? Number(draft.salary_max_inr) : null,
+          status: draft.status,
+        } as any,
+      }),
     onSuccess: () => {
       toast.success(draft.id ? "Posting updated" : "Posting created");
       setOpen(false);
@@ -1736,27 +2075,49 @@ function HrPostingsPanel() {
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
-                <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Loading…</td></tr>
-              ) : (data ?? []).length === 0 ? (
-                <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">No postings yet.</td></tr>
-              ) : (data ?? []).map((p: JobPosting) => (
-                <tr key={p.id}>
-                  <td className="py-2 pr-3 font-medium">{p.title}</td>
-                  <td className="py-2 pr-3">{p.department}</td>
-                  <td className="py-2 pr-3">{p.is_remote ? "Remote" : p.location}</td>
-                  <td className="py-2 pr-3 font-mono text-xs">{p.job_code ?? "—"}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="capitalize">{p.status}</Badge></td>
-                  <td className="py-2 pr-3">
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(p)}>Edit</Button>
-                      <Button size="sm" variant="ghost" className="text-destructive"
-                        onClick={() => { if (confirm(`Delete "${p.title}"?`)) remove.mutate(p.id); }}>
-                        Delete
-                      </Button>
-                    </div>
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                    Loading…
                   </td>
                 </tr>
-              ))}
+              ) : (data ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                    No postings yet.
+                  </td>
+                </tr>
+              ) : (
+                (data ?? []).map((p: JobPosting) => (
+                  <tr key={p.id}>
+                    <td className="py-2 pr-3 font-medium">{p.title}</td>
+                    <td className="py-2 pr-3">{p.department}</td>
+                    <td className="py-2 pr-3">{p.is_remote ? "Remote" : p.location}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{p.job_code ?? "—"}</td>
+                    <td className="py-2 pr-3">
+                      <Badge variant="outline" className="capitalize">
+                        {p.status}
+                      </Badge>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(p)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => {
+                            if (confirm(`Delete "${p.title}"?`)) remove.mutate(p.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1765,55 +2126,144 @@ function HrPostingsPanel() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{draft.id ? "Edit posting" : "New posting"}</DialogTitle>
-              <DialogDescription>Fields marked required will be validated on save.</DialogDescription>
+              <DialogDescription>
+                Fields marked required will be validated on save.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Label>Title</Label><Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></div>
-              <div><Label>Department</Label>
-                <Select value={draft.department} onValueChange={(v) => setDraft({ ...draft, department: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+              <div className="sm:col-span-2">
+                <Label>Title</Label>
+                <Input
+                  value={draft.title}
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Department</Label>
+                <Select
+                  value={draft.department}
+                  onValueChange={(v) => setDraft({ ...draft, department: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
                   <SelectContent>
                     {lookups.departments.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                      <SelectItem key={d.id} value={d.name}>
+                        {d.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Location</Label><Input value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} /></div>
-              <div><Label>Employment type</Label>
-                <Select value={draft.employment_type} onValueChange={(v) => setDraft({ ...draft, employment_type: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+              <div>
+                <Label>Location</Label>
+                <Input
+                  value={draft.location}
+                  onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Employment type</Label>
+                <Select
+                  value={draft.employment_type}
+                  onValueChange={(v) => setDraft({ ...draft, employment_type: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
                   <SelectContent>
                     {lookups.employment_types.map((t) => (
-                      <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
+                      <SelectItem key={t.code} value={t.code}>
+                        {t.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Status</Label>
-                <Select value={draft.status} onValueChange={(v: any) => setDraft({ ...draft, status: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={draft.status}
+                  onValueChange={(v: any) => setDraft({ ...draft, status: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {lookups.statuses.job_posting.map((s) => (
-                      <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
+                      <SelectItem key={s.code} value={s.code}>
+                        {s.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center gap-2 pt-6">
-                <Checkbox id="hr-remote" checked={draft.is_remote} onCheckedChange={(v) => setDraft({ ...draft, is_remote: !!v })} />
+                <Checkbox
+                  id="hr-remote"
+                  checked={draft.is_remote}
+                  onCheckedChange={(v) => setDraft({ ...draft, is_remote: !!v })}
+                />
                 <Label htmlFor="hr-remote">Remote</Label>
               </div>
-              <div><Label>Salary min (INR)</Label><Input type="number" value={draft.salary_min_inr} onChange={(e) => setDraft({ ...draft, salary_min_inr: e.target.value })} /></div>
-              <div><Label>Salary max (INR)</Label><Input type="number" value={draft.salary_max_inr} onChange={(e) => setDraft({ ...draft, salary_max_inr: e.target.value })} /></div>
-              <div className="sm:col-span-2"><Label>Summary</Label><Textarea rows={2} value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} /></div>
-              <div className="sm:col-span-2"><Label>Description</Label><Textarea rows={5} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></div>
-              <div className="sm:col-span-2"><Label>Requirements (one per line)</Label><Textarea rows={4} value={draft.requirements} onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} /></div>
-              <div className="sm:col-span-2"><Label>Tags (comma-separated)</Label><Input value={draft.tags} onChange={(e) => setDraft({ ...draft, tags: e.target.value })} /></div>
+              <div>
+                <Label>Salary min (INR)</Label>
+                <Input
+                  type="number"
+                  value={draft.salary_min_inr}
+                  onChange={(e) => setDraft({ ...draft, salary_min_inr: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Salary max (INR)</Label>
+                <Input
+                  type="number"
+                  value={draft.salary_max_inr}
+                  onChange={(e) => setDraft({ ...draft, salary_max_inr: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Summary</Label>
+                <Textarea
+                  rows={2}
+                  value={draft.summary}
+                  onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Description</Label>
+                <Textarea
+                  rows={5}
+                  value={draft.description}
+                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Requirements (one per line)</Label>
+                <Textarea
+                  rows={4}
+                  value={draft.requirements}
+                  onChange={(e) => setDraft({ ...draft, requirements: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Tags (comma-separated)</Label>
+                <Input
+                  value={draft.tags}
+                  onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
+                />
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => save.mutate()} disabled={save.isPending} className="bg-brand text-brand-foreground hover:bg-brand-glow">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => save.mutate()}
+                disabled={save.isPending}
+                className="bg-brand text-brand-foreground hover:bg-brand-glow"
+              >
                 {save.isPending ? "Saving…" : "Save"}
               </Button>
             </DialogFooter>
@@ -1829,12 +2279,15 @@ function HrPostingsPanel() {
 // ============================================================
 function HrDirectoryPanel() {
   const dirFn = useServerFn(listEmployeeDirectory);
-  const { data, isLoading } = useQuery({ queryKey: ["hr-directory-panel"], queryFn: () => dirFn() });
+  const { data, isLoading } = useQuery({
+    queryKey: ["hr-directory-panel"],
+    queryFn: () => dirFn(),
+  });
   const [q, setQ] = useState("");
   const rows = useMemo(() => {
     const query = q.trim().toLowerCase();
-    return (data ?? []).filter((u: any) =>
-      !query || (u.full_name ?? "").toLowerCase().includes(query),
+    return (data ?? []).filter(
+      (u: any) => !query || (u.full_name ?? "").toLowerCase().includes(query),
     );
   }, [data, q]);
   return (
@@ -1845,7 +2298,12 @@ function HrDirectoryPanel() {
             <h3 className="text-lg font-semibold">Employee directory</h3>
             <p className="text-sm text-muted-foreground">All active staff visible to HR.</p>
           </div>
-          <Input placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+          <Input
+            placeholder="Search by name"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="max-w-xs"
+          />
         </div>
         {isLoading ? (
           <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
@@ -1854,7 +2312,10 @@ function HrDirectoryPanel() {
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {rows.map((u: any) => (
-              <li key={u.id} className="flex items-center justify-between rounded-lg border border-border bg-card/40 p-3 text-sm">
+              <li
+                key={u.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-card/40 p-3 text-sm"
+              >
                 <span className="font-medium">{u.full_name ?? "Unnamed"}</span>
                 <span className="font-mono text-xs text-muted-foreground">{u.id.slice(0, 8)}</span>
               </li>
@@ -1865,5 +2326,3 @@ function HrDirectoryPanel() {
     </Card>
   );
 }
-
-

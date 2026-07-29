@@ -28,7 +28,9 @@ export const getMyProfile = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data, error } = await supabase
       .from("profiles")
-      .select("user_id, full_name, public_email, bio, pronouns, website, linkedin, portfolio, leetcode, avatar_path")
+      .select(
+        "user_id, full_name, public_email, bio, pronouns, website, linkedin, portfolio, leetcode, avatar_path",
+      )
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -70,11 +72,9 @@ export const upsertMyProfile = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const payload: Record<string, any> = { user_id: userId };
     for (const [k, v] of Object.entries(data)) {
-      payload[k] = v === "" ? null : v ?? null;
+      payload[k] = v === "" ? null : (v ?? null);
     }
-    const { error } = await supabase
-      .from("profiles")
-      .upsert(payload, { onConflict: "user_id" });
+    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
 
     if (payload.full_name) {
@@ -96,7 +96,8 @@ export const withdrawMyApplication = createServerFn({ method: "POST" })
       .maybeSingle();
     if (fetchErr) throw new Error(fetchErr.message);
     if (!row || row.user_id !== userId) throw new Error("Application not found");
-    if (row.status !== "applied") throw new Error("Only applications in the Applied stage can be withdrawn");
+    if (row.status !== "applied")
+      throw new Error("Only applications in the Applied stage can be withdrawn");
 
     const { error } = await supabase.from("job_applications").delete().eq("id", data.id);
     if (error) throw new Error(error.message);

@@ -18,7 +18,13 @@ export const DEPT_TYPES = [
 ] as const;
 export type DeptType = (typeof DEPT_TYPES)[number];
 
-export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contractor", "intern", "probation"] as const;
+export const EMPLOYMENT_TYPES = [
+  "full_time",
+  "part_time",
+  "contractor",
+  "intern",
+  "probation",
+] as const;
 export const WORK_MODELS = ["onsite", "remote", "hybrid"] as const;
 export const PROBATION_STATUSES = ["under_review", "confirmed", "extended"] as const;
 export const BG_CHECK_STATUSES = ["not_started", "in_progress", "cleared", "flagged"] as const;
@@ -88,11 +94,7 @@ export const getUserDetail = createServerFn({ method: "GET" })
         .eq("user_id", data.user_id)
         .maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", data.user_id),
-      supabase
-        .from("identity_documents")
-        .select("*")
-        .eq("user_id", data.user_id)
-        .order("doc_type"),
+      supabase.from("identity_documents").select("*").eq("user_id", data.user_id).order("doc_type"),
     ]);
 
     // sign docs
@@ -130,7 +132,11 @@ const employeeSchema = z.object({
   designation: z.string().trim().max(160).optional().nullable(),
   reporting_manager_id: z.string().uuid().optional().nullable(),
   reporting_hr_id: z.string().uuid().optional().nullable(),
-  doj: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  doj: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
   employment_type: z.enum(EMPLOYMENT_TYPES).optional().nullable(),
   base_salary: z.number().nonnegative().max(999999999).optional().nullable(),
   salary_currency: z.string().trim().min(1).max(6).default("INR").optional(),
@@ -160,15 +166,34 @@ export const upsertEmployee = createServerFn({ method: "POST" })
     if (data.full_name !== undefined) {
       await supabase
         .from("profiles")
-        .upsert({ user_id: data.user_id, full_name: data.full_name || null }, { onConflict: "user_id" });
+        .upsert(
+          { user_id: data.user_id, full_name: data.full_name || null },
+          { onConflict: "user_id" },
+        );
     }
 
     const emp: Record<string, any> = { user_id: data.user_id };
     const keys = [
-      "work_email","personal_email","contact_number","address","department","team_name",
-      "designation","reporting_manager_id","reporting_hr_id","doj","employment_type",
-      "base_salary","salary_currency","work_model","work_location","probation_months",
-      "probation_status","background_check_status","doc_verification_status","notes",
+      "work_email",
+      "personal_email",
+      "contact_number",
+      "address",
+      "department",
+      "team_name",
+      "designation",
+      "reporting_manager_id",
+      "reporting_hr_id",
+      "doj",
+      "employment_type",
+      "base_salary",
+      "salary_currency",
+      "work_model",
+      "work_location",
+      "probation_months",
+      "probation_status",
+      "background_check_status",
+      "doc_verification_status",
+      "notes",
     ] as const;
     for (const k of keys) {
       const v = (data as any)[k];

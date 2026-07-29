@@ -42,7 +42,11 @@ export const Route = createFileRoute("/what-we-do")({
         content:
           "Custom software, ERP/CRM, SaaS, high-throughput backends, Kubernetes, AWS architecture and 24/7 SRE — engineered end-to-end.",
       },
-      { name: "keywords", content: "custom software development, ERP development, CRM development, SaaS platform, backend engineering, Kubernetes consulting, AWS architecture, DevOps services, SRE, cloud infrastructure" },
+      {
+        name: "keywords",
+        content:
+          "custom software development, ERP development, CRM development, SaaS platform, backend engineering, Kubernetes consulting, AWS architecture, DevOps services, SRE, cloud infrastructure",
+      },
       { property: "og:title", content: "Services — Ciago Technologies" },
       {
         property: "og:description",
@@ -67,8 +71,7 @@ export const Route = createFileRoute("/what-we-do")({
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "Service",
-          serviceType:
-            "Custom software development, cloud infrastructure and DevOps consulting",
+          serviceType: "Custom software development, cloud infrastructure and DevOps consulting",
           provider: {
             "@type": "Organization",
             name: "Ciago Technologies",
@@ -78,10 +81,25 @@ export const Route = createFileRoute("/what-we-do")({
             "@type": "OfferCatalog",
             name: "Ciago Technologies services",
             itemListElement: [
-              { "@type": "Offer", itemOffered: { "@type": "Service", name: "Custom Software & Digital Products" } },
-              { "@type": "Offer", itemOffered: { "@type": "Service", name: "Core Industry Solutions" } },
-              { "@type": "Offer", itemOffered: { "@type": "Service", name: "Backend Engineering & Application Security" } },
-              { "@type": "Offer", itemOffered: { "@type": "Service", name: "Cloud Infrastructure & DevOps" } },
+              {
+                "@type": "Offer",
+                itemOffered: { "@type": "Service", name: "Custom Software & Digital Products" },
+              },
+              {
+                "@type": "Offer",
+                itemOffered: { "@type": "Service", name: "Core Industry Solutions" },
+              },
+              {
+                "@type": "Offer",
+                itemOffered: {
+                  "@type": "Service",
+                  name: "Backend Engineering & Application Security",
+                },
+              },
+              {
+                "@type": "Offer",
+                itemOffered: { "@type": "Service", name: "Cloud Infrastructure & DevOps" },
+              },
             ],
           },
         }),
@@ -139,7 +157,6 @@ export const Route = createFileRoute("/what-we-do")({
   }),
   component: WhatWeDo,
 });
-
 
 type Item = {
   id: string;
@@ -416,7 +433,6 @@ const faqs: { q: string; a: string }[] = [
   },
 ];
 
-
 function SectionBlock({ sec }: { sec: Section }) {
   const Icon = sec.icon;
   return (
@@ -472,7 +488,6 @@ function SectionBlock({ sec }: { sec: Section }) {
                 );
               })}
             </div>
-
           </div>
         ))}
       </div>
@@ -570,7 +585,6 @@ function WhatWeDo() {
         </section>
 
         <TechStackGrid />
-
       </main>
       <SiteFooter />
       <Toaster />

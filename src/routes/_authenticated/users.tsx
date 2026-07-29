@@ -1,10 +1,18 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  Search, Upload, ShieldCheck, ShieldAlert, ShieldX, Lock, FileText, Loader2, User as UserIcon,
+  Search,
+  Upload,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Lock,
+  FileText,
+  Loader2,
+  User as UserIcon,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -17,52 +25,106 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 
 import {
-  listDirectory, getUserDetail, upsertEmployee, setUserRole,
-  upsertIdentityDoc, verifyIdentityDoc, listAssignables,
-  DEPT_TYPES, EMPLOYMENT_TYPES, WORK_MODELS, PROBATION_STATUSES,
-  BG_CHECK_STATUSES, DOC_VERIFY_STATUSES, ID_DOC_TYPES,
-  type DirectoryRow, type AppRole,
+  listDirectory,
+  getUserDetail,
+  upsertEmployee,
+  setUserRole,
+  upsertIdentityDoc,
+  verifyIdentityDoc,
+  listAssignables,
+  DEPT_TYPES,
+  EMPLOYMENT_TYPES,
+  WORK_MODELS,
+  PROBATION_STATUSES,
+  BG_CHECK_STATUSES,
+  DOC_VERIFY_STATUSES,
+  ID_DOC_TYPES,
+  type DirectoryRow,
+  type AppRole,
 } from "@/lib/users.functions";
+import { useMyRoles } from "@/hooks/use-my-roles";
+import { requireAuthenticated } from "./-guard";
 
 export const Route = createFileRoute("/_authenticated/users")({
   head: () => ({
     meta: [
       { title: "User Management · Ciago Technologies" },
-      { name: "description", content: "Enterprise directory & onboarding management for HR and Admin." },
+      {
+        name: "description",
+        content: "Enterprise directory & onboarding management for HR and Admin.",
+      },
       { property: "og:title", content: "User Management · Ciago Technologies" },
-      { property: "og:description", content: "Enterprise directory & onboarding management for HR and Admin." },
+      {
+        property: "og:description",
+        content: "Enterprise directory & onboarding management for HR and Admin.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth" });
+    await requireAuthenticated("/users");
   },
   component: UsersPage,
 });
 
 const DEPT_LABEL: Record<string, string> = {
-  engineering: "Engineering", operations: "Operations", human_resource: "Human Resource",
-  management: "Management", product: "Product", design: "Design", finance: "Finance",
-  sales: "Sales", marketing: "Marketing", customer_support: "Customer Support",
-  legal: "Legal", it_infrastructure: "IT Infrastructure",
+  engineering: "Engineering",
+  operations: "Operations",
+  human_resource: "Human Resource",
+  management: "Management",
+  product: "Product",
+  design: "Design",
+  finance: "Finance",
+  sales: "Sales",
+  marketing: "Marketing",
+  customer_support: "Customer Support",
+  legal: "Legal",
+  it_infrastructure: "IT Infrastructure",
 };
-const humanize = (s: string | null | undefined) => (s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—");
+const humanize = (s: string | null | undefined) =>
+  s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
 function DocStatusBadge({ status }: { status: string }) {
-  if (status === "verified") return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30"><ShieldCheck className="h-3 w-3 mr-1" />Verified</Badge>;
-  if (status === "rejected") return <Badge className="bg-rose-500/15 text-rose-500 border-rose-500/30"><ShieldX className="h-3 w-3 mr-1" />Rejected</Badge>;
-  return <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30"><ShieldAlert className="h-3 w-3 mr-1" />Pending</Badge>;
+  if (status === "verified")
+    return (
+      <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">
+        <ShieldCheck className="h-3 w-3 mr-1" />
+        Verified
+      </Badge>
+    );
+  if (status === "rejected")
+    return (
+      <Badge className="bg-rose-500/15 text-rose-500 border-rose-500/30">
+        <ShieldX className="h-3 w-3 mr-1" />
+        Rejected
+      </Badge>
+    );
+  return (
+    <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30">
+      <ShieldAlert className="h-3 w-3 mr-1" />
+      Pending
+    </Badge>
+  );
 }
 function WorkModelBadge({ v }: { v: string | null }) {
   if (!v) return <span className="text-muted-foreground">—</span>;
@@ -87,7 +149,11 @@ function RoleBadge({ role, isAdmin }: { role: AppRole; isAdmin: boolean }) {
 
 function UsersPage() {
   const listFn = useServerFn(listDirectory);
-  const { data: dir, isLoading, error } = useQuery({
+  const {
+    data: dir,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["directory"],
     queryFn: () => listFn(),
   });
@@ -98,18 +164,7 @@ function UsersPage() {
   const [openUser, setOpenUser] = useState<DirectoryRow | null>(null);
 
   // Actor role: determine if user is admin or HR to shape UI
-  const [actorIsAdmin, setActorIsAdmin] = useState(false);
-  const [actorIsHr, setActorIsHr] = useState(false);
-  useEffect(() => {
-    (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const { data: r } = await supabase.from("user_roles").select("role").eq("user_id", u.user.id);
-      const roles = new Set((r ?? []).map((x: any) => x.role));
-      setActorIsAdmin(roles.has("admin"));
-      setActorIsHr(roles.has("hr"));
-    })();
-  }, []);
+  const { isAdmin: actorIsAdmin, isHr: actorIsHr } = useMyRoles();
 
   const canAccess = actorIsAdmin || actorIsHr;
 
@@ -123,7 +178,8 @@ function UsersPage() {
       if (deptFilter !== "all" && r.department !== deptFilter) return false;
       if (query) {
         const q = query.toLowerCase();
-        const hay = `${r.full_name ?? ""} ${r.email ?? ""} ${r.designation ?? ""} ${r.team_name ?? ""}`.toLowerCase();
+        const hay =
+          `${r.full_name ?? ""} ${r.email ?? ""} ${r.designation ?? ""} ${r.team_name ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -149,7 +205,8 @@ function UsersPage() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">User Management</h1>
               <p className="text-sm text-muted-foreground">
-                Unified directory for Admin & HR — {actorIsAdmin ? "full access" : "HR access (Admin accounts are read-only)"}.
+                Unified directory for Admin & HR —{" "}
+                {actorIsAdmin ? "full access" : "HR access (Admin accounts are read-only)"}.
               </p>
             </div>
           </header>
@@ -187,7 +244,9 @@ function UsersPage() {
                       />
                     </div>
                     <Select value={roleFilter} onValueChange={setRoleFilter}>
-                      <SelectTrigger className="md:w-40"><SelectValue placeholder="Role" /></SelectTrigger>
+                      <SelectTrigger className="md:w-40">
+                        <SelectValue placeholder="Role" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All roles</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
@@ -198,11 +257,15 @@ function UsersPage() {
                       </SelectContent>
                     </Select>
                     <Select value={deptFilter} onValueChange={setDeptFilter}>
-                      <SelectTrigger className="md:w-52"><SelectValue placeholder="Department" /></SelectTrigger>
+                      <SelectTrigger className="md:w-52">
+                        <SelectValue placeholder="Department" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All departments</SelectItem>
                         {DEPT_TYPES.map((d) => (
-                          <SelectItem key={d} value={d}>{DEPT_LABEL[d]}</SelectItem>
+                          <SelectItem key={d} value={d}>
+                            {DEPT_LABEL[d]}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -210,50 +273,96 @@ function UsersPage() {
 
                   {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
                   {isLoading ? (
-                    <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
+                    <div className="space-y-2">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-14" />
+                      ))}
+                    </div>
                   ) : (
                     <div className="overflow-x-auto rounded-lg border border-border/60">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50">
                           <tr className="text-left">
-                            <Th>Name</Th><Th>Role</Th><Th>Department</Th><Th>Designation</Th>
-                            <Th>DOJ</Th><Th>Docs</Th><Th>Work</Th><Th className="text-right pr-4">Action</Th>
+                            <Th>Name</Th>
+                            <Th>Role</Th>
+                            <Th>Department</Th>
+                            <Th>Designation</Th>
+                            <Th>DOJ</Th>
+                            <Th>Docs</Th>
+                            <Th>Work</Th>
+                            <Th className="text-right pr-4">Action</Th>
                           </tr>
                         </thead>
                         <tbody>
                           {rows.length === 0 && (
-                            <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">No users match.</td></tr>
+                            <tr>
+                              <td colSpan={8} className="text-center py-10 text-muted-foreground">
+                                No users match.
+                              </td>
+                            </tr>
                           )}
                           {rows.map((r) => {
                             const hrLocked = actorIsHr && !actorIsAdmin && r.is_admin;
                             return (
-                              <tr key={r.user_id} className="border-t border-border/50 hover:bg-muted/30">
+                              <tr
+                                key={r.user_id}
+                                className="border-t border-border/50 hover:bg-muted/30"
+                              >
                                 <Td>
                                   <div className="font-medium">{r.full_name || "—"}</div>
                                   <div className="text-xs text-muted-foreground">{r.email}</div>
                                 </Td>
-                                <Td><RoleBadge role={r.role} isAdmin={r.is_admin} /></Td>
-                                <Td>{r.department ? DEPT_LABEL[r.department] : <span className="text-muted-foreground">—</span>}</Td>
-                                <Td>{r.designation || <span className="text-muted-foreground">—</span>}</Td>
+                                <Td>
+                                  <RoleBadge role={r.role} isAdmin={r.is_admin} />
+                                </Td>
+                                <Td>
+                                  {r.department ? (
+                                    DEPT_LABEL[r.department]
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </Td>
+                                <Td>
+                                  {r.designation || (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </Td>
                                 <Td>{r.doj || <span className="text-muted-foreground">—</span>}</Td>
-                                <Td><DocStatusBadge status={r.doc_verification_status} /></Td>
-                                <Td><WorkModelBadge v={r.work_model} /></Td>
+                                <Td>
+                                  <DocStatusBadge status={r.doc_verification_status} />
+                                </Td>
+                                <Td>
+                                  <WorkModelBadge v={r.work_model} />
+                                </Td>
                                 <Td className="text-right pr-4">
                                   {hrLocked ? (
                                     <TooltipProvider>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <span className="inline-flex">
-                                            <Button size="sm" variant="ghost" disabled className="gap-1">
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              disabled
+                                              className="gap-1"
+                                            >
                                               <Lock className="h-3.5 w-3.5" /> Admin
                                             </Button>
                                           </span>
                                         </TooltipTrigger>
-                                        <TooltipContent>HR users cannot modify System Admin accounts.</TooltipContent>
+                                        <TooltipContent>
+                                          HR users cannot modify System Admin accounts.
+                                        </TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
                                   ) : (
-                                    <Button size="sm" variant="outline" onClick={() => setOpenUser(r)}>Edit</Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setOpenUser(r)}
+                                    >
+                                      Edit
+                                    </Button>
                                   )}
                                 </Td>
                               </tr>
@@ -284,13 +393,34 @@ function UsersPage() {
 }
 
 function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <th className={`px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground font-medium ${className}`}>{children}</th>;
+  return (
+    <th
+      className={`px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground font-medium ${className}`}
+    >
+      {children}
+    </th>
+  );
 }
 function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-3 align-middle ${className}`}>{children}</td>;
 }
-function KpiCard({ label, value, tone }: { label: string; value: number; tone?: "emerald" | "amber" | "rose" }) {
-  const toneCls = tone === "emerald" ? "text-emerald-500" : tone === "amber" ? "text-amber-500" : tone === "rose" ? "text-rose-500" : "text-primary";
+function KpiCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "emerald" | "amber" | "rose";
+}) {
+  const toneCls =
+    tone === "emerald"
+      ? "text-emerald-500"
+      : tone === "amber"
+        ? "text-amber-500"
+        : tone === "rose"
+          ? "text-rose-500"
+          : "text-primary";
   return (
     <Card className="border-border/60">
       <CardContent className="p-4">
@@ -302,8 +432,16 @@ function KpiCard({ label, value, tone }: { label: string; value: number; tone?: 
 }
 
 function EditUserDrawer({
-  userId, actorIsAdmin, actorIsHr, onClose,
-}: { userId: string; actorIsAdmin: boolean; actorIsHr: boolean; onClose: () => void }) {
+  userId,
+  actorIsAdmin,
+  actorIsHr,
+  onClose,
+}: {
+  userId: string;
+  actorIsAdmin: boolean;
+  actorIsHr: boolean;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const detailFn = useServerFn(getUserDetail);
   const assignableFn = useServerFn(listAssignables);
@@ -312,7 +450,10 @@ function EditUserDrawer({
   const upsertDocFn = useServerFn(upsertIdentityDoc);
   const verifyDocFn = useServerFn(verifyIdentityDoc);
 
-  const detail = useQuery({ queryKey: ["user-detail", userId], queryFn: () => detailFn({ data: { user_id: userId } }) });
+  const detail = useQuery({
+    queryKey: ["user-detail", userId],
+    queryFn: () => detailFn({ data: { user_id: userId } }),
+  });
   const assignables = useQuery({ queryKey: ["assignables"], queryFn: () => assignableFn() });
 
   const targetIsAdmin = !!detail.data?.is_admin_target;
@@ -350,14 +491,17 @@ function EditUserDrawer({
 
   const primaryRole: AppRole = (detail.data?.roles?.[0] as AppRole) ?? "user";
   const [newRole, setNewRole] = useState<string>("");
-  useEffect(() => { setNewRole(targetIsAdmin ? "admin" : primaryRole); }, [primaryRole, targetIsAdmin]);
+  useEffect(() => {
+    setNewRole(targetIsAdmin ? "admin" : primaryRole);
+  }, [primaryRole, targetIsAdmin]);
 
   const saveMut = useMutation({
     mutationFn: async () => {
       const payload: any = { user_id: userId, ...form };
       // coerce
       payload.base_salary = payload.base_salary === "" ? null : Number(payload.base_salary);
-      payload.probation_months = payload.probation_months === "" ? null : Number(payload.probation_months);
+      payload.probation_months =
+        payload.probation_months === "" ? null : Number(payload.probation_months);
       for (const k of Object.keys(payload)) if (payload[k] === "") payload[k] = null;
       return upsertFn({ data: payload });
     },
@@ -398,7 +542,11 @@ function EditUserDrawer({
         )}
 
         {detail.isLoading ? (
-          <div className="space-y-2 mt-6">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          <div className="space-y-2 mt-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-10" />
+            ))}
+          </div>
         ) : (
           <Tabs defaultValue="identity" className="mt-6">
             <TabsList className="grid grid-cols-4">
@@ -409,49 +557,131 @@ function EditUserDrawer({
             </TabsList>
 
             <TabsContent value="identity" className="space-y-4 pt-4">
-              <Field label="Full name"><Input value={form.full_name || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></Field>
-              <Field label="Work email"><Input type="email" value={form.work_email || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, work_email: e.target.value })} /></Field>
-              <Field label="Personal email"><Input type="email" value={form.personal_email || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, personal_email: e.target.value })} /></Field>
-              <Field label="Contact number"><Input value={form.contact_number || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, contact_number: e.target.value })} /></Field>
-              <Field label="Address"><Textarea value={form.address || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
+              <Field label="Full name">
+                <Input
+                  value={form.full_name || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                />
+              </Field>
+              <Field label="Work email">
+                <Input
+                  type="email"
+                  value={form.work_email || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, work_email: e.target.value })}
+                />
+              </Field>
+              <Field label="Personal email">
+                <Input
+                  type="email"
+                  value={form.personal_email || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, personal_email: e.target.value })}
+                />
+              </Field>
+              <Field label="Contact number">
+                <Input
+                  value={form.contact_number || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, contact_number: e.target.value })}
+                />
+              </Field>
+              <Field label="Address">
+                <Textarea
+                  value={form.address || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                />
+              </Field>
               <Separator />
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Background check">
-                  <SelectBox v={form.background_check_status} disabled={hrLocked} onV={(v) => setForm({ ...form, background_check_status: v })} options={BG_CHECK_STATUSES} />
+                  <SelectBox
+                    v={form.background_check_status}
+                    disabled={hrLocked}
+                    onV={(v) => setForm({ ...form, background_check_status: v })}
+                    options={BG_CHECK_STATUSES}
+                  />
                 </Field>
                 <Field label="Docs verification (rollup)">
-                  <SelectBox v={form.doc_verification_status} disabled={hrLocked} onV={(v) => setForm({ ...form, doc_verification_status: v })} options={DOC_VERIFY_STATUSES} />
+                  <SelectBox
+                    v={form.doc_verification_status}
+                    disabled={hrLocked}
+                    onV={(v) => setForm({ ...form, doc_verification_status: v })}
+                    options={DOC_VERIFY_STATUSES}
+                  />
                 </Field>
               </div>
             </TabsContent>
 
             <TabsContent value="org" className="space-y-4 pt-4">
               <Field label="Department">
-                <Select value={form.department || ""} disabled={hrLocked} onValueChange={(v) => setForm({ ...form, department: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>{DEPT_TYPES.map((d) => <SelectItem key={d} value={d}>{DEPT_LABEL[d]}</SelectItem>)}</SelectContent>
+                <Select
+                  value={form.department || ""}
+                  disabled={hrLocked}
+                  onValueChange={(v) => setForm({ ...form, department: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPT_TYPES.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {DEPT_LABEL[d]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Team"><Input value={form.team_name || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, team_name: e.target.value })} /></Field>
-                <Field label="Designation"><Input value={form.designation || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, designation: e.target.value })} /></Field>
+                <Field label="Team">
+                  <Input
+                    value={form.team_name || ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, team_name: e.target.value })}
+                  />
+                </Field>
+                <Field label="Designation">
+                  <Input
+                    value={form.designation || ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                  />
+                </Field>
               </div>
               <Field label="Reporting Manager">
-                <Select value={form.reporting_manager_id || ""} disabled={hrLocked} onValueChange={(v) => setForm({ ...form, reporting_manager_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Assign manager" /></SelectTrigger>
+                <Select
+                  value={form.reporting_manager_id || ""}
+                  disabled={hrLocked}
+                  onValueChange={(v) => setForm({ ...form, reporting_manager_id: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Assign manager" />
+                  </SelectTrigger>
                   <SelectContent>
                     {(assignables.data?.managers ?? []).map((m) => (
-                      <SelectItem key={m.user_id} value={m.user_id}>{m.full_name || m.email}</SelectItem>
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.full_name || m.email}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
               <Field label="Reporting HR">
-                <Select value={form.reporting_hr_id || ""} disabled={hrLocked} onValueChange={(v) => setForm({ ...form, reporting_hr_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Assign HR" /></SelectTrigger>
+                <Select
+                  value={form.reporting_hr_id || ""}
+                  disabled={hrLocked}
+                  onValueChange={(v) => setForm({ ...form, reporting_hr_id: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Assign HR" />
+                  </SelectTrigger>
                   <SelectContent>
                     {(assignables.data?.hrs ?? []).map((m) => (
-                      <SelectItem key={m.user_id} value={m.user_id}>{m.full_name || m.email}</SelectItem>
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.full_name || m.email}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -462,7 +692,9 @@ function EditUserDrawer({
                 <Label>Role</Label>
                 <div className="flex gap-2">
                   <Select value={newRole} onValueChange={setNewRole} disabled={hrLocked}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {actorIsAdmin && <SelectItem value="admin">Admin</SelectItem>}
                       <SelectItem value="hr">HR</SelectItem>
@@ -472,42 +704,109 @@ function EditUserDrawer({
                   </Select>
                   <Button
                     onClick={() => roleMut.mutate()}
-                    disabled={hrLocked || roleMut.isPending || !newRole || newRole === "admin" && !actorIsAdmin}
+                    disabled={
+                      hrLocked ||
+                      roleMut.isPending ||
+                      !newRole ||
+                      (newRole === "admin" && !actorIsAdmin)
+                    }
                   >
-                    {roleMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply role"}
+                    {roleMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Apply role"
+                    )}
                   </Button>
                 </div>
                 {actorIsHr && !actorIsAdmin && (
-                  <p className="text-xs text-muted-foreground">Only Admins can grant the Admin role.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Only Admins can grant the Admin role.
+                  </p>
                 )}
               </div>
             </TabsContent>
 
             <TabsContent value="employ" className="space-y-4 pt-4">
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Date of Joining"><Input type="date" value={form.doj || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, doj: e.target.value })} /></Field>
+                <Field label="Date of Joining">
+                  <Input
+                    type="date"
+                    value={form.doj || ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, doj: e.target.value })}
+                  />
+                </Field>
                 <Field label="Employment type">
-                  <SelectBox v={form.employment_type} disabled={hrLocked} onV={(v) => setForm({ ...form, employment_type: v })} options={EMPLOYMENT_TYPES} />
+                  <SelectBox
+                    v={form.employment_type}
+                    disabled={hrLocked}
+                    onV={(v) => setForm({ ...form, employment_type: v })}
+                    options={EMPLOYMENT_TYPES}
+                  />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Base salary"><Input type="number" value={form.base_salary ?? ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, base_salary: e.target.value })} /></Field>
-                <Field label="Currency"><Input value={form.salary_currency || "INR"} disabled={hrLocked} onChange={(e) => setForm({ ...form, salary_currency: e.target.value })} /></Field>
+                <Field label="Base salary">
+                  <Input
+                    type="number"
+                    value={form.base_salary ?? ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
+                  />
+                </Field>
+                <Field label="Currency">
+                  <Input
+                    value={form.salary_currency || "INR"}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, salary_currency: e.target.value })}
+                  />
+                </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Work model">
-                  <SelectBox v={form.work_model} disabled={hrLocked} onV={(v) => setForm({ ...form, work_model: v })} options={WORK_MODELS} />
+                  <SelectBox
+                    v={form.work_model}
+                    disabled={hrLocked}
+                    onV={(v) => setForm({ ...form, work_model: v })}
+                    options={WORK_MODELS}
+                  />
                 </Field>
-                <Field label="Work location"><Input value={form.work_location || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, work_location: e.target.value })} /></Field>
+                <Field label="Work location">
+                  <Input
+                    value={form.work_location || ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, work_location: e.target.value })}
+                  />
+                </Field>
               </div>
               <Separator />
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Probation months"><Input type="number" min={0} max={24} value={form.probation_months ?? ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, probation_months: e.target.value })} /></Field>
+                <Field label="Probation months">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={24}
+                    value={form.probation_months ?? ""}
+                    disabled={hrLocked}
+                    onChange={(e) => setForm({ ...form, probation_months: e.target.value })}
+                  />
+                </Field>
                 <Field label="Probation status">
-                  <SelectBox v={form.probation_status} disabled={hrLocked} onV={(v) => setForm({ ...form, probation_status: v })} options={PROBATION_STATUSES} />
+                  <SelectBox
+                    v={form.probation_status}
+                    disabled={hrLocked}
+                    onV={(v) => setForm({ ...form, probation_status: v })}
+                    options={PROBATION_STATUSES}
+                  />
                 </Field>
               </div>
-              <Field label="Notes"><Textarea value={form.notes || ""} disabled={hrLocked} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+              <Field label="Notes">
+                <Textarea
+                  value={form.notes || ""}
+                  disabled={hrLocked}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </Field>
             </TabsContent>
 
             <TabsContent value="docs" className="space-y-4 pt-4">
@@ -518,13 +817,19 @@ function EditUserDrawer({
                 actorCanVerify={(actorIsAdmin || actorIsHr) && !hrLocked}
                 onUpload={async (docType, file) => {
                   const path = `${userId}/${docType}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-                  const { error: upErr } = await supabase.storage.from("identity-docs").upload(path, file, { upsert: true });
+                  const { error: upErr } = await supabase.storage
+                    .from("identity-docs")
+                    .upload(path, file, { upsert: true });
                   if (upErr) throw new Error(upErr.message);
-                  await upsertDocFn({ data: { user_id: userId, doc_type: docType, storage_path: path } });
+                  await upsertDocFn({
+                    data: { user_id: userId, doc_type: docType, storage_path: path },
+                  });
                   qc.invalidateQueries({ queryKey: ["user-detail", userId] });
                 }}
                 onVerify={async (docId, status, feedback) => {
-                  await verifyDocFn({ data: { doc_id: docId, status, feedback: feedback ?? null } });
+                  await verifyDocFn({
+                    data: { doc_id: docId, status, feedback: feedback ?? null },
+                  });
                   qc.invalidateQueries({ queryKey: ["user-detail", userId] });
                   qc.invalidateQueries({ queryKey: ["directory"] });
                 }}
@@ -535,11 +840,17 @@ function EditUserDrawer({
 
         {!hrLocked && !detail.isLoading && (
           <div className="mt-6 flex gap-2 sticky bottom-0 bg-background py-3 border-t">
-            <Button className="flex-1" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+            <Button
+              className="flex-1"
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+            >
               {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save changes
             </Button>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
           </div>
         )}
       </SheetContent>
@@ -557,27 +868,50 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SelectBox({
-  v, onV, options, disabled,
-}: { v: string | null | undefined; onV: (v: string) => void; options: readonly string[]; disabled?: boolean }) {
+  v,
+  onV,
+  options,
+  disabled,
+}: {
+  v: string | null | undefined;
+  onV: (v: string) => void;
+  options: readonly string[];
+  disabled?: boolean;
+}) {
   return (
     <Select value={v || ""} onValueChange={onV} disabled={disabled}>
-      <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+      <SelectTrigger>
+        <SelectValue placeholder="Select…" />
+      </SelectTrigger>
       <SelectContent>
-        {options.map((o) => <SelectItem key={o} value={o}>{humanize(o)}</SelectItem>)}
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>
+            {humanize(o)}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
 }
 
 function IdentityDocs({
-  userId, docs, hrLocked, actorCanVerify, onUpload, onVerify,
+  userId,
+  docs,
+  hrLocked,
+  actorCanVerify,
+  onUpload,
+  onVerify,
 }: {
   userId: string;
   docs: any[];
   hrLocked: boolean;
   actorCanVerify: boolean;
   onUpload: (docType: (typeof ID_DOC_TYPES)[number], file: File) => Promise<void>;
-  onVerify: (docId: string, status: "verified" | "rejected" | "pending", feedback?: string) => Promise<void>;
+  onVerify: (
+    docId: string,
+    status: "verified" | "rejected" | "pending",
+    feedback?: string,
+  ) => Promise<void>;
 }) {
   return (
     <div className="space-y-3">
@@ -596,21 +930,31 @@ function IdentityDocs({
         );
       })}
       <p className="text-xs text-muted-foreground">
-        Identity documents are stored privately. Access is limited to the owner, HR (non-admin targets), and Admin.
+        Identity documents are stored privately. Access is limited to the owner, HR (non-admin
+        targets), and Admin.
       </p>
     </div>
   );
 }
 
 function DocRow({
-  docType, existing, hrLocked, actorCanVerify, onUpload, onVerify,
+  docType,
+  existing,
+  hrLocked,
+  actorCanVerify,
+  onUpload,
+  onVerify,
 }: {
   docType: (typeof ID_DOC_TYPES)[number];
   existing: any;
   hrLocked: boolean;
   actorCanVerify: boolean;
   onUpload: (docType: (typeof ID_DOC_TYPES)[number], file: File) => Promise<void>;
-  onVerify: (docId: string, status: "verified" | "rejected" | "pending", feedback?: string) => Promise<void>;
+  onVerify: (
+    docId: string,
+    status: "verified" | "rejected" | "pending",
+    feedback?: string,
+  ) => Promise<void>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -629,21 +973,46 @@ function DocRow({
             {existing && <DocStatusBadge status={existing.status} />}
             {existing?.signed_url && (
               <Button size="sm" variant="ghost" asChild>
-                <a href={existing.signed_url} target="_blank" rel="noreferrer"><FileText className="h-4 w-4 mr-1" />View</a>
+                <a href={existing.signed_url} target="_blank" rel="noreferrer">
+                  <FileText className="h-4 w-4 mr-1" />
+                  View
+                </a>
               </Button>
             )}
             <input
-              ref={fileRef} type="file" className="hidden" accept="image/*,application/pdf"
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              accept="image/*,application/pdf"
               onChange={async (e) => {
-                const f = e.target.files?.[0]; if (!f) return;
+                const f = e.target.files?.[0];
+                if (!f) return;
                 setBusy(true);
-                try { await onUpload(docType, f); toast.success("Uploaded"); }
-                catch (err: any) { toast.error(err.message); }
-                finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
+                try {
+                  await onUpload(docType, f);
+                  toast.success("Uploaded");
+                } catch (err: any) {
+                  toast.error(err.message);
+                } finally {
+                  setBusy(false);
+                  if (fileRef.current) fileRef.current.value = "";
+                }
               }}
             />
-            <Button size="sm" variant="outline" disabled={hrLocked || busy} onClick={() => fileRef.current?.click()}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Upload className="h-4 w-4 mr-1" />Upload</>}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={hrLocked || busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-1" />
+                  Upload
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -657,9 +1026,23 @@ function DocRow({
               className="text-sm"
             />
             <div className="flex gap-2 justify-end">
-              <Button size="sm" variant="outline" onClick={() => onVerify(existing.id, "pending", feedback)}>Reset</Button>
-              <Button size="sm" variant="destructive" onClick={() => onVerify(existing.id, "rejected", feedback)}>Reject</Button>
-              <Button size="sm" onClick={() => onVerify(existing.id, "verified", feedback)}>Verify</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onVerify(existing.id, "pending", feedback)}
+              >
+                Reset
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => onVerify(existing.id, "rejected", feedback)}
+              >
+                Reject
+              </Button>
+              <Button size="sm" onClick={() => onVerify(existing.id, "verified", feedback)}>
+                Verify
+              </Button>
             </div>
           </div>
         )}

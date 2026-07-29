@@ -87,8 +87,7 @@ const principles = [
     icon: Shield,
     title: "Resilience by Default",
     tagline: "Every system assumes failure — and heals.",
-    body:
-      "Blast-radius isolation, circuit breakers, retries with jitter, and multi-AZ replication are non-negotiable. We rehearse failure with regular GameDays and injection tests, so incidents are training, not surprises.",
+    body: "Blast-radius isolation, circuit breakers, retries with jitter, and multi-AZ replication are non-negotiable. We rehearse failure with regular GameDays and injection tests, so incidents are training, not surprises.",
     proof: ["99.99% uptime target", "Sub-5-minute MTTR", "Zero data-loss RPO"],
   },
   {
@@ -96,8 +95,7 @@ const principles = [
     icon: Zap,
     title: "Velocity Through Rigor",
     tagline: "Discipline is the shortest path to shipping fast.",
-    body:
-      "Fast feedback loops beat heroics. Trunk-based development, CI < 10 minutes, automated canaries, and reversible releases let teams ship confidently to production every day.",
+    body: "Fast feedback loops beat heroics. Trunk-based development, CI < 10 minutes, automated canaries, and reversible releases let teams ship confidently to production every day.",
     proof: ["Multiple deploys/day", "10-minute CI", "Instant rollback"],
   },
   {
@@ -105,19 +103,42 @@ const principles = [
     icon: GitBranch,
     title: "Clarity in Architecture",
     tagline: "Boring, legible systems compound.",
-    body:
-      "We choose proven tools over shiny ones, write ADRs for every non-trivial decision, and keep service boundaries obvious. The best architecture is one a new engineer can navigate in a day.",
+    body: "We choose proven tools over shiny ones, write ADRs for every non-trivial decision, and keep service boundaries obvious. The best architecture is one a new engineer can navigate in a day.",
     proof: ["ADR-first culture", "Documented invariants", "1-day ramp for seniors"],
   },
 ];
 
 const milestones = [
-  { year: "Q1 2026", title: "Ciago Technologies founded", body: "Started with a simple bet — a senior-only team, taking on the projects nobody else wants to touch." },
-  { year: "Q2 2026", title: "First platform shipped", body: "Delivered our first end-to-end production platform for a design partner — architecture, code, deploy, on-call." },
-  { year: "Q2 2026", title: "Cloud & DevOps practice live", body: "Formalized our Kubernetes, AWS and SRE playbook — reproducible infra from day one." },
-  { year: "Q3 2026", title: "Remote-first, async by default", body: "Locked in the operating rhythm — deep-work time protected, decisions written down, reviews open." },
-  { year: "Q4 2026", title: "Design partners onboarded", body: "Small cohort of ambitious brands working with us on custom engineering and platform builds." },
-  { year: "2027", title: "Scaling the senior bench", body: "Deliberately growing at each seniority level — every engagement led by people who've shipped the thing before." },
+  {
+    year: "Q1 2026",
+    title: "Ciago Technologies founded",
+    body: "Started with a simple bet — a senior-only team, taking on the projects nobody else wants to touch.",
+  },
+  {
+    year: "Q2 2026",
+    title: "First platform shipped",
+    body: "Delivered our first end-to-end production platform for a design partner — architecture, code, deploy, on-call.",
+  },
+  {
+    year: "Q2 2026",
+    title: "Cloud & DevOps practice live",
+    body: "Formalized our Kubernetes, AWS and SRE playbook — reproducible infra from day one.",
+  },
+  {
+    year: "Q3 2026",
+    title: "Remote-first, async by default",
+    body: "Locked in the operating rhythm — deep-work time protected, decisions written down, reviews open.",
+  },
+  {
+    year: "Q4 2026",
+    title: "Design partners onboarded",
+    body: "Small cohort of ambitious brands working with us on custom engineering and platform builds.",
+  },
+  {
+    year: "2027",
+    title: "Scaling the senior bench",
+    body: "Deliberately growing at each seniority level — every engagement led by people who've shipped the thing before.",
+  },
 ];
 
 function AboutUs() {
@@ -166,7 +187,9 @@ function AboutUs() {
         <section className="py-24 sm:py-28">
           <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-widest text-brand">Our story</p>
+              <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+                Our story
+              </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 A brand-new firm, with a senior-only bench from day one.
               </h2>
@@ -193,12 +216,15 @@ function AboutUs() {
         <section className="border-y border-border bg-muted/30 py-24 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-brand">Our vision</p>
+              <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+                Our vision
+              </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 Core engineering principles.
               </h2>
               <p className="mt-4 text-muted-foreground">
-                Three commitments that shape every architecture review, every hire, and every release.
+                Three commitments that shape every architecture review, every hire, and every
+                release.
               </p>
             </div>
 
@@ -241,14 +267,21 @@ function AboutUs() {
                       <active.icon className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-widest text-brand">Principle</p>
+                      <p className="text-xs font-semibold uppercase tracking-widest text-brand">
+                        Principle
+                      </p>
                       <h3 className="text-2xl font-black tracking-tight">{active.title}</h3>
                     </div>
                   </div>
-                  <p className="mt-6 text-base leading-relaxed text-muted-foreground">{active.body}</p>
+                  <p className="mt-6 text-base leading-relaxed text-muted-foreground">
+                    {active.body}
+                  </p>
                   <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {active.proof.map((p) => (
-                      <div key={p} className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-3">
+                      <div
+                        key={p}
+                        className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-3"
+                      >
                         <CheckCircle2 className="h-4 w-4 shrink-0 text-brand" />
                         <span className="text-sm font-semibold">{p}</span>
                       </div>
@@ -263,12 +296,15 @@ function AboutUs() {
         <section className="py-24 sm:py-28">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-brand">Milestones</p>
+              <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+                Milestones
+              </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 Year one, in motion.
               </h2>
               <p className="mt-4 text-muted-foreground">
-                We started in 2026. Here's what we're building, quarter by quarter — and where we're headed next.
+                We started in 2026. Here's what we're building, quarter by quarter — and where we're
+                headed next.
               </p>
             </div>
 
@@ -287,7 +323,9 @@ function AboutUs() {
                     }`}
                   >
                     <CardContent className="p-5">
-                      <p className="text-xs font-black uppercase tracking-widest text-brand">{m.year}</p>
+                      <p className="text-xs font-black uppercase tracking-widest text-brand">
+                        {m.year}
+                      </p>
                       <h3 className="mt-1 text-lg font-bold">{m.title}</h3>
                       <p className="mt-2 text-sm text-muted-foreground">{m.body}</p>
                     </CardContent>
@@ -301,7 +339,9 @@ function AboutUs() {
         <section className="border-y border-border bg-muted/30 py-24 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-brand">Core values</p>
+              <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+                Core values
+              </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 What we optimize for.
               </h2>
@@ -333,7 +373,9 @@ function AboutUs() {
         <section className="py-24 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-widest text-brand">Our clients</p>
+              <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+                Our clients
+              </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                 Brands we've worked with.
               </h2>

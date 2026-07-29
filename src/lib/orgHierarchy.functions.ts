@@ -91,10 +91,9 @@ export const listStaffUsers = createServerFn({ method: "GET" })
         id: u.id,
         email: u.email ?? null,
         created_at: u.created_at,
-        full_name:
-          ((u.user_metadata as any)?.full_name || (u.user_metadata as any)?.name || null) as
-            | string
-            | null,
+        full_name: ((u.user_metadata as any)?.full_name ||
+          (u.user_metadata as any)?.name ||
+          null) as string | null,
         role,
         department_id,
         department_name: department_id ? (deptMap.get(department_id) ?? null) : null,

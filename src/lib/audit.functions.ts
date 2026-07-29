@@ -12,7 +12,6 @@ export type AuditLog = {
   details: any;
 };
 
-
 const filterSchema = z
   .object({
     action: z.string().optional(),

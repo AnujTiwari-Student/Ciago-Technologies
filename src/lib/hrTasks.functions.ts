@@ -52,9 +52,13 @@ export const listHrPeers = createServerFn({ method: "GET" })
     const ids = Array.from(new Set((roles ?? []).map((r) => r.user_id as string)));
     if (ids.length === 0) return [];
     const { data: profiles } = await supabaseAdmin
-      .from("profiles").select("user_id, full_name").in("user_id", ids);
+      .from("profiles")
+      .select("user_id, full_name")
+      .in("user_id", ids);
     const nameMap = new Map<string, string | null>();
-    (profiles ?? []).forEach((p) => nameMap.set(p.user_id as string, (p.full_name as string) ?? null));
+    (profiles ?? []).forEach((p) =>
+      nameMap.set(p.user_id as string, (p.full_name as string) ?? null),
+    );
     const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
     const emailMap = new Map<string, string | null>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,8 +86,12 @@ export const listHrTasks = createServerFn({ method: "GET" })
     const emailMap = new Map<string, string | null>();
     if (ids.length > 0) {
       const { data: profiles } = await supabaseAdmin
-        .from("profiles").select("user_id, full_name").in("user_id", ids);
-      (profiles ?? []).forEach((p) => nameMap.set(p.user_id as string, (p.full_name as string) ?? null));
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", ids);
+      (profiles ?? []).forEach((p) =>
+        nameMap.set(p.user_id as string, (p.full_name as string) ?? null),
+      );
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (usersData?.users ?? []).forEach((u: any) => emailMap.set(u.id, u.email ?? null));
@@ -111,7 +119,9 @@ export const createHrTask = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Assignee must also be HR/admin — reject cross-role tasks.
     const { data: roleRows } = await supabaseAdmin
-      .from("user_roles").select("role").eq("user_id", data.assignee_id);
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.assignee_id);
     const roles = new Set((roleRows ?? []).map((r) => r.role as string));
     if (!roles.has("hr") && !roles.has("admin")) {
       throw new Error("HR tasks may only be assigned to HR or admin users.");
@@ -144,7 +154,11 @@ export const createHrTask = createServerFn({ method: "POST" })
       actor_email: (context.claims as any)?.email ?? null,
       action: "HR_TASK_CREATED",
       target_resource: row?.id ?? null,
-      details: { assignee_id: data.assignee_id, title: data.title, due_date: data.due_date || null },
+      details: {
+        assignee_id: data.assignee_id,
+        title: data.title,
+        due_date: data.due_date || null,
+      },
     });
     return row as unknown as HrTask;
   });

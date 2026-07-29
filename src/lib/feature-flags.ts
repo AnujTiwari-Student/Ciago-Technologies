@@ -54,3 +54,27 @@ export const FEATURE_FLAGS = {
 export type FeatureKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
 
 export type Capabilities = Record<FeatureKey, boolean>;
+
+export const DEFAULT_CAPABILITIES: Capabilities = {
+  employeePortalEnabled: true,
+  managerPortalEnabled: true,
+  hrPortalEnabled: true,
+  onboardingPortalEnabled: true,
+  documentUploadsEnabled: true,
+  interviewSchedulingEnabled: true,
+  offerManagementEnabled: true,
+  leaveManagementEnabled: true,
+  attendanceEnabled: true,
+  timesheetsEnabled: true,
+  payrollPortalEnabled: true,
+  referralsEnabled: true,
+  internalMobilityEnabled: true,
+  advancedAnalyticsEnabled: false,
+  maintenanceMode: false,
+};
+
+export const FEATURE_KEYS = Object.values(FEATURE_FLAGS) as FeatureKey[];
+
+export function getCapabilityDefault(key: FeatureKey): boolean {
+  return DEFAULT_CAPABILITIES[key];
+}

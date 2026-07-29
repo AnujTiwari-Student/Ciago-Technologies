@@ -28,7 +28,6 @@ export const Route = createFileRoute("/sitemap.xml")({
           { path: "/cookies", changefreq: "yearly", priority: "0.3" },
         ];
 
-
         const urls = entries.map((e) =>
           [
             `  <url>`,

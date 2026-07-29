@@ -40,7 +40,12 @@ export function NotificationBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative rounded-full" aria-label="Notifications">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative rounded-full"
+          aria-label="Notifications"
+        >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-brand-foreground">

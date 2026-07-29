@@ -34,7 +34,8 @@ function serverPublicClient() {
     global: {
       fetch: (input, init) => {
         const h = new Headers(init?.headers);
-        if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization");
+        if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`)
+          h.delete("Authorization");
         h.set("apikey", key);
         return fetch(input, { ...init, headers: h });
       },
@@ -76,8 +77,13 @@ async function assertAdmin(supabase: any, userId: string) {
   if (!data) throw new Error("Forbidden");
 }
 
-
-async function insertAudit(actorId: string, actorEmail: string | null, action: string, target: string, details: Record<string, unknown>) {
+async function insertAudit(
+  actorId: string,
+  actorEmail: string | null,
+  action: string,
+  target: string,
+  details: Record<string, unknown>,
+) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   await supabaseAdmin.from("audit_logs").insert({
     actor_id: actorId,

@@ -137,9 +137,11 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
 
     const employmentType = ((posting as any)?.employment_type ?? null) as string | null;
     const trackType = ((posting as any)?.track_type ?? null) as OnboardingOffer["track_type"];
-    const postingRequired =
-      ((posting as any)?.required_onboarding_docs as string[] | null) ??
-      ["aadhaar", "pan", "bank_details"];
+    const postingRequired = ((posting as any)?.required_onboarding_docs as string[] | null) ?? [
+      "aadhaar",
+      "pan",
+      "bank_details",
+    ];
     const docRequirements = computeDocRequirements(employmentType, postingRequired);
 
     return {
@@ -248,7 +250,8 @@ export const saveOnboardingDraft = createServerFn({ method: "POST" })
     if (data.form_state !== undefined) patch.form_state = data.form_state;
     if (data.emergency_contact !== undefined) patch.emergency_contact = data.emergency_contact;
     if (data.id_ack !== undefined) patch.id_ack = data.id_ack;
-    if (data.code_of_conduct_ack !== undefined) patch.code_of_conduct_ack = data.code_of_conduct_ack;
+    if (data.code_of_conduct_ack !== undefined)
+      patch.code_of_conduct_ack = data.code_of_conduct_ack;
     if (data.current_step !== undefined) patch.current_step = data.current_step;
     if (Object.keys(patch).length === 0) return { ok: true };
     const { error } = await (context.supabase as any)

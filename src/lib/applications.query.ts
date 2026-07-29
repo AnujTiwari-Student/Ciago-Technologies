@@ -54,4 +54,3 @@ export const listMyApplications = createServerFn({ method: "GET" })
         next_eligible_at: new Date(new Date(r.created_at).getTime() + NINETY_DAYS).toISOString(),
       }));
   });
-

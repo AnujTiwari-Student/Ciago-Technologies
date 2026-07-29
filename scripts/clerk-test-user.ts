@@ -36,7 +36,9 @@ function readSecretKey(): string | undefined {
 
 function randomEmail(): string {
   // Random 8-char hex prefix; deterministic enough for a smoke test.
-  const hex = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+  const hex = Math.floor(Math.random() * 0xffffffff)
+    .toString(16)
+    .padStart(8, "0");
   return `ciago.test.${hex}@example-test.com`;
 }
 

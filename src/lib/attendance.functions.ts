@@ -61,7 +61,9 @@ export const checkOutToday = createServerFn({ method: "POST" })
 
 export const listMyAttendance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) => z.object({ from: isoDate.optional(), to: isoDate.optional() }).parse(d ?? {}))
+  .inputValidator((d: any) =>
+    z.object({ from: isoDate.optional(), to: isoDate.optional() }).parse(d ?? {}),
+  )
   .handler(async ({ data, context }): Promise<AttendanceRecord[]> => {
     let q = context.supabase.from("attendance_records").select("*").eq("user_id", context.userId);
     if (data.from) q = q.gte("work_date", data.from);
@@ -73,10 +75,14 @@ export const listMyAttendance = createServerFn({ method: "GET" })
 
 export const requestRegularization = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) => z.object({
-    work_date: isoDate,
-    reason: z.string().min(4).max(500),
-  }).parse(d))
+  .inputValidator((d: any) =>
+    z
+      .object({
+        work_date: isoDate,
+        reason: z.string().min(4).max(500),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase
       .from("attendance_records")
@@ -97,10 +103,14 @@ export const requestRegularization = createServerFn({ method: "POST" })
 
 export const decideRegularization = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) => z.object({
-    id: z.string().uuid(),
-    approve: z.boolean(),
-  }).parse(d))
+  .inputValidator((d: any) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        approve: z.boolean(),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase
       .from("attendance_records")
@@ -130,7 +140,9 @@ export const listPendingRegularizations = createServerFn({ method: "GET" })
     let byId = new Map<string, any>();
     if (ids.length) {
       const { data: profiles } = await context.supabase
-        .from("profiles").select("user_id, full_name").in("user_id", ids);
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", ids);
       byId = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
     }
     return (rows ?? []).map((r: any) => ({

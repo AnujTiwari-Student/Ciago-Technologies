@@ -15,14 +15,7 @@
 // Consumers (Header, route guard, role hooks, etc.) are not edited in this
 // step — the type surface stays identical across the flag boundary.
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { FLAGS } from "@/lib/feature-flags";
@@ -143,8 +136,7 @@ type ClerkUserLike = {
 function normalizeClerkUser(raw: ClerkUserLike | null | undefined): User | null {
   if (!raw) return null;
   const primary = raw.emailAddresses.find((e) => e.id === raw.primaryEmailAddressId);
-  const email =
-    primary?.emailAddress ?? raw.emailAddresses[0]?.emailAddress ?? null;
+  const email = primary?.emailAddress ?? raw.emailAddresses[0]?.emailAddress ?? null;
   const fullName = [raw.firstName, raw.lastName].filter(Boolean).join(" ").trim();
   // Synthesise a Supabase-shaped User. The `email` and `user_metadata.full_name`
   // fields are read by displayName() downstream; the `aud` field asserts a
@@ -200,15 +192,9 @@ function ClerkAuthProvider({ children }: { children: ReactNode }) {
         const clerkReact = await import("@clerk/tanstack-react-start");
         if (cancelled) return;
         setImpls({
-          useUserImpl: clerkReact.useUser as unknown as (
-            ...args: unknown[]
-          ) => unknown,
-          useSessionImpl: clerkReact.useSession as unknown as (
-            ...args: unknown[]
-          ) => unknown,
-          useClerkImpl: clerkReact.useClerk as unknown as (
-            ...args: unknown[]
-          ) => unknown,
+          useUserImpl: clerkReact.useUser as unknown as (...args: unknown[]) => unknown,
+          useSessionImpl: clerkReact.useSession as unknown as (...args: unknown[]) => unknown,
+          useClerkImpl: clerkReact.useClerk as unknown as (...args: unknown[]) => unknown,
         });
       } catch {
         // The Clerk React SDK isn't available. Render a no-auth shell so

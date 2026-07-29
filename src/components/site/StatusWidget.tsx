@@ -37,7 +37,9 @@ export function StatusWidget({ className = "" }: { className?: string }) {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">Updated in real time</p>
+        <p className="mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+          Updated in real time
+        </p>
       </PopoverContent>
     </Popover>
   );
