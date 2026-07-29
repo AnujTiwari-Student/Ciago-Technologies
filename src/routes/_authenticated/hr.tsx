@@ -103,7 +103,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { docLabel } from "@/lib/onboarding.functions";
-import { requireRoles } from "./-guard";
+import { requireRoles, requireDashboardEnabled } from "./-guard";
 
 const searchSchema = z.object({
   tab: z

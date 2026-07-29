@@ -62,7 +62,7 @@ import {
   type AppRole,
 } from "@/lib/users.functions";
 import { useMyRoles } from "@/hooks/use-my-roles";
-import { requireAuthenticated } from "./-guard";
+import { requireAuthenticated, requireDashboardEnabled } from "./-guard";
 
 export const Route = createFileRoute("/_authenticated/users")({
   head: () => ({

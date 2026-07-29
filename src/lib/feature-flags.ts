@@ -34,20 +34,32 @@ export const FLAGS: FeatureFlags = {
 };
 
 export const FEATURE_FLAGS = {
+  // -- Authentication --------------------------------------------------------
+  // ConfigCat key: clerkAuthentication (confirmed ON in ConfigCat dashboard)
+  clerkAuthentication: "clerkAuthentication",
+  // -- Dashboard -------------------------------------------------------------
+  // Controls whether the authenticated dashboard UI surfaces are accessible.
+  // When false, authenticated users are redirected to a maintenance/splash page.
+  dashboard: "dashboardEnabled",
+  // -- Employee portals ------------------------------------------------------
   employeePortal: "employeePortalEnabled",
   managerPortal: "managerPortalEnabled",
   hrPortal: "hrPortalEnabled",
   onboardingPortal: "onboardingPortalEnabled",
+  // -- HR features -----------------------------------------------------------
   documentUploads: "documentUploadsEnabled",
   interviewScheduling: "interviewSchedulingEnabled",
   offerManagement: "offerManagementEnabled",
+  // -- Employee self-service -------------------------------------------------
   leaveManagement: "leaveManagementEnabled",
   attendance: "attendanceEnabled",
   timesheets: "timesheetsEnabled",
   payrollPortal: "payrollPortalEnabled",
   referrals: "referralsEnabled",
   internalMobility: "internalMobilityEnabled",
+  // -- Analytics -------------------------------------------------------------
   advancedAnalytics: "advancedAnalyticsEnabled",
+  // -- System ----------------------------------------------------------------
   maintenanceMode: "maintenanceMode",
 } as const;
 
@@ -56,20 +68,29 @@ export type FeatureKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
 export type Capabilities = Record<FeatureKey, boolean>;
 
 export const DEFAULT_CAPABILITIES: Capabilities = {
+  // Authentication
+  clerkAuthentication: false,
+  // Dashboard — on by default; flip off to show maintenance screen
+  dashboardEnabled: true,
+  // Portals
   employeePortalEnabled: true,
   managerPortalEnabled: true,
   hrPortalEnabled: true,
   onboardingPortalEnabled: true,
+  // HR features
   documentUploadsEnabled: true,
   interviewSchedulingEnabled: true,
   offerManagementEnabled: true,
+  // Employee self-service
   leaveManagementEnabled: true,
   attendanceEnabled: true,
   timesheetsEnabled: true,
   payrollPortalEnabled: true,
   referralsEnabled: true,
   internalMobilityEnabled: true,
+  // Analytics
   advancedAnalyticsEnabled: false,
+  // System
   maintenanceMode: false,
 };
 

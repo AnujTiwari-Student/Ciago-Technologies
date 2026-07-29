@@ -9,12 +9,12 @@
 
 ## Project Progress Tracker
 
-| Phase | Name | Status |
-|-------|------|--------|
-| Phase 1 | Clerk Documentation & Architecture Audit | ✅ Complete |
-| Phase 2 | Neon + Cloudflare R2 Migration Planning | ✅ Complete |
-| Phase 3 | ConfigCat Feature Flag Implementation + Clerk Guard Fixes | ✅ Complete |
-| Phase 4 | Enterprise Dockerization & Deployment Architecture | ⬜ Not Started |
+| Phase   | Name                                                      | Status         |
+| ------- | --------------------------------------------------------- | -------------- |
+| Phase 1 | Clerk Documentation & Architecture Audit                  | ✅ Complete    |
+| Phase 2 | Neon + Cloudflare R2 Migration Planning                   | ✅ Complete    |
+| Phase 3 | ConfigCat Feature Flag Implementation + Clerk Guard Fixes | ✅ Complete    |
+| Phase 4 | Enterprise Dockerization & Deployment Architecture        | ⬜ Not Started |
 
 ---
 
@@ -52,64 +52,64 @@ Postgres handles authorization (what you can do).
 
 5. **Eager ClerkProvider**: `ClerkProviderBoundary` mounts `<ClerkProvider>` eagerly
    (not lazily) when the flag is on. Lazy mounting caused `useClerkSignal can only be
-   used within <ClerkProvider />` crashes during SSR.
+used within <ClerkProvider />` crashes during SSR.
 
 ### Files Created by the Migration
 
-| File | Purpose |
-|------|---------|
-| `src/integrations/clerk/client.tsx` | ClerkProviderBoundary — flag-aware mount point for Clerk. Eager ClerkProvider + ClerkTokenBridge. |
-| `src/integrations/clerk/forms.tsx` | Clerk-backed auth form components (signIn, signUp, social). Lazy-loaded. |
-| `src/integrations/clerk/provision.server.ts` | Clerk→Supabase identity provisioning (clerk_user_map). Idempotent. Server-only. |
-| `src/integrations/clerk/issue-token.server.ts` | GoTrue JWT issuer for Clerk auth path. Cached per auth_user_id. Server-only. |
-| `src/integrations/clerk/ensure-mapping.server.ts` | First-login provisioning server fn. Called by useEnsureUserMapped hook. |
-| `src/integrations/clerk/__tests__/issue-token.server.test.ts` | Unit tests for token issuer. |
-| `src/integrations/clerk/__tests__/provision.server.test.ts` | Unit tests for provisioner. |
-| `src/integrations/clerk/__tests__/rls-audit.test.ts` | RLS preservation invariant test (CI-enforced). |
-| `src/hooks/use-ensure-user-mapped.ts` | Client hook: ensures clerk_user_map row exists on first mount. |
-| `scripts/rls-audit.ts` | CLI static audit: verifies all RLS policies route through auth.uid(). |
-| `scripts/clerk-test-user.ts` | CLI: provisions dummy Clerk user for E2E testing. |
-| `supabase/migrations/20260724201018_26f2d3a1-…-7a0e6f1c9b25.sql` | Migration: creates clerk_user_map table, indexes, trigger, RLS. |
-| `docs/STEP-13-RLS-VERIFICATION.md` | RLS verification documentation. |
-| `docs/STEP-14-CUTOVER.md` | Cutover runbook. |
+| File                                                             | Purpose                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/integrations/clerk/client.tsx`                              | ClerkProviderBoundary — flag-aware mount point for Clerk. Eager ClerkProvider + ClerkTokenBridge. |
+| `src/integrations/clerk/forms.tsx`                               | Clerk-backed auth form components (signIn, signUp, social). Lazy-loaded.                          |
+| `src/integrations/clerk/provision.server.ts`                     | Clerk→Supabase identity provisioning (clerk_user_map). Idempotent. Server-only.                   |
+| `src/integrations/clerk/issue-token.server.ts`                   | GoTrue JWT issuer for Clerk auth path. Cached per auth_user_id. Server-only.                      |
+| `src/integrations/clerk/ensure-mapping.server.ts`                | First-login provisioning server fn. Called by useEnsureUserMapped hook.                           |
+| `src/integrations/clerk/__tests__/issue-token.server.test.ts`    | Unit tests for token issuer.                                                                      |
+| `src/integrations/clerk/__tests__/provision.server.test.ts`      | Unit tests for provisioner.                                                                       |
+| `src/integrations/clerk/__tests__/rls-audit.test.ts`             | RLS preservation invariant test (CI-enforced).                                                    |
+| `src/hooks/use-ensure-user-mapped.ts`                            | Client hook: ensures clerk_user_map row exists on first mount.                                    |
+| `scripts/rls-audit.ts`                                           | CLI static audit: verifies all RLS policies route through auth.uid().                             |
+| `scripts/clerk-test-user.ts`                                     | CLI: provisions dummy Clerk user for E2E testing.                                                 |
+| `supabase/migrations/20260724201018_26f2d3a1-…-7a0e6f1c9b25.sql` | Migration: creates clerk_user_map table, indexes, trigger, RLS.                                   |
+| `docs/STEP-13-RLS-VERIFICATION.md`                               | RLS verification documentation.                                                                   |
+| `docs/STEP-14-CUTOVER.md`                                        | Cutover runbook.                                                                                  |
 
 ### Files Modified by the Migration
 
-| File | What Changed |
-|------|--------------|
-| `src/lib/auth.tsx` | Added ClerkAuthProvider branch with normalizeClerkUser; legacy path preserved. |
-| `src/lib/feature-flags.ts` | Added USE_CLERK_AUTH flag + FEATURE_FLAGS/FeatureKey/Capabilities types. |
-| `src/lib/portal.functions.ts` | Created: server fn resolveMyPortal (replaces client-side resolver for Clerk branch). |
-| `src/lib/roles.functions.ts` | Created: getMyRoles server fn (role hooks now defer to this under Clerk). |
-| `src/integrations/supabase/auth-middleware.ts` | Added Clerk branch (verifyToken → provision → issueToken → buildUserClient). |
-| `src/integrations/supabase/auth-attacher.ts` | Added Clerk branch (reads window.__clerkAuthToken). |
-| `src/routes/__root.tsx` | Added ClerkProviderBoundary wrapper + EnsureUserMapped + Clerk CSP domains. |
-| `src/routes/auth.tsx` | Flag-aware dispatcher: lazy-loads ClerkForms when flag on; legacy forms preserved. |
-| `src/routes/_authenticated/route.tsx` | Added Clerk branch (reads window.__clerkAuthToken for guard). |
-| `src/hooks/use-my-roles.tsx` | Added Clerk branch (defers to getMyRoles server fn). |
-| `src/hooks/use-is-admin.tsx` | Added Clerk branch (defers to getMyRoles server fn). |
-| `src/hooks/use-is-employee.tsx` | Added Clerk branch (defers to getMyRoles server fn). |
-| `package.json` | Added @clerk/clerk-react, @clerk/tanstack-react-start, @clerk/backend, @configcat/sdk, configcat-react. |
+| File                                           | What Changed                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/lib/auth.tsx`                             | Added ClerkAuthProvider branch with normalizeClerkUser; legacy path preserved.                          |
+| `src/lib/feature-flags.ts`                     | Added USE_CLERK_AUTH flag + FEATURE_FLAGS/FeatureKey/Capabilities types.                                |
+| `src/lib/portal.functions.ts`                  | Created: server fn resolveMyPortal (replaces client-side resolver for Clerk branch).                    |
+| `src/lib/roles.functions.ts`                   | Created: getMyRoles server fn (role hooks now defer to this under Clerk).                               |
+| `src/integrations/supabase/auth-middleware.ts` | Added Clerk branch (verifyToken → provision → issueToken → buildUserClient).                            |
+| `src/integrations/supabase/auth-attacher.ts`   | Added Clerk branch (reads window.\_\_clerkAuthToken).                                                   |
+| `src/routes/__root.tsx`                        | Added ClerkProviderBoundary wrapper + EnsureUserMapped + Clerk CSP domains.                             |
+| `src/routes/auth.tsx`                          | Flag-aware dispatcher: lazy-loads ClerkForms when flag on; legacy forms preserved.                      |
+| `src/routes/_authenticated/route.tsx`          | Added Clerk branch (reads window.\_\_clerkAuthToken for guard).                                         |
+| `src/hooks/use-my-roles.tsx`                   | Added Clerk branch (defers to getMyRoles server fn).                                                    |
+| `src/hooks/use-is-admin.tsx`                   | Added Clerk branch (defers to getMyRoles server fn).                                                    |
+| `src/hooks/use-is-employee.tsx`                | Added Clerk branch (defers to getMyRoles server fn).                                                    |
+| `package.json`                                 | Added @clerk/clerk-react, @clerk/tanstack-react-start, @clerk/backend, @configcat/sdk, configcat-react. |
 
 ### Environment Variables
 
-| Variable | Scope | Purpose |
-|----------|-------|---------|
-| `USE_CLERK_AUTH` | Server | Master feature flag (0/1). Controls Clerk vs legacy auth. |
-| `VITE_USE_CLERK_AUTH` | Client | Same flag, Vite-injected for client bundle. |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Client | Clerk publishable key (safe for browser bundle). |
-| `CLERK_PUBLISHABLE_KEY` | Server | Fallback for SSR if VITE_ prefix not set. |
-| `CLERK_SECRET_KEY` | Server-only | Clerk secret key for verifyToken + createClerkClient. NEVER prefixed with VITE_. |
-| `CONFIGCAT_SDK_KEY` | Server/Client | ConfigCat SDK key (development environment). |
-| `SUPABASE_URL` | Server | Supabase project URL. |
-| `SUPABASE_PUBLISHABLE_KEY` | Server | Supabase publishable (anon) key. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only | Supabase service role key — bypasses RLS. NEVER in client bundle. |
-| `VITE_SUPABASE_URL` | Client | Same as SUPABASE_URL, Vite-injected. |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client | Same as SUPABASE_PUBLISHABLE_KEY, Vite-injected. |
-| `RESEND_API_KEY` | Server-only | Resend email API key. |
-| `TURNSTILE_SITE_KEY` | Client | Cloudflare Turnstile site key. |
-| `TURNSTILE_SECRET_KEY` | Server-only | Cloudflare Turnstile secret key. |
-| `SUPABASE_PROJECT_ID` | Server | Supabase project ID. |
+| Variable                        | Scope         | Purpose                                                                           |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------------- |
+| `USE_CLERK_AUTH`                | Server        | Master feature flag (0/1). Controls Clerk vs legacy auth.                         |
+| `VITE_USE_CLERK_AUTH`           | Client        | Same flag, Vite-injected for client bundle.                                       |
+| `VITE_CLERK_PUBLISHABLE_KEY`    | Client        | Clerk publishable key (safe for browser bundle).                                  |
+| `CLERK_PUBLISHABLE_KEY`         | Server        | Fallback for SSR if VITE\_ prefix not set.                                        |
+| `CLERK_SECRET_KEY`              | Server-only   | Clerk secret key for verifyToken + createClerkClient. NEVER prefixed with VITE\_. |
+| `CONFIGCAT_SDK_KEY`             | Server/Client | ConfigCat SDK key (development environment).                                      |
+| `SUPABASE_URL`                  | Server        | Supabase project URL.                                                             |
+| `SUPABASE_PUBLISHABLE_KEY`      | Server        | Supabase publishable (anon) key.                                                  |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Server-only   | Supabase service role key — bypasses RLS. NEVER in client bundle.                 |
+| `VITE_SUPABASE_URL`             | Client        | Same as SUPABASE_URL, Vite-injected.                                              |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client        | Same as SUPABASE_PUBLISHABLE_KEY, Vite-injected.                                  |
+| `RESEND_API_KEY`                | Server-only   | Resend email API key.                                                             |
+| `TURNSTILE_SITE_KEY`            | Client        | Cloudflare Turnstile site key.                                                    |
+| `TURNSTILE_SECRET_KEY`          | Server-only   | Cloudflare Turnstile secret key.                                                  |
+| `SUPABASE_PROJECT_ID`           | Server        | Supabase project ID.                                                              |
 
 ---
 
@@ -127,6 +127,7 @@ Postgres handles authorization (what you can do).
 ### Objective
 
 Create an enterprise-grade documentation package covering:
+
 1. Clerk integration architecture audit (`clerk.md`)
 2. Canonical engineering workflow reference (`workflow.md` rewrite)
 3. Platform technical reference (`platform_reference.md` redesign)
@@ -166,9 +167,10 @@ Phase 2 (plans.md), Phase 3 (feature-flags.md), and Phase 4 (docker.md + docker-
 ### AI Handover Notes
 
 **Current project state**: Clerk migration complete. The codebase runs TanStack Start
-+ React 19 + Vite 8 + Bun + Supabase + Clerk + ConfigCat + shadcn/ui on Cloudflare
-Workers (via Nitro). 36 migrations define the database schema with 104 RLS policies.
-All policies route through `auth.uid()` — verified by the static RLS audit.
+
+- React 19 + Vite 8 + Bun + Supabase + Clerk + ConfigCat + shadcn/ui on Cloudflare
+  Workers (via Nitro). 36 migrations define the database schema with 104 RLS policies.
+  All policies route through `auth.uid()` — verified by the static RLS audit.
 
 **Completed work**: 15-step Clerk migration (auth-provider swap only, Postgres unchanged).
 
@@ -178,6 +180,7 @@ All policies route through `auth.uid()` — verified by the static RLS audit.
 Phase 2 (plans.md) → Phase 3 (feature-flags.md) → Phase 4 (docker.md, docker-plan.md).
 
 **Important architectural decisions**:
+
 - Postgres remains the sole source of truth for authorization and RLS.
 - Clerk handles authentication only via sidecar mapping to auth.users.
 - GoTrue JWT issuance ensures auth.uid() compatibility.
@@ -192,6 +195,7 @@ direct codebase inspection.
 **Blockers**: None identified.
 
 **Recommendations for the next AI or engineer**:
+
 - Read this journal first.
 - Read `prompt.md` for the full task specification.
 - Follow the phase order strictly; each phase builds on the previous.
@@ -221,17 +225,14 @@ Implement production-ready feature flag infrastructure with ConfigCat and fix cr
    - Protected routes were using direct `supabase.auth.getUser()` calls
    - Guards ignored `FLAGS.USE_CLERK_AUTH` flag
    - All 6 protected routes needed unified guard logic
-   
 2. **ConfigCat Server Integration**
    - SDK client initialization with key resolution
    - Async flag evaluation with defaults
    - Target user context for role-based targeting
-   
 3. **ConfigCat Client Integration**
    - React provider with graceful fallback
    - Hooks for client-side flag evaluation
    - Type-safe flag names via FEATURE_KEYS
-   
 4. **Feature Flags Server Functions**
    - Authenticated flag fetch with user context
    - Unauthenticated flag fetch for page load
@@ -240,11 +241,13 @@ Implement production-ready feature flag infrastructure with ConfigCat and fix cr
 ### Work Completed
 
 **Files Created:** 3 new modules (~223 lines)
+
 - `src/routes/_authenticated/-guard.ts`: Auth guard helpers (90 lines)
 - `src/lib/feature-flags.client.tsx`: React provider + hooks (83 lines)
 - `src/lib/feature-flags.functions.ts`: Server functions (50 lines)
 
 **Files Modified:** 9 files (~100 lines)
+
 - `src/lib/feature-flags.server.ts`: ConfigCat server init (67 lines)
 - `src/lib/feature-flags.ts`: Constants + helpers (+30 lines)
 - `src/lib/roles.functions.ts`: Auth-aware role resolution (+40 lines)
@@ -256,17 +259,20 @@ Implement production-ready feature flag infrastructure with ConfigCat and fix cr
 ### Build & Test Results
 
 **Build:** ✅ 7.14s
+
 - 2214 client modules transformed
 - 225 SSR modules transformed
 - 2264 Nitro modules transformed
 - No errors
 
 **Tests:** ✅ 64/64 passed (0 failures)
+
 - All existing tests pass
 - No breaking changes
 - No new test failures
 
 **Lint:** ✅ (CRLF normalized)
+
 - Fixed 28,000+ CRLF line ending errors via prettier --fix
 - 297 pre-existing `any` type errors (unrelated to this work)
 - No new linting errors introduced
@@ -350,14 +356,14 @@ Lovable Cloud Supabase to Neon + Cloudflare R2 without errors.
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
+| File       | Purpose                                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------- |
 | `plans.md` | Exhaustive 67KB migration planning document — single source of truth for Neon + R2 migration |
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
+| File                | Change                                                  |
+| ------------------- | ------------------------------------------------------- |
 | `implementation.md` | Updated Phase 2 status to ✅ Complete; added this entry |
 
 ### Architecture Decisions
@@ -388,16 +394,16 @@ Lovable Cloud Supabase to Neon + Cloudflare R2 without errors.
 
 ### Key Findings from Codebase Audit
 
-| Finding | Impact |
-|---------|--------|
-| 4 Supabase Storage buckets in use: resumes, avatars, onboarding-docs, identity-docs | All 4 must be migrated to R2 |
-| 12 files contain storage operations | All 12 files need storage layer replacement |
-| 104+ RLS policies all use `auth.uid()` | All preserved via custom Neon function |
-| 8 stored Postgres functions (has_role, is_admin_user, etc.) | All migrate verbatim |
-| GoTrue JWT issuance used only in Clerk auth path | Can be completely removed post-migration |
-| `supabase.from()` called across 20+ files | All must be rewritten to Drizzle |
-| `types.ts` is 1200+ lines of auto-generated PostgREST types | Replaced by Drizzle inferred types |
-| `clerk_user_map` is the critical bridge table | Must be migrated with zero data loss |
+| Finding                                                                             | Impact                                      |
+| ----------------------------------------------------------------------------------- | ------------------------------------------- |
+| 4 Supabase Storage buckets in use: resumes, avatars, onboarding-docs, identity-docs | All 4 must be migrated to R2                |
+| 12 files contain storage operations                                                 | All 12 files need storage layer replacement |
+| 104+ RLS policies all use `auth.uid()`                                              | All preserved via custom Neon function      |
+| 8 stored Postgres functions (has_role, is_admin_user, etc.)                         | All migrate verbatim                        |
+| GoTrue JWT issuance used only in Clerk auth path                                    | Can be completely removed post-migration    |
+| `supabase.from()` called across 20+ files                                           | All must be rewritten to Drizzle            |
+| `types.ts` is 1200+ lines of auto-generated PostgREST types                         | Replaced by Drizzle inferred types          |
+| `clerk_user_map` is the critical bridge table                                       | Must be migrated with zero data loss        |
 
 ### Next Recommended Steps (Phase 4)
 
@@ -406,6 +412,7 @@ covering the containerization architecture and `docker-plan.md` covering the
 implementation plan.
 
 Phase 4 deliverables:
+
 1. `docker.md` — Docker architecture, containers, compose, environment management
 2. `docker-plan.md` — Stage-by-stage Dockerization implementation plan
 
@@ -417,6 +424,7 @@ constraints, development vs production container strategies, and CI/CD integrati
 ### AI Handover Notes
 
 **Current project state:**
+
 - Phases 1, 2, 3 are ✅ COMPLETE
 - `clerk.md`: Clerk architecture documented
 - `plans.md`: Neon + R2 migration fully planned
@@ -430,6 +438,7 @@ constraints, development vs production container strategies, and CI/CD integrati
 **Next step**: Create Phase 4 deliverables — `docker.md` + `docker-plan.md`.
 
 **Important context for Docker planning:**
+
 - Deployment target is Cloudflare Workers (Nitro preset)
 - Cloudflare Workers cannot run Docker containers in production
 - Docker is therefore only for local development + CI/CD
@@ -438,6 +447,7 @@ constraints, development vs production container strategies, and CI/CD integrati
 - Consider `docker compose` for: app (dev server) + Neon local + Supabase local (for migration period)
 
 **Files to read before starting Phase 4:**
+
 - `PROMPT.md` lines ~1430–1700 (Phase 4 section)
 - `vite.config.ts` (understand build output)
 - `package.json` (scripts: dev, build, preview)

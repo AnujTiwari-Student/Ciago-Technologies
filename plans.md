@@ -11,24 +11,24 @@
 
 ## Document Status
 
-| Section | Status | Last Updated |
-|---------|--------|--------------|
-| Executive Summary | ✅ Complete | 2026-07-29 |
-| Existing Architecture | ✅ Complete | 2026-07-29 |
-| Proposed Architecture | ✅ Complete | 2026-07-29 |
-| Database Schema Audit | ✅ Complete | 2026-07-29 |
-| Storage Audit | ✅ Complete | 2026-07-29 |
-| RLS Strategy | ✅ Complete | 2026-07-29 |
-| Clerk Changes | ✅ Complete | 2026-07-29 |
-| Migration Stages | ✅ Complete | 2026-07-29 |
-| File-by-File Plan | ✅ Complete | 2026-07-29 |
-| Environment Variables | ✅ Complete | 2026-07-29 |
-| Testing Strategy | ✅ Complete | 2026-07-29 |
-| Security Checklist | ✅ Complete | 2026-07-29 |
-| Rollback Strategy | ✅ Complete | 2026-07-29 |
-| Cost Analysis | ✅ Complete | 2026-07-29 |
-| Observability | ✅ Complete | 2026-07-29 |
-| Final Readiness Checklist | ✅ Complete | 2026-07-29 |
+| Section                   | Status      | Last Updated |
+| ------------------------- | ----------- | ------------ |
+| Executive Summary         | ✅ Complete | 2026-07-29   |
+| Existing Architecture     | ✅ Complete | 2026-07-29   |
+| Proposed Architecture     | ✅ Complete | 2026-07-29   |
+| Database Schema Audit     | ✅ Complete | 2026-07-29   |
+| Storage Audit             | ✅ Complete | 2026-07-29   |
+| RLS Strategy              | ✅ Complete | 2026-07-29   |
+| Clerk Changes             | ✅ Complete | 2026-07-29   |
+| Migration Stages          | ✅ Complete | 2026-07-29   |
+| File-by-File Plan         | ✅ Complete | 2026-07-29   |
+| Environment Variables     | ✅ Complete | 2026-07-29   |
+| Testing Strategy          | ✅ Complete | 2026-07-29   |
+| Security Checklist        | ✅ Complete | 2026-07-29   |
+| Rollback Strategy         | ✅ Complete | 2026-07-29   |
+| Cost Analysis             | ✅ Complete | 2026-07-29   |
+| Observability             | ✅ Complete | 2026-07-29   |
+| Final Readiness Checklist | ✅ Complete | 2026-07-29   |
 
 ---
 
@@ -47,26 +47,27 @@ The migration moves to:
 
 1. **Database**: **Neon** — serverless PostgreSQL with branching and scale-to-zero
 2. **Storage**: **Cloudflare R2** — S3-compatible object storage at Cloudflare edge
-3. **ORM/Query Layer**: **Drizzle ORM** — type-safe SQL query builder for Neon
+3. **ORM/Query Layer**: **Prisma ORM** — type-safe SQL query builder for Neon
 4. **Auth**: Continue using **Clerk** (already implemented) + **Neon** as user identity store
 
 ### Why This Migration
 
-| Concern | Supabase Cloud | Neon + R2 |
-|---------|----------------|-----------|
-| Database branching | No | Yes — instant schema previews |
-| Scale to zero | No | Yes — cost-efficient dev/staging |
-| Edge runtime | HTTP only (PostgREST) | Native serverless driver for Cloudflare Workers |
-| Storage costs | Supabase tier pricing | R2 has no egress fees |
-| Vendor lock-in | High (GoTrue, PostgREST, RLS) | Low (standard Postgres + S3 API) |
-| Deployment platform | Lovable Cloud only | Self-hosted or any cloud |
-| Performance | PostgREST HTTP roundtrip | Direct connection pool (10x lower latency) |
-| SQL flexibility | Limited via PostgREST | Full SQL via Drizzle |
+| Concern             | Supabase Cloud                | Neon + R2                                       |
+| ------------------- | ----------------------------- | ----------------------------------------------- |
+| Database branching  | No                            | Yes — instant schema previews                   |
+| Scale to zero       | No                            | Yes — cost-efficient dev/staging                |
+| Edge runtime        | HTTP only (PostgREST)         | Native serverless driver for Cloudflare Workers |
+| Storage costs       | Supabase tier pricing         | R2 has no egress fees                           |
+| Vendor lock-in      | High (GoTrue, PostgREST, RLS) | Low (standard Postgres + S3 API)                |
+| Deployment platform | Lovable Cloud only            | Self-hosted or any cloud                        |
+| Performance         | PostgREST HTTP roundtrip      | Direct connection pool (10x lower latency)      |
+| SQL flexibility     | Limited via PostgREST         | Full SQL via Prisma                             |
 
 ### Migration Complexity
 
 **HIGH**. This is a structural migration that touches:
-- Every server function (`*.functions.ts`) — queries rewritten from PostgREST to Drizzle SQL
+
+- Every server function (`*.functions.ts`) — queries rewritten from PostgREST to Prisma SQL
 - Authentication middleware — GoTrue JWT replaced with Clerk JWT + Neon app-level JWT claims
 - Storage layer — 4 buckets, all upload/download/signed URL logic
 - RLS policies — 104+ policies preserved verbatim but with custom `auth.uid()` function
@@ -78,18 +79,18 @@ The migration moves to:
 
 ### Technology Stack (Current)
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Framework | TanStack Start + React | 19.x |
-| Runtime | Bun | Latest |
-| Build | Vite | 8.x |
-| Deployment | Cloudflare Workers (Nitro preset) | - |
-| Database | Supabase PostgreSQL (Lovable Cloud) | PostgreSQL 15 |
-| DB Client | `@supabase/supabase-js` | 2.110.x |
-| Auth | Supabase GoTrue + Clerk (gated) | - |
-| Storage | Supabase Storage (S3-like) | - |
-| Feature Flags | ConfigCat | 1.x |
-| Routing | TanStack Router | 1.170.x |
+| Component     | Technology                          | Version       |
+| ------------- | ----------------------------------- | ------------- |
+| Framework     | TanStack Start + React              | 19.x          |
+| Runtime       | Bun                                 | Latest        |
+| Build         | Vite                                | 8.x           |
+| Deployment    | Cloudflare Workers (Nitro preset)   | -             |
+| Database      | Supabase PostgreSQL (Lovable Cloud) | PostgreSQL 15 |
+| DB Client     | `@supabase/supabase-js`             | 2.110.x       |
+| Auth          | Supabase GoTrue + Clerk (gated)     | -             |
+| Storage       | Supabase Storage (S3-like)          | -             |
+| Feature Flags | ConfigCat                           | 1.x           |
+| Routing       | TanStack Router                     | 1.170.x       |
 
 ### Current Database Architecture
 
@@ -143,14 +144,15 @@ Lovable Cloud Supabase
 
 ### Current Storage Architecture
 
-| Bucket | Usage | Access Pattern | File Types |
-|--------|-------|---------------|------------|
-| `resumes` | Job application PDFs | Private, user-scoped RLS | PDF |
-| `avatars` | Profile photos | Read: authenticated users, Write: owner only | JPG, PNG, WEBP |
-| `onboarding-docs` | Onboarding document uploads | Private, user-scoped + staff read | PDF, JPG, PNG |
-| `identity-docs` | Employee identity verification | Private, user + admin/HR read | PDF, JPG, PNG |
+| Bucket            | Usage                          | Access Pattern                               | File Types     |
+| ----------------- | ------------------------------ | -------------------------------------------- | -------------- |
+| `resumes`         | Job application PDFs           | Private, user-scoped RLS                     | PDF            |
+| `avatars`         | Profile photos                 | Read: authenticated users, Write: owner only | JPG, PNG, WEBP |
+| `onboarding-docs` | Onboarding document uploads    | Private, user-scoped + staff read            | PDF, JPG, PNG  |
+| `identity-docs`   | Employee identity verification | Private, user + admin/HR read                | PDF, JPG, PNG  |
 
 Storage is accessed via:
+
 - `supabase.storage.from('bucket').upload(path, file)` — direct uploads
 - `supabase.storage.from('bucket').createSignedUrl(path, expiry)` — time-limited reads
 - `supabase.storage.from('bucket').getPublicUrl(path)` — public reads (avatars)
@@ -240,17 +242,17 @@ src/
 
 ### Target Technology Stack
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Framework | TanStack Start + React | 19.x (unchanged) |
-| Runtime | Bun | Latest (unchanged) |
-| Build | Vite | 8.x (unchanged) |
-| Deployment | Cloudflare Workers (Nitro) | (unchanged) |
-| Database | **Neon** serverless PostgreSQL | PostgreSQL 16 |
-| DB Client | **`@neondatabase/serverless`** + **Drizzle ORM** | Latest |
-| Auth | **Clerk** (only — GoTrue removed) | 5.x |
-| Storage | **Cloudflare R2** | S3-compatible |
-| Feature Flags | ConfigCat | 1.x (unchanged) |
+| Component     | Technology                                      | Version            |
+| ------------- | ----------------------------------------------- | ------------------ |
+| Framework     | TanStack Start + React                          | 19.x (unchanged)   |
+| Runtime       | Bun                                             | Latest (unchanged) |
+| Build         | Vite                                            | 8.x (unchanged)    |
+| Deployment    | Cloudflare Workers (Nitro)                      | (unchanged)        |
+| Database      | **Neon** serverless PostgreSQL                  | PostgreSQL 16      |
+| DB Client     | **`@neondatabase/serverless`** + **Prisma ORM** | Latest             |
+| Auth          | **Clerk** (only — GoTrue removed)               | 5.x                |
+| Storage       | **Cloudflare R2**                               | S3-compatible      |
+| Feature Flags | ConfigCat                                       | 1.x (unchanged)    |
 
 ### Target Database Architecture
 
@@ -281,6 +283,7 @@ Cloudflare R2 Account
 ```
 
 All R2 buckets:
+
 - Private by default
 - Accessed via Workers R2 binding or AWS S3-compatible API
 - Signed URL generation via Cloudflare R2 Presigned URLs (S3 compatible)
@@ -303,7 +306,7 @@ TanStack Start middleware (auth-middleware.ts — REWRITTEN)
 │   5. Inject { db, userId, claims }            │
 └──────────────────────────────────────────────┘
   ↓
-Server function accesses context.db (Drizzle)
+Server function accesses context.db (Prisma)
 — RLS applies via auth.uid() custom function
   reading current_setting('app.current_user_id')
 ```
@@ -314,41 +317,41 @@ Server function accesses context.db (Drizzle)
 
 ### Pros of Migrating to Neon + R2
 
-| Benefit | Detail |
-|---------|--------|
-| **No HTTP overhead** | Supabase PostgREST adds an HTTP layer for every query. Neon's serverless driver connects directly to Postgres. Expected latency reduction: 50–200ms per request. |
-| **Branching** | Neon's instant schema branching enables preview environments per PR — impossible on Supabase Cloud. |
-| **Scale to zero** | Neon auto-suspends after inactivity. Eliminates Supabase's base compute cost for dev/staging branches. |
-| **No R2 egress fees** | Supabase Storage charges egress. Cloudflare R2 has zero egress fees for objects served via Workers or public CDN. |
-| **Cloudflare-native** | The entire stack runs on Cloudflare: Workers (compute) + R2 (storage) + Neon (via Cloudflare partnership). Co-location reduces latency further. |
-| **Full SQL** | Drizzle gives full SQL access (CTEs, window functions, complex JOINs) without PostgREST limitations. |
-| **Remove GoTrue dependency** | GoTrue JWT issuance (`issue-token.server.ts`) is complex, fragile, and slow. With Neon, we use Clerk JWTs directly — removing ~150 lines of auth scaffolding. |
-| **Type safety** | Drizzle's inferred types eliminate the need for manually maintaining `src/integrations/supabase/types.ts` (1200+ lines). |
+| Benefit                      | Detail                                                                                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No HTTP overhead**         | Supabase PostgREST adds an HTTP layer for every query. Neon's serverless driver connects directly to Postgres. Expected latency reduction: 50–200ms per request. |
+| **Branching**                | Neon's instant schema branching enables preview environments per PR — impossible on Supabase Cloud.                                                              |
+| **Scale to zero**            | Neon auto-suspends after inactivity. Eliminates Supabase's base compute cost for dev/staging branches.                                                           |
+| **No R2 egress fees**        | Supabase Storage charges egress. Cloudflare R2 has zero egress fees for objects served via Workers or public CDN.                                                |
+| **Cloudflare-native**        | The entire stack runs on Cloudflare: Workers (compute) + R2 (storage) + Neon (via Cloudflare partnership). Co-location reduces latency further.                  |
+| **Full SQL**                 | Prisma gives full SQL access (CTEs, window functions, complex JOINs) without PostgREST limitations.                                                              |
+| **Remove GoTrue dependency** | GoTrue JWT issuance (`issue-token.server.ts`) is complex, fragile, and slow. With Neon, we use Clerk JWTs directly — removing ~150 lines of auth scaffolding.    |
+| **Type safety**              | Prisma's inferred types eliminate the need for manually maintaining `src/integrations/supabase/types.ts` (1200+ lines).                                          |
 
 ### Cons and Trade-offs
 
-| Risk | Mitigation |
-|------|-----------|
-| **Large migration scope** | Use feature flags (`neonMigrationEnabled`) to switch incrementally |
-| **PostgREST API loss** | Replaced by Drizzle — all query logic must be rewritten |
-| **Supabase Realtime loss** | Not currently used — not a blocker |
-| **Supabase Dashboard loss** | Neon console + pgAdmin available as alternatives |
+| Risk                           | Mitigation                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Large migration scope**      | Use feature flags (`neonMigrationEnabled`) to switch incrementally                                  |
+| **PostgREST API loss**         | Replaced by Prisma — all query logic must be rewritten                                              |
+| **Supabase Realtime loss**     | Not currently used — not a blocker                                                                  |
+| **Supabase Dashboard loss**    | Neon console + pgAdmin available as alternatives                                                    |
 | **Lovable Cloud dependencies** | Lovable uses Supabase for project infrastructure — self-hosted Supabase client code is already ours |
 
 ---
 
 ## Risks
 
-| Risk | Severity | Probability | Mitigation |
-|------|----------|-------------|-----------|
-| auth.uid() RLS incompatibility | **Critical** | High | Pre-migrate RLS with custom function tested on Neon fork |
-| Data loss during migration | **Critical** | Low | Use Neon branching for zero-risk dry runs |
-| GoTrue JWT issuance failure during cutover | **Critical** | Medium | Switch to direct Clerk JWT first (Step 4) |
-| Storage URL breakage | **High** | High | Pre-migrate using redirect rules; update all storage_path references |
-| TypeScript type mismatch after Drizzle | **High** | Medium | Auto-generate Drizzle types from schema; verify each function |
-| Clerk user map sync loss | **High** | Low | Verify all clerk_user_map rows before cutover |
-| RLS policy gaps | **High** | Low | Run existing RLS audit test suite against Neon |
-| Downtime during cutover | **Medium** | Medium | Use zero-downtime dual-write pattern (described in Stage 7) |
+| Risk                                       | Severity     | Probability | Mitigation                                                           |
+| ------------------------------------------ | ------------ | ----------- | -------------------------------------------------------------------- |
+| auth.uid() RLS incompatibility             | **Critical** | High        | Pre-migrate RLS with custom function tested on Neon fork             |
+| Data loss during migration                 | **Critical** | Low         | Use Neon branching for zero-risk dry runs                            |
+| GoTrue JWT issuance failure during cutover | **Critical** | Medium      | Switch to direct Clerk JWT first (Step 4)                            |
+| Storage URL breakage                       | **High**     | High        | Pre-migrate using redirect rules; update all storage_path references |
+| TypeScript type mismatch after Prisma      | **High**     | Medium      | Auto-generate Prisma types from schema; verify each function         |
+| Clerk user map sync loss                   | **High**     | Low         | Verify all clerk_user_map rows before cutover                        |
+| RLS policy gaps                            | **High**     | Low         | Run existing RLS audit test suite against Neon                       |
+| Downtime during cutover                    | **Medium**   | Medium      | Use zero-downtime dual-write pattern (described in Stage 7)          |
 
 ---
 
@@ -369,7 +372,7 @@ This enables:
 ```
 Stage 1: Neon Project Setup + Schema Migration
 Stage 2: auth.uid() RLS Compatibility Layer
-Stage 3: Drizzle ORM Setup + Schema Definition
+Stage 3: Prisma ORM Setup + Schema Definition
 Stage 4: Clerk Authentication Simplified (remove GoTrue)
 Stage 5: Database Client Migration (function by function)
 Stage 6: Storage Migration (Supabase → Cloudflare R2)
@@ -433,12 +436,12 @@ Each stage can be individually rolled back:
 
 ### What Changes
 
-- `context.supabase` → `context.db` (Drizzle instance) in all server functions
-- `supabase.from('table')` → `db.select().from(schema.table)` (Drizzle queries)
+- `context.supabase` → `context.db` (Prisma instance) in all server functions
+- `supabase.from('table')` → `db.select().from(schema.table)` (Prisma queries)
 - `supabase.storage.from('bucket')` → `env.R2_BUCKET.put/get/createSignedUrl`
 - `supabase.auth.*` → removed (Clerk only)
 - GoTrue JWT issuance → removed (Clerk JWT passed directly)
-- `src/integrations/supabase/types.ts` → replaced by Drizzle schema types
+- `src/integrations/supabase/types.ts` → replaced by Prisma schema types
 
 ---
 
@@ -446,12 +449,12 @@ Each stage can be individually rolled back:
 
 ### Authentication
 
-| Concern | Current | Post-Migration | Status |
-|---------|---------|----------------|--------|
-| JWT verification | Supabase GoTrue or Clerk | Clerk only | ✅ Improved |
-| JWT expiry | GoTrue 1hr / Clerk configurable | Clerk configurable | ✅ Maintained |
-| Token rotation | GoTrue refresh tokens | Clerk session tokens | ✅ Maintained |
-| MITM protection | HTTPS + SameSite cookies | HTTPS + SameSite cookies | ✅ Unchanged |
+| Concern          | Current                         | Post-Migration           | Status        |
+| ---------------- | ------------------------------- | ------------------------ | ------------- |
+| JWT verification | Supabase GoTrue or Clerk        | Clerk only               | ✅ Improved   |
+| JWT expiry       | GoTrue 1hr / Clerk configurable | Clerk configurable       | ✅ Maintained |
+| Token rotation   | GoTrue refresh tokens           | Clerk session tokens     | ✅ Maintained |
+| MITM protection  | HTTPS + SameSite cookies        | HTTPS + SameSite cookies | ✅ Unchanged  |
 
 ### RLS Security
 
@@ -461,6 +464,7 @@ PostgreSQL function reading `current_setting('app.current_user_id', true)`.
 
 **Critical**: The `app.current_user_id` setting MUST be set within a transaction and
 must NEVER be set to a hard-coded value. The Neon middleware must:
+
 1. Verify the Clerk JWT first
 2. Look up the mapped `auth_user_id` from `clerk_user_map`
 3. Only THEN execute `SET LOCAL app.current_user_id = '<verified_uuid>'`
@@ -485,13 +489,13 @@ a Worker that validates authentication before generating a signed URL.
 
 ### Expected Improvements
 
-| Metric | Supabase PostgREST | Neon Direct | Improvement |
-|--------|-------------------|-------------|-------------|
-| Simple SELECT latency | ~50–200ms (HTTP roundtrip) | ~5–20ms (direct connection) | 5–10x |
-| Complex JOIN query | ~150–500ms | ~20–80ms | 5–8x |
-| Storage upload (10MB) | ~500ms–2s | ~200ms–800ms | 2–3x |
-| Storage signed URL | ~100ms | ~10ms | 10x |
-| Cold start (Workers) | N/A | Neon HTTP driver | Sub-100ms |
+| Metric                | Supabase PostgREST         | Neon Direct                 | Improvement |
+| --------------------- | -------------------------- | --------------------------- | ----------- |
+| Simple SELECT latency | ~50–200ms (HTTP roundtrip) | ~5–20ms (direct connection) | 5–10x       |
+| Complex JOIN query    | ~150–500ms                 | ~20–80ms                    | 5–8x        |
+| Storage upload (10MB) | ~500ms–2s                  | ~200ms–800ms                | 2–3x        |
+| Storage signed URL    | ~100ms                     | ~10ms                       | 10x         |
+| Cold start (Workers)  | N/A                        | Neon HTTP driver            | Sub-100ms   |
 
 ### Potential Regressions
 
@@ -525,20 +529,20 @@ a Worker that validates authentication before generating a signed URL.
 
 ### Current (Supabase Cloud)
 
-| Service | Plan | Monthly Cost |
-|---------|------|-------------|
-| Supabase Lovable Cloud | Pro (managed) | Included in Lovable subscription |
-| Supabase Storage | 100GB included | ~$0–25/mo |
-| Database compute | Always-on | Included in Lovable |
+| Service                | Plan           | Monthly Cost                     |
+| ---------------------- | -------------- | -------------------------------- |
+| Supabase Lovable Cloud | Pro (managed)  | Included in Lovable subscription |
+| Supabase Storage       | 100GB included | ~$0–25/mo                        |
+| Database compute       | Always-on      | Included in Lovable              |
 
 ### Target (Neon + R2)
 
-| Service | Plan | Monthly Cost |
-|---------|------|-------------|
-| Neon | Free (dev) / Scale ($69/mo prod) | $0–69/mo |
-| Neon branching | Included | $0 |
-| Cloudflare R2 | $0.015/GB storage + $0 egress | ~$2–10/mo |
-| Cloudflare Workers | First 100K req/day free | $0–5/mo |
+| Service            | Plan                             | Monthly Cost |
+| ------------------ | -------------------------------- | ------------ |
+| Neon               | Free (dev) / Scale ($69/mo prod) | $0–69/mo     |
+| Neon branching     | Included                         | $0           |
+| Cloudflare R2      | $0.015/GB storage + $0 egress    | ~$2–10/mo    |
+| Cloudflare Workers | First 100K req/day free          | $0–5/mo      |
 
 **Estimated savings**: $15–50/month for production; development branches cost $0.
 
@@ -555,39 +559,39 @@ extensions are used beyond what Neon supports.
 
 The following tables have no Supabase-specific dependencies and migrate verbatim:
 
-| Table | Action | Notes |
-|-------|--------|-------|
-| `departments` | Migrate as-is | No auth dependency |
-| `employment_types` | Migrate as-is | Reference table |
-| `status_options` | Migrate as-is | Reference table |
-| `job_postings` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `job_applications` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `project_estimates` | Migrate as-is | No RLS (anon access) |
-| `resource_downloads` | Migrate as-is | No RLS (anon access) |
-| `rate_limits` | Migrate as-is | No auth dependency |
-| `audit_logs` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `in_app_notifications` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `profiles` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `user_roles` | Migrate as-is | Uses `auth.uid()` via `has_role()` |
-| `employees` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `employee_tasks` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `timesheets` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `leave_requests` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `attendance_records` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `salary_structures` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `salary_slips` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `resignations` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `referrals` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `interview_slots` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `onboarding_records` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `onboarding_documents` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `identity_documents` | Migrate as-is | Uses `auth.uid()` in RLS only |
-| `clerk_user_map` | Migrate as-is | Critical for Clerk auth |
+| Table                  | Action        | Notes                              |
+| ---------------------- | ------------- | ---------------------------------- |
+| `departments`          | Migrate as-is | No auth dependency                 |
+| `employment_types`     | Migrate as-is | Reference table                    |
+| `status_options`       | Migrate as-is | Reference table                    |
+| `job_postings`         | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `job_applications`     | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `project_estimates`    | Migrate as-is | No RLS (anon access)               |
+| `resource_downloads`   | Migrate as-is | No RLS (anon access)               |
+| `rate_limits`          | Migrate as-is | No auth dependency                 |
+| `audit_logs`           | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `in_app_notifications` | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `profiles`             | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `user_roles`           | Migrate as-is | Uses `auth.uid()` via `has_role()` |
+| `employees`            | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `employee_tasks`       | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `timesheets`           | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `leave_requests`       | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `attendance_records`   | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `salary_structures`    | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `salary_slips`         | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `resignations`         | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `referrals`            | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `interview_slots`      | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `onboarding_records`   | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `onboarding_documents` | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `identity_documents`   | Migrate as-is | Uses `auth.uid()` in RLS only      |
+| `clerk_user_map`       | Migrate as-is | Critical for Clerk auth            |
 
 #### Tables Requiring Special Handling
 
-| Table | Issue | Resolution |
-|-------|-------|-----------|
+| Table        | Issue                                    | Resolution                                                                                                                                       |
+| ------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `auth.users` | Managed by Supabase GoTrue, not our code | **Create `auth.users` table in Neon** with the same UUID primary key and minimal columns (id, email, created_at). Populate from Supabase export. |
 
 #### The `auth.users` Problem
@@ -640,17 +644,19 @@ After migration:
 1. Clerk JWT verified via `verifyToken()`
 2. User provisioned/looked up in `clerk_user_map` (Neon — same table)
 3. ~~GoTrue JWT minted~~ → **SET LOCAL app.current_user_id = '<uuid>'**
-4. Per-user Neon connection built with Drizzle
+4. Per-user Neon connection built with Prisma
 5. RLS uses `auth.uid()` which reads `current_setting('app.current_user_id')`
 
 **Files Deleted Post-Migration:**
+
 - `src/integrations/clerk/issue-token.server.ts` — entire file removed
 - GoTrue imports in `auth-middleware.ts` — removed
 
 **Files Rewritten Post-Migration:**
+
 - `src/integrations/supabase/auth-middleware.ts` → Neon connection factory with RLS context setting
-- `src/integrations/supabase/client.ts` → replaced with Drizzle + Neon client
-- `src/integrations/supabase/client.server.ts` → replaced with Drizzle admin client
+- `src/integrations/supabase/client.ts` → replaced with Prisma + Neon client
+- `src/integrations/supabase/client.server.ts` → replaced with Prisma admin client
 
 ### Clerk + Neon: User Identity Flow
 
@@ -668,13 +674,13 @@ User mappings are preserved exactly.
 
 ### Organisations, Metadata, Foreign Keys
 
-| Clerk Concept | Current Mapping | Post-Migration Mapping |
-|---------------|-----------------|----------------------|
-| Clerk User ID | `clerk_user_map.clerk_user_id` (TEXT) | Same — no change |
-| App User UUID | `clerk_user_map.auth_user_id` (UUID) | Same — no change |
-| Email | `clerk_user_map.email` | Same — no change |
-| Roles | `user_roles.role` (app_role enum) | Same — no change |
-| User metadata | `profiles.full_name`, `employees.*` | Same — no change |
+| Clerk Concept | Current Mapping                       | Post-Migration Mapping |
+| ------------- | ------------------------------------- | ---------------------- |
+| Clerk User ID | `clerk_user_map.clerk_user_id` (TEXT) | Same — no change       |
+| App User UUID | `clerk_user_map.auth_user_id` (UUID)  | Same — no change       |
+| Email         | `clerk_user_map.email`                | Same — no change       |
+| Roles         | `user_roles.role` (app_role enum)     | Same — no change       |
+| User metadata | `profiles.full_name`, `employees.*`   | Same — no change       |
 
 ---
 
@@ -696,6 +702,7 @@ USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'admin'::app_role))
 ```
 
 The `has_role` function is:
+
 ```sql
 CREATE FUNCTION public.has_role(_user_id uuid, _role app_role) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER
@@ -710,6 +717,7 @@ custom implementation.
 **Step 1**: Create the `auth` schema in Neon.
 
 **Step 2**: Create `auth.uid()` as:
+
 ```sql
 CREATE OR REPLACE FUNCTION auth.uid()
   RETURNS uuid
@@ -723,24 +731,23 @@ CREATE OR REPLACE FUNCTION auth.uid()
 The `has_role()` function migrates verbatim.
 
 **Step 4**: The middleware sets `app.current_user_id` per transaction:
+
 ```typescript
 // In Neon connection factory (auth-middleware rewrite)
-await db.execute(
-  sql`SET LOCAL app.current_user_id = ${verifiedUserId}`
-);
+await db.execute(sql`SET LOCAL app.current_user_id = ${verifiedUserId}`);
 // All subsequent queries in this transaction use the correct auth.uid()
 ```
 
 ### Neon RLS Compatibility Assessment
 
-| Policy Type | Compatible | Notes |
-|-------------|-----------|-------|
-| `auth.uid() = user_id` | ✅ Yes | Via custom function |
-| `has_role(auth.uid(), 'admin')` | ✅ Yes | `has_role` migrates verbatim |
-| `has_role(auth.uid(), 'hr')` | ✅ Yes | Same |
-| `has_role(auth.uid(), 'manager')` | ✅ Yes | Same |
-| `service_role` bypass policies | ✅ Yes | Via admin connection (no RLS) |
-| `storage.objects` policies | ❌ N/A | Storage moves to R2; no Postgres storage policies |
+| Policy Type                       | Compatible | Notes                                             |
+| --------------------------------- | ---------- | ------------------------------------------------- |
+| `auth.uid() = user_id`            | ✅ Yes     | Via custom function                               |
+| `has_role(auth.uid(), 'admin')`   | ✅ Yes     | `has_role` migrates verbatim                      |
+| `has_role(auth.uid(), 'hr')`      | ✅ Yes     | Same                                              |
+| `has_role(auth.uid(), 'manager')` | ✅ Yes     | Same                                              |
+| `service_role` bypass policies    | ✅ Yes     | Via admin connection (no RLS)                     |
+| `storage.objects` policies        | ❌ N/A     | Storage moves to R2; no Postgres storage policies |
 
 ---
 
@@ -750,16 +757,17 @@ await db.execute(
 
 #### Bucket Mapping
 
-| Supabase Bucket | R2 Bucket | Notes |
-|-----------------|-----------|-------|
-| `resumes` | `ciago-resumes` | PDF files, user-private |
-| `avatars` | `ciago-avatars` | Images, authenticated read |
-| `onboarding-docs` | `ciago-onboarding-docs` | PDFs + images, user + staff read |
-| `identity-docs` | `ciago-identity-docs` | PDFs + images, user + admin/HR read |
+| Supabase Bucket   | R2 Bucket               | Notes                               |
+| ----------------- | ----------------------- | ----------------------------------- |
+| `resumes`         | `ciago-resumes`         | PDF files, user-private             |
+| `avatars`         | `ciago-avatars`         | Images, authenticated read          |
+| `onboarding-docs` | `ciago-onboarding-docs` | PDFs + images, user + staff read    |
+| `identity-docs`   | `ciago-identity-docs`   | PDFs + images, user + admin/HR read |
 
 #### Storage Path Convention
 
 Current Supabase storage paths follow:
+
 ```
 resumes/{user_id}/{filename}
 avatars/{user_id}/{filename}
@@ -773,13 +781,13 @@ the path without the bucket prefix. No database updates needed for paths.
 #### Upload Flow Changes
 
 **Current (Supabase):**
+
 ```typescript
-const { error } = await supabase.storage
-  .from('resumes')
-  .upload(`${userId}/${filename}`, file);
+const { error } = await supabase.storage.from("resumes").upload(`${userId}/${filename}`, file);
 ```
 
 **Target (R2 via Worker):**
+
 ```typescript
 // Upload via Worker binding
 await env.R2_CIAGO_RESUMES.put(`${userId}/${filename}`, file);
@@ -792,40 +800,44 @@ const presignedUrl = await getR2PresignedUploadUrl(bucket, key, expiry);
 #### Signed URL Changes
 
 **Current (Supabase):**
+
 ```typescript
-const { data } = await supabase.storage
-  .from('avatars')
-  .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days
+const { data } = await supabase.storage.from("avatars").createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days
 ```
 
 **Target (R2):**
+
 ```typescript
 // Using @aws-sdk/client-s3 with R2 credentials
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-const url = await getSignedUrl(r2Client, new GetObjectCommand({
-  Bucket: 'ciago-avatars',
-  Key: path
-}), { expiresIn: 60 * 60 * 24 * 7 });
+const url = await getSignedUrl(
+  r2Client,
+  new GetObjectCommand({
+    Bucket: "ciago-avatars",
+    Key: path,
+  }),
+  { expiresIn: 60 * 60 * 24 * 7 },
+);
 ```
 
 #### Files Modified for Storage Migration
 
-| File | Change |
-|------|--------|
-| `src/lib/profile.functions.ts` | Replace `supabase.storage.from('avatars').createSignedUrl` with R2 signed URL |
-| `src/lib/admin.functions.ts` | Replace `supabaseAdmin.storage.from('resumes').remove` with R2 delete |
-| `src/lib/hr-decisions.ts` | Replace `supabase.storage.from('onboarding-docs')` with R2 |
-| `src/lib/hr.functions.ts` | Replace both `supabase.storage.from('onboarding-docs')` calls with R2 |
-| `src/lib/onboarding.functions.ts` | Replace `supabase.storage.from('onboarding-docs').remove` with R2 |
-| `src/lib/applications.functions.ts` | Replace `supabase.storage.from('resumes')` with R2 |
-| `src/lib/users.functions.ts` | Replace `supabase.storage.from('identity-docs')` with R2 |
-| `src/lib/profile.functions.ts` | Replace `supabaseAdmin.storage.from('resumes').remove` with R2 |
-| `src/routes/careers.tsx` | Replace direct `supabase.storage.from('resumes').upload` with R2 |
-| `src/routes/_authenticated/profile.tsx` | Replace `supabase.storage.from('avatars')` with R2 |
-| `src/routes/_authenticated/users.tsx` | Replace `supabase.storage.from('identity-docs')` with R2 |
-| `src/components/site/OnboardingDocUploader.tsx` | Replace `supabase.storage.from('onboarding-docs')` with R2 |
+| File                                            | Change                                                                        |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/lib/profile.functions.ts`                  | Replace `supabase.storage.from('avatars').createSignedUrl` with R2 signed URL |
+| `src/lib/admin.functions.ts`                    | Replace `supabaseAdmin.storage.from('resumes').remove` with R2 delete         |
+| `src/lib/hr-decisions.ts`                       | Replace `supabase.storage.from('onboarding-docs')` with R2                    |
+| `src/lib/hr.functions.ts`                       | Replace both `supabase.storage.from('onboarding-docs')` calls with R2         |
+| `src/lib/onboarding.functions.ts`               | Replace `supabase.storage.from('onboarding-docs').remove` with R2             |
+| `src/lib/applications.functions.ts`             | Replace `supabase.storage.from('resumes')` with R2                            |
+| `src/lib/users.functions.ts`                    | Replace `supabase.storage.from('identity-docs')` with R2                      |
+| `src/lib/profile.functions.ts`                  | Replace `supabaseAdmin.storage.from('resumes').remove` with R2                |
+| `src/routes/careers.tsx`                        | Replace direct `supabase.storage.from('resumes').upload` with R2              |
+| `src/routes/_authenticated/profile.tsx`         | Replace `supabase.storage.from('avatars')` with R2                            |
+| `src/routes/_authenticated/users.tsx`           | Replace `supabase.storage.from('identity-docs')` with R2                      |
+| `src/components/site/OnboardingDocUploader.tsx` | Replace `supabase.storage.from('onboarding-docs')` with R2                    |
 
 #### Data Migration (Supabase → R2)
 
@@ -854,6 +866,7 @@ Use the following migration script (to be created in `scripts/migrate-storage.ts
 **Prerequisites**: Neon account, `neonctl` CLI installed, Supabase service role key.
 
 **Files Created:**
+
 - `scripts/migrate-schema.ts` — exports Supabase schema + imports to Neon
 - `scripts/seed-neon.ts` — exports Supabase data + imports to Neon
 
@@ -909,6 +922,7 @@ ORDER BY tablename;
 **Rollback**: Delete Neon project. No application code changed.
 
 **Acceptance Criteria:**
+
 - [ ] All 26 tables present in Neon
 - [ ] All 8 stored functions present
 - [ ] All 4 enums present
@@ -917,6 +931,7 @@ ORDER BY tablename;
 - [ ] `auth.uid()` function returns correct UUID when `app.current_user_id` is set via SET LOCAL
 
 **Risks:**
+
 - Supabase uses extensions (e.g., `uuid-ossp`) — verify Neon has them enabled
 - Some Supabase-specific syntax may not export cleanly — review schema.sql manually
 
@@ -977,6 +992,7 @@ ROLLBACK; -- Don't commit test data
 **Rollback**: No application code changed. Drop the custom functions if needed.
 
 **Acceptance Criteria:**
+
 - [ ] `auth.uid()` returns `null` when `app.current_user_id` is not set
 - [ ] `auth.uid()` returns the correct UUID when set via `SET LOCAL`
 - [ ] RLS policies evaluated correctly with simulated user context
@@ -984,15 +1000,15 @@ ROLLBACK; -- Don't commit test data
 
 ---
 
-### Stage 3: Drizzle ORM Setup + Schema Definition
+### Stage 3: Prisma ORM Setup + Schema Definition
 
-**Objective**: Add Drizzle ORM, define the complete schema in TypeScript, generate types.
+**Objective**: Add Prisma ORM, define the complete schema in TypeScript, generate types.
 
 **Packages to Install:**
 
 ```bash
-bun add drizzle-orm @neondatabase/serverless
-bun add -D drizzle-kit
+bun add @prisma/client @neondatabase/serverless
+bun add -D prisma
 ```
 
 **Files Created:**
@@ -1002,30 +1018,69 @@ src/
 ├── db/
 │   ├── index.ts          # Database connection factory
 │   ├── index.server.ts   # Admin connection factory (no RLS)
-│   ├── schema.ts         # Complete Drizzle schema definition
-│   └── types.ts          # Exported Drizzle inferred types (replaces supabase/types.ts)
-drizzle.config.ts         # Drizzle Kit configuration
+│   ├── schema.ts         # Complete Prisma schema definition
+│   └── types.ts          # Exported Prisma inferred types (replaces supabase/types.ts)
+prisma.config.ts         # Prisma Kit configuration
 ```
 
 **`src/db/schema.ts` structure (do not copy verbatim — derive from actual types.ts):**
 
 ```typescript
-import { pgTable, uuid, text, boolean, timestamp, integer, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  boolean,
+  timestamp,
+  integer,
+  jsonb,
+  pgEnum,
+} from "@prisma/client/pg-core";
 
 // Enums
-export const appRoleEnum = pgEnum('app_role', ['admin', 'moderator', 'user', 'employee', 'hr', 'manager']);
-export const deptTypeEnum = pgEnum('dept_type', ['engineering', 'operations', 'human_resource', 'management', 'product', 'design', 'finance', 'sales', 'marketing', 'customer_support', 'legal', 'it_infrastructure']);
-export const jobPostingStatusEnum = pgEnum('job_posting_status', ['draft', 'published', 'internal_only', 'closed', 'archived']);
-export const jobTrackTypeEnum = pgEnum('job_track_type', ['standard', 'manager_track', 'hr_track']);
+export const appRoleEnum = pgEnum("app_role", [
+  "admin",
+  "moderator",
+  "user",
+  "employee",
+  "hr",
+  "manager",
+]);
+export const deptTypeEnum = pgEnum("dept_type", [
+  "engineering",
+  "operations",
+  "human_resource",
+  "management",
+  "product",
+  "design",
+  "finance",
+  "sales",
+  "marketing",
+  "customer_support",
+  "legal",
+  "it_infrastructure",
+]);
+export const jobPostingStatusEnum = pgEnum("job_posting_status", [
+  "draft",
+  "published",
+  "internal_only",
+  "closed",
+  "archived",
+]);
+export const jobTrackTypeEnum = pgEnum("job_track_type", ["standard", "manager_track", "hr_track"]);
 
 // auth schema
-export const authUsers = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: text('email').unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  rawUserMetaData: jsonb('raw_user_meta_data').default({})
-}, (t) => ({ schema: 'auth' }));
+export const authUsers = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rawUserMetaData: jsonb("raw_user_meta_data").default({}),
+  },
+  (t) => ({ schema: "auth" }),
+);
 
 // All 26 public tables follow the same pattern...
 // (Define each from the types.ts Row definitions)
@@ -1034,13 +1089,13 @@ export const authUsers = pgTable('users', {
 **`src/db/index.ts` structure:**
 
 ```typescript
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import * as schema from './schema';
+import { neon } from "@neondatabase/serverless";
+import { Prisma } from "@prisma/client/neon-http";
+import * as schema from "./schema";
 
 export function createUserDb(connectionString: string, userId: string) {
   const sql = neon(connectionString);
-  const db = drizzle(sql, { schema });
+  const db = Prisma(sql, { schema });
   // SET LOCAL called in auth-middleware before returning context
   return db;
 }
@@ -1048,36 +1103,37 @@ export function createUserDb(connectionString: string, userId: string) {
 export function createAdminDb(connectionString: string) {
   // Admin connection — bypasses RLS via admin role
   const sql = neon(connectionString);
-  return drizzle(sql, { schema });
+  return Prisma(sql, { schema });
 }
 ```
 
-**`drizzle.config.ts`:**
+**`prisma.config.ts`:**
 
 ```typescript
-import type { Config } from 'drizzle-kit';
+import type { Config } from "prisma";
 export default {
-  schema: './src/db/schema.ts',
-  out: './supabase/migrations-neon',
-  dialect: 'postgresql',
+  schema: "./src/db/schema.ts",
+  out: "./supabase/migrations-neon",
+  dialect: "postgresql",
   dbCredentials: {
-    url: process.env.NEON_DATABASE_URL!
-  }
+    url: process.env.NEON_DATABASE_URL!,
+  },
 } satisfies Config;
 ```
 
 **Validation:**
 
 ```bash
-# Generate Drizzle migration from schema
-bunx drizzle-kit generate
+# Generate Prisma migration from schema
+bunx prisma generate
 
 # Verify generated migration matches Supabase schema
 diff supabase/migrations-neon/0000_initial.sql schema.sql
 ```
 
 **Acceptance Criteria:**
-- [ ] Drizzle installed and configured
+
+- [ ] Prisma installed and configured
 - [ ] All 26 tables defined in `schema.ts`
 - [ ] All 4 enums defined
 - [ ] TypeScript types generated and correct
@@ -1096,12 +1152,14 @@ issuance step. This is the most impactful change.
 #### `src/integrations/supabase/auth-middleware.ts` (REWRITE)
 
 Current behavior:
+
 1. Verify Clerk JWT
 2. Provision user in `clerk_user_map` (Supabase)
 3. Issue GoTrue JWT via `generateLink` + `verifyOtp`
 4. Build Supabase per-user client with GoTrue JWT
 
 New behavior:
+
 1. Verify Clerk JWT
 2. Look up `auth_user_id` from `clerk_user_map` (Neon)
 3. Execute `SET LOCAL app.current_user_id = '<auth_user_id>'` on the connection
@@ -1113,52 +1171,53 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@clerk/backend";
 import { createUserDb } from "@/db";
-import { sql } from "drizzle-orm";
+import { sql } from "@prisma/client";
 import { FLAGS } from "@/lib/feature-flags";
 import { clerkUserMap } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq } from "@prisma/client";
 
-export const requireNeonAuth = createMiddleware({ type: "function" }).server(
-  async ({ next }) => {
-    const request = getRequest();
-    const token = extractBearerToken(request);
+export const requireNeonAuth = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  const request = getRequest();
+  const token = extractBearerToken(request);
 
-    // Verify Clerk JWT
-    const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-    const { sub: clerkUserId, ...claims } = await clerkClient.verifyToken(token);
+  // Verify Clerk JWT
+  const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+  const { sub: clerkUserId, ...claims } = await clerkClient.verifyToken(token);
 
-    // Look up auth_user_id from clerk_user_map
-    const adminDb = createAdminDb(process.env.NEON_DATABASE_URL!);
-    const [mapping] = await adminDb
-      .select({ authUserId: clerkUserMap.authUserId })
-      .from(clerkUserMap)
-      .where(eq(clerkUserMap.clerkUserId, clerkUserId));
+  // Look up auth_user_id from clerk_user_map
+  const adminDb = createAdminDb(process.env.NEON_DATABASE_URL!);
+  const [mapping] = await adminDb
+    .select({ authUserId: clerkUserMap.authUserId })
+    .from(clerkUserMap)
+    .where(eq(clerkUserMap.clerkUserId, clerkUserId));
 
-    if (!mapping) throw new Error('User not provisioned');
+  if (!mapping) throw new Error("User not provisioned");
 
-    // Build user-scoped Neon connection with RLS context
-    const userDb = createUserDb(process.env.NEON_DATABASE_URL!, mapping.authUserId);
-    await userDb.execute(sql`SET LOCAL app.current_user_id = ${mapping.authUserId}`);
+  // Build user-scoped Neon connection with RLS context
+  const userDb = createUserDb(process.env.NEON_DATABASE_URL!, mapping.authUserId);
+  await userDb.execute(sql`SET LOCAL app.current_user_id = ${mapping.authUserId}`);
 
-    return next({
-      context: {
-        db: userDb,
-        userId: mapping.authUserId,
-        claims
-      }
-    });
-  }
-);
+  return next({
+    context: {
+      db: userDb,
+      userId: mapping.authUserId,
+      claims,
+    },
+  });
+});
 ```
 
 **Files Deleted:**
+
 - `src/integrations/clerk/issue-token.server.ts` — entire file
 
 **Files Modified:**
+
 - `src/integrations/supabase/auth-middleware.ts` — rewrite (keep file path for backward compat)
 - All `*.functions.ts` files — replace `requireSupabaseAuth` with `requireNeonAuth`, `context.supabase` with `context.db`
 
 **Acceptance Criteria:**
+
 - [ ] Middleware verifies Clerk JWT without GoTrue
 - [ ] `app.current_user_id` set correctly in every authenticated request
 - [ ] `auth.uid()` returns correct UUID in all RLS contexts
@@ -1171,7 +1230,7 @@ export const requireNeonAuth = createMiddleware({ type: "function" }).server(
 ### Stage 5: Database Client Migration (Function by Function)
 
 **Objective**: Rewrite all server functions from PostgREST (`supabase.from()`)
-to Drizzle SQL (`db.select().from()`). Use `neonMigrationEnabled` flag to
+to Prisma SQL (`db.select().from()`). Use `neonMigrationEnabled` flag to
 switch between implementations.
 
 **Pattern for each function:**
@@ -1188,7 +1247,7 @@ export const getMyRoles = createServerFn({ method: "GET" })
     // ...
   });
 
-// AFTER (Drizzle — add AFTER existing, behind flag)
+// AFTER (Prisma — add AFTER existing, behind flag)
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireNeonAuth])
   .handler(async ({ context }) => {
@@ -1202,29 +1261,30 @@ export const getMyRoles = createServerFn({ method: "GET" })
 
 **Files to Migrate (in order of priority):**
 
-| File | Functions | Priority |
-|------|-----------|----------|
-| `src/lib/roles.functions.ts` | `getMyRoles`, `getMyAuthUserId`, `getMyEmployeeAccess` | **P0** (used by auth guard) |
-| `src/lib/portal.functions.ts` | `resolveMyPortal` | **P0** (used by all portals) |
-| `src/lib/feature-flags.functions.ts` | `getMyFeatureFlags` | **P1** |
-| `src/lib/profile.functions.ts` | All | **P1** |
-| `src/lib/applications.functions.ts` | All | **P1** |
-| `src/lib/onboarding.functions.ts` | All | **P2** |
-| `src/lib/hr.functions.ts` | All | **P2** |
-| `src/lib/admin.functions.ts` | All | **P2** |
-| `src/lib/employee.functions.ts` | All | **P2** |
-| `src/lib/users.functions.ts` | All | **P3** |
-| `src/lib/adminTasks.functions.ts` | All | **P3** |
-| `src/lib/hrTasks.functions.ts` | All | **P3** |
-| `src/lib/orgHierarchy.functions.ts` | All | **P3** |
-| `src/lib/payroll.functions.ts` | All (if exists) | **P3** |
-| `src/routes/careers.tsx` | Inline DB calls | **P2** |
-| `src/routes/_authenticated/profile.tsx` | Inline DB calls | **P2** |
-| `src/routes/_authenticated/users.tsx` | Inline DB calls | **P2** |
+| File                                    | Functions                                              | Priority                     |
+| --------------------------------------- | ------------------------------------------------------ | ---------------------------- |
+| `src/lib/roles.functions.ts`            | `getMyRoles`, `getMyAuthUserId`, `getMyEmployeeAccess` | **P0** (used by auth guard)  |
+| `src/lib/portal.functions.ts`           | `resolveMyPortal`                                      | **P0** (used by all portals) |
+| `src/lib/feature-flags.functions.ts`    | `getMyFeatureFlags`                                    | **P1**                       |
+| `src/lib/profile.functions.ts`          | All                                                    | **P1**                       |
+| `src/lib/applications.functions.ts`     | All                                                    | **P1**                       |
+| `src/lib/onboarding.functions.ts`       | All                                                    | **P2**                       |
+| `src/lib/hr.functions.ts`               | All                                                    | **P2**                       |
+| `src/lib/admin.functions.ts`            | All                                                    | **P2**                       |
+| `src/lib/employee.functions.ts`         | All                                                    | **P2**                       |
+| `src/lib/users.functions.ts`            | All                                                    | **P3**                       |
+| `src/lib/adminTasks.functions.ts`       | All                                                    | **P3**                       |
+| `src/lib/hrTasks.functions.ts`          | All                                                    | **P3**                       |
+| `src/lib/orgHierarchy.functions.ts`     | All                                                    | **P3**                       |
+| `src/lib/payroll.functions.ts`          | All (if exists)                                        | **P3**                       |
+| `src/routes/careers.tsx`                | Inline DB calls                                        | **P2**                       |
+| `src/routes/_authenticated/profile.tsx` | Inline DB calls                                        | **P2**                       |
+| `src/routes/_authenticated/users.tsx`   | Inline DB calls                                        | **P2**                       |
 
 **Stage 5 Acceptance Criteria:**
-- [ ] All server functions rewritten to Drizzle
-- [ ] `neonMigrationEnabled` flag routes to Drizzle functions
+
+- [ ] All server functions rewritten to Prisma
+- [ ] `neonMigrationEnabled` flag routes to Prisma functions
 - [ ] `neonMigrationEnabled = false` still routes to Supabase functions (unchanged)
 - [ ] All 64 tests pass
 - [ ] Build passes
@@ -1283,21 +1343,18 @@ export async function uploadToR2(
   bucket: R2Bucket,
   key: string,
   file: File | ArrayBuffer,
-  options?: { contentType?: string }
+  options?: { contentType?: string },
 ): Promise<{ key: string }>;
 
 // Generate signed URL for download
 export async function getSignedUrl(
   bucket: R2Bucket,
   key: string,
-  expiresInSeconds: number
+  expiresInSeconds: number,
 ): Promise<string>;
 
 // Delete object from R2
-export async function deleteFromR2(
-  bucket: R2Bucket,
-  key: string
-): Promise<void>;
+export async function deleteFromR2(bucket: R2Bucket, key: string): Promise<void>;
 ```
 
 **Step 6d: Run Storage Migration Script**
@@ -1312,11 +1369,13 @@ bun run scripts/migrate-storage.ts --execute
 **Step 6e: Enable R2 Storage via Flag**
 
 After migration script completes and is verified:
+
 1. Set `r2StorageEnabled = true` in ConfigCat for admins only
 2. Verify uploads and downloads work
 3. Gradually roll out to all users
 
 **Stage 6 Acceptance Criteria:**
+
 - [ ] All 4 R2 buckets created
 - [ ] All existing objects migrated from Supabase to R2
 - [ ] Object counts match between Supabase and R2
@@ -1344,10 +1403,10 @@ if (FLAGS.neonMigrationEnabled) {
   // Write to Neon
   await context.db.insert(table).values(data);
   // Also write to Supabase as fallback
-  await supabaseAdmin.from('table').insert(data);
+  await supabaseAdmin.from("table").insert(data);
 } else {
   // Write to Supabase only
-  await context.supabase.from('table').insert(data);
+  await context.supabase.from("table").insert(data);
 }
 ```
 
@@ -1361,6 +1420,7 @@ bun run scripts/validate-migration.ts
 ```
 
 **Stage 7 Acceptance Criteria:**
+
 - [ ] Zero data discrepancies over 2-week period
 - [ ] Performance benchmarks: Neon reads < 50ms for all common queries
 - [ ] No errors in Neon logs
@@ -1408,63 +1468,63 @@ Decommission (Day 30):
 
 ### Files to CREATE
 
-| Path | Purpose | Stage | Dependencies |
-|------|---------|-------|-------------|
-| `src/db/schema.ts` | Drizzle schema definition | 3 | Neon project |
-| `src/db/index.ts` | User-scoped DB connection factory | 3 | schema.ts |
-| `src/db/index.server.ts` | Admin DB connection factory | 3 | schema.ts |
-| `src/db/types.ts` | Exported Drizzle inferred types | 3 | schema.ts |
-| `src/lib/storage.server.ts` | R2 storage utilities | 6 | R2 buckets |
-| `scripts/migrate-schema.ts` | Schema export/import script | 1 | pg_dump |
-| `scripts/migrate-data.ts` | Data export/import script | 1 | pg_dump |
-| `scripts/migrate-storage.ts` | Object migration script | 6 | R2 buckets |
-| `scripts/validate-migration.ts` | Data consistency validator | 7 | Both DBs |
-| `drizzle.config.ts` | Drizzle Kit config | 3 | Neon connection |
-| `wrangler.toml` | Cloudflare Workers + R2 bindings | 6 | R2 buckets |
+| Path                            | Purpose                           | Stage | Dependencies    |
+| ------------------------------- | --------------------------------- | ----- | --------------- |
+| `src/db/schema.ts`              | Prisma schema definition          | 3     | Neon project    |
+| `src/db/index.ts`               | User-scoped DB connection factory | 3     | schema.ts       |
+| `src/db/index.server.ts`        | Admin DB connection factory       | 3     | schema.ts       |
+| `src/db/types.ts`               | Exported Prisma inferred types    | 3     | schema.ts       |
+| `src/lib/storage.server.ts`     | R2 storage utilities              | 6     | R2 buckets      |
+| `scripts/migrate-schema.ts`     | Schema export/import script       | 1     | pg_dump         |
+| `scripts/migrate-data.ts`       | Data export/import script         | 1     | pg_dump         |
+| `scripts/migrate-storage.ts`    | Object migration script           | 6     | R2 buckets      |
+| `scripts/validate-migration.ts` | Data consistency validator        | 7     | Both DBs        |
+| `prisma.config.ts`              | Prisma Kit config                 | 3     | Neon connection |
+| `wrangler.toml`                 | Cloudflare Workers + R2 bindings  | 6     | R2 buckets      |
 
 ### Files to MODIFY
 
-| Path | Change | Stage |
-|------|--------|-------|
-| `src/integrations/supabase/auth-middleware.ts` | Rewrite Clerk branch to use Neon + SET LOCAL | 4 |
-| `src/integrations/clerk/provision.server.ts` | Point to Neon instead of Supabase | 4 |
-| `src/integrations/clerk/ensure-mapping.server.ts` | Point to Neon instead of Supabase | 4 |
-| `src/lib/roles.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/portal.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/feature-flags.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/profile.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/applications.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/admin.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/hr.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/employee.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/onboarding.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/users.functions.ts` | Add Drizzle + R2 implementation | 5+6 |
-| `src/lib/adminTasks.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/hrTasks.functions.ts` | Add Drizzle implementation | 5 |
-| `src/lib/orgHierarchy.functions.ts` | Add Drizzle implementation | 5 |
-| `src/routes/careers.tsx` | Replace inline storage calls with R2 | 6 |
-| `src/routes/_authenticated/profile.tsx` | Replace inline storage calls with R2 | 6 |
-| `src/routes/_authenticated/users.tsx` | Replace inline storage calls with R2 | 6 |
-| `src/components/site/OnboardingDocUploader.tsx` | Replace inline storage calls with R2 | 6 |
-| `package.json` | Add drizzle-orm, @neondatabase/serverless, @aws-sdk | 3 |
-| `src/lib/feature-flags.ts` | Enable `neonMigrationEnabled` and `r2StorageEnabled` flags | 3 |
+| Path                                              | Change                                                     | Stage |
+| ------------------------------------------------- | ---------------------------------------------------------- | ----- |
+| `src/integrations/supabase/auth-middleware.ts`    | Rewrite Clerk branch to use Neon + SET LOCAL               | 4     |
+| `src/integrations/clerk/provision.server.ts`      | Point to Neon instead of Supabase                          | 4     |
+| `src/integrations/clerk/ensure-mapping.server.ts` | Point to Neon instead of Supabase                          | 4     |
+| `src/lib/roles.functions.ts`                      | Add Prisma implementation                                  | 5     |
+| `src/lib/portal.functions.ts`                     | Add Prisma implementation                                  | 5     |
+| `src/lib/feature-flags.functions.ts`              | Add Prisma implementation                                  | 5     |
+| `src/lib/profile.functions.ts`                    | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/applications.functions.ts`               | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/admin.functions.ts`                      | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/hr.functions.ts`                         | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/employee.functions.ts`                   | Add Prisma implementation                                  | 5     |
+| `src/lib/onboarding.functions.ts`                 | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/users.functions.ts`                      | Add Prisma + R2 implementation                             | 5+6   |
+| `src/lib/adminTasks.functions.ts`                 | Add Prisma implementation                                  | 5     |
+| `src/lib/hrTasks.functions.ts`                    | Add Prisma implementation                                  | 5     |
+| `src/lib/orgHierarchy.functions.ts`               | Add Prisma implementation                                  | 5     |
+| `src/routes/careers.tsx`                          | Replace inline storage calls with R2                       | 6     |
+| `src/routes/_authenticated/profile.tsx`           | Replace inline storage calls with R2                       | 6     |
+| `src/routes/_authenticated/users.tsx`             | Replace inline storage calls with R2                       | 6     |
+| `src/components/site/OnboardingDocUploader.tsx`   | Replace inline storage calls with R2                       | 6     |
+| `package.json`                                    | Add @prisma/client, @neondatabase/serverless, @aws-sdk     | 3     |
+| `src/lib/feature-flags.ts`                        | Enable `neonMigrationEnabled` and `r2StorageEnabled` flags | 3     |
 
 ### Files to DELETE (after Stage 8 — not before)
 
-| Path | Reason | Replacement |
-|------|--------|-------------|
-| `src/integrations/clerk/issue-token.server.ts` | GoTrue JWT issuance removed | None needed — Clerk JWT used directly |
-| `src/integrations/supabase/client.ts` | Supabase client removed | `src/db/index.ts` |
-| `src/integrations/supabase/client.server.ts` | Supabase admin client removed | `src/db/index.server.ts` |
-| `src/integrations/supabase/types.ts` | PostgREST types replaced | `src/db/types.ts` (Drizzle inferred) |
+| Path                                           | Reason                        | Replacement                           |
+| ---------------------------------------------- | ----------------------------- | ------------------------------------- |
+| `src/integrations/clerk/issue-token.server.ts` | GoTrue JWT issuance removed   | None needed — Clerk JWT used directly |
+| `src/integrations/supabase/client.ts`          | Supabase client removed       | `src/db/index.ts`                     |
+| `src/integrations/supabase/client.server.ts`   | Supabase admin client removed | `src/db/index.server.ts`              |
+| `src/integrations/supabase/types.ts`           | PostgREST types replaced      | `src/db/types.ts` (Prisma inferred)   |
 
 ### Folder Changes
 
-| Change | Reason |
-|--------|--------|
-| New: `src/db/` | Drizzle schema + connection factories |
-| Keep: `src/integrations/supabase/` | Until Stage 8 complete |
-| Keep: `src/integrations/clerk/` | Unchanged (provision + ensure-mapping updated) |
+| Change                             | Reason                                         |
+| ---------------------------------- | ---------------------------------------------- |
+| New: `src/db/`                     | Prisma schema + connection factories           |
+| Keep: `src/integrations/supabase/` | Until Stage 8 complete                         |
+| Keep: `src/integrations/clerk/`    | Unchanged (provision + ensure-mapping updated) |
 
 ---
 
@@ -1472,48 +1532,50 @@ Decommission (Day 30):
 
 ### Current Variables (Supabase)
 
-| Variable | Scope | Required | Purpose |
-|----------|-------|----------|---------|
-| `SUPABASE_URL` | Server | Required | Supabase project URL |
-| `SUPABASE_PUBLISHABLE_KEY` | Server | Required | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only | Required | Supabase service role (bypasses RLS) |
-| `VITE_SUPABASE_URL` | Client | Required | Same as SUPABASE_URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client | Required | Same as SUPABASE_PUBLISHABLE_KEY |
-| `SUPABASE_PROJECT_ID` | Server | Required | For migrations and admin |
+| Variable                        | Scope       | Required | Purpose                              |
+| ------------------------------- | ----------- | -------- | ------------------------------------ |
+| `SUPABASE_URL`                  | Server      | Required | Supabase project URL                 |
+| `SUPABASE_PUBLISHABLE_KEY`      | Server      | Required | Supabase anon key                    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Server-only | Required | Supabase service role (bypasses RLS) |
+| `VITE_SUPABASE_URL`             | Client      | Required | Same as SUPABASE_URL                 |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client      | Required | Same as SUPABASE_PUBLISHABLE_KEY     |
+| `SUPABASE_PROJECT_ID`           | Server      | Required | For migrations and admin             |
 
 ### New Variables (Neon + R2)
 
-| Variable | Scope | Environment | Required | Purpose |
-|----------|-------|-------------|----------|---------|
-| `NEON_DATABASE_URL` | Server-only | All | Required | Neon connection string with PgBouncer pooling |
-| `NEON_DIRECT_URL` | Server-only | All | Optional | Direct Neon connection (for migrations) |
-| `R2_ACCOUNT_ID` | Server-only | All | Required | Cloudflare account ID for R2 |
-| `R2_ACCESS_KEY_ID` | Server-only | All | Required | R2 S3-compatible access key |
-| `R2_SECRET_ACCESS_KEY` | Server-only | All | Required | R2 S3-compatible secret key |
-| `R2_BUCKET_RESUMES` | Server-only | All | Required | R2 bucket name for resumes |
-| `R2_BUCKET_AVATARS` | Server-only | All | Required | R2 bucket name for avatars |
-| `R2_BUCKET_ONBOARDING_DOCS` | Server-only | All | Required | R2 bucket name for onboarding docs |
-| `R2_BUCKET_IDENTITY_DOCS` | Server-only | All | Required | R2 bucket name for identity docs |
+| Variable                    | Scope       | Environment | Required | Purpose                                       |
+| --------------------------- | ----------- | ----------- | -------- | --------------------------------------------- |
+| `NEON_DATABASE_URL`         | Server-only | All         | Required | Neon connection string with PgBouncer pooling |
+| `NEON_DIRECT_URL`           | Server-only | All         | Optional | Direct Neon connection (for migrations)       |
+| `R2_ACCOUNT_ID`             | Server-only | All         | Required | Cloudflare account ID for R2                  |
+| `R2_ACCESS_KEY_ID`          | Server-only | All         | Required | R2 S3-compatible access key                   |
+| `R2_SECRET_ACCESS_KEY`      | Server-only | All         | Required | R2 S3-compatible secret key                   |
+| `R2_BUCKET_RESUMES`         | Server-only | All         | Required | R2 bucket name for resumes                    |
+| `R2_BUCKET_AVATARS`         | Server-only | All         | Required | R2 bucket name for avatars                    |
+| `R2_BUCKET_ONBOARDING_DOCS` | Server-only | All         | Required | R2 bucket name for onboarding docs            |
+| `R2_BUCKET_IDENTITY_DOCS`   | Server-only | All         | Required | R2 bucket name for identity docs              |
 
 ### Variables to DEPRECATE after Stage 8
 
-| Variable | When to Remove |
-|----------|---------------|
-| `SUPABASE_URL` | After Stage 8 complete + 30-day retention |
-| `SUPABASE_PUBLISHABLE_KEY` | After Stage 8 complete |
-| `SUPABASE_SERVICE_ROLE_KEY` | After Stage 8 complete |
-| `VITE_SUPABASE_URL` | After Stage 8 complete |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | After Stage 8 complete |
-| `SUPABASE_PROJECT_ID` | After Stage 8 complete |
+| Variable                        | When to Remove                            |
+| ------------------------------- | ----------------------------------------- |
+| `SUPABASE_URL`                  | After Stage 8 complete + 30-day retention |
+| `SUPABASE_PUBLISHABLE_KEY`      | After Stage 8 complete                    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | After Stage 8 complete                    |
+| `VITE_SUPABASE_URL`             | After Stage 8 complete                    |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | After Stage 8 complete                    |
+| `SUPABASE_PROJECT_ID`           | After Stage 8 complete                    |
 
 ### Doppler Configuration
 
 All variables above must be configured in Doppler under three configs:
+
 - `dev`: Local development values
 - `stg`: Staging values (separate Neon branch, separate R2 buckets with `-staging` suffix)
 - `prd`: Production values
 
 Variable naming in Doppler:
+
 ```
 # Database
 NEON_DATABASE_URL          → postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
@@ -1537,19 +1599,19 @@ R2_BUCKET_IDENTITY_DOCS    → ciago-identity-docs
 
 **New tests to add in Stage 3:**
 
-| Test File | What to Test |
-|-----------|-------------|
-| `src/db/__tests__/schema.test.ts` | Schema types match expected shapes |
-| `src/db/__tests__/connection.test.ts` | Connection factory creates valid Drizzle instance |
-| `src/lib/__tests__/storage.test.ts` | R2 utility functions with mocked R2 binding |
+| Test File                             | What to Test                                     |
+| ------------------------------------- | ------------------------------------------------ |
+| `src/db/__tests__/schema.test.ts`     | Schema types match expected shapes               |
+| `src/db/__tests__/connection.test.ts` | Connection factory creates valid Prisma instance |
+| `src/lib/__tests__/storage.test.ts`   | R2 utility functions with mocked R2 binding      |
 
 **Existing tests to update:**
 
-| Test File | Update Required |
-|-----------|----------------|
-| `src/integrations/clerk/__tests__/issue-token.server.test.ts` | Delete after Stage 4 |
-| `src/integrations/clerk/__tests__/provision.server.test.ts` | Update mocks to use Neon |
-| `src/lib/__tests__/route-access.test.ts` | Update mocks if Supabase-specific |
+| Test File                                                     | Update Required                   |
+| ------------------------------------------------------------- | --------------------------------- |
+| `src/integrations/clerk/__tests__/issue-token.server.test.ts` | Delete after Stage 4              |
+| `src/integrations/clerk/__tests__/provision.server.test.ts`   | Update mocks to use Neon          |
+| `src/lib/__tests__/route-access.test.ts`                      | Update mocks if Supabase-specific |
 
 ### Integration Tests
 
@@ -1567,15 +1629,15 @@ NEON_TEST_URL="postgresql://..." bun test --config vitest.integration.config.ts
 
 Before each stage cutover, manually test:
 
-| Scenario | Stage |
-|----------|-------|
-| Admin login and portal access | 4, 7 |
-| HR review and approve application | 5 |
-| Employee submit leave request | 5 |
-| Upload onboarding document | 6 |
-| Download signed resume URL | 6 |
-| Manager approve timesheet | 5 |
-| Profile avatar upload | 6 |
+| Scenario                          | Stage |
+| --------------------------------- | ----- |
+| Admin login and portal access     | 4, 7  |
+| HR review and approve application | 5     |
+| Employee submit leave request     | 5     |
+| Upload onboarding document        | 6     |
+| Download signed resume URL        | 6     |
+| Manager approve timesheet         | 5     |
+| Profile avatar upload             | 6     |
 
 ### Migration Validation
 
@@ -1632,7 +1694,7 @@ NEON_DATABASE_URL="..." bun run test src/integrations/clerk/__tests__/rls-audit.
 
 ### SQL Injection
 
-- [ ] All queries use Drizzle's parameterized query API
+- [ ] All queries use Prisma's parameterized query API
 - [ ] No raw string interpolation in `db.execute(sql`...${variable}...`)` — use `sql.raw` only for static identifiers
 - [ ] User input NEVER concatenated into SQL strings
 
@@ -1653,37 +1715,38 @@ Add structured logging throughout the migration:
 
 ```typescript
 // In auth middleware (Neon branch)
-console.log('[neon-auth]', {
+console.log("[neon-auth]", {
   userId: mapping.authUserId,
   clerkUserId,
   durationMs: Date.now() - start,
-  event: 'auth-context-set'
+  event: "auth-context-set",
 });
 
 // In storage operations
-console.log('[r2]', {
+console.log("[r2]", {
   bucket,
   key,
-  operation: 'upload' | 'download' | 'delete',
+  operation: "upload" | "download" | "delete",
   durationMs,
-  success
+  success,
 });
 ```
 
 ### Metrics to Track
 
-| Metric | Target | Alert Threshold |
-|--------|--------|----------------|
-| Neon query latency (p99) | < 100ms | > 500ms |
-| Auth context set duration | < 10ms | > 50ms |
-| R2 upload duration (1MB) | < 500ms | > 2s |
-| R2 signed URL generation | < 20ms | > 100ms |
-| Failed auth attempts | < 1% | > 5% |
-| RLS policy violations (error) | 0 | > 0 |
+| Metric                        | Target  | Alert Threshold |
+| ----------------------------- | ------- | --------------- |
+| Neon query latency (p99)      | < 100ms | > 500ms         |
+| Auth context set duration     | < 10ms  | > 50ms          |
+| R2 upload duration (1MB)      | < 500ms | > 2s            |
+| R2 signed URL generation      | < 20ms  | > 100ms         |
+| Failed auth attempts          | < 1%    | > 5%            |
+| RLS policy violations (error) | 0       | > 0             |
 
 ### Neon Console Monitoring
 
 After cutover, set up Neon console alerts for:
+
 - Compute utilization > 80%
 - Connection pool utilization > 90%
 - Failed query rate > 1%
@@ -1698,11 +1761,13 @@ After cutover, set up Neon console alerts for:
 After storage migrates to R2:
 
 **Avatars (public, cacheable):**
+
 - Serve via Cloudflare Cache
 - `Cache-Control: public, max-age=86400` (24 hours)
 - On profile update: purge Cloudflare cache for the avatar key
 
 **Documents (private, no cache):**
+
 - Serve via short-lived signed URLs only
 - `Cache-Control: private, no-store`
 - Signed URL expiry: 1 hour (resumes, onboarding-docs, identity-docs)
@@ -1717,7 +1782,7 @@ After storage migrates to R2:
 - [ ] Schema migrated and validated (26 tables, 8 functions, 4 enums, 104+ policies)
 - [ ] `auth.uid()` custom function working correctly
 - [ ] `auth.users` table populated with all Supabase user UUIDs
-- [ ] Drizzle schema matches Supabase schema exactly
+- [ ] Prisma schema matches Supabase schema exactly
 - [ ] TypeScript types generated and reviewed
 - [ ] All existing 64 tests pass against Supabase (baseline confirmed)
 - [ ] R2 buckets created and CORS configured
@@ -1725,7 +1790,7 @@ After storage migrates to R2:
 ### During Migration (Stages 4–6)
 
 - [ ] GoTrue JWT issuance replaced by direct Clerk JWT in Neon middleware
-- [ ] All server functions rewritten to Drizzle
+- [ ] All server functions rewritten to Prisma
 - [ ] All storage operations rewritten to R2
 - [ ] `neonMigrationEnabled` flag routes correctly
 - [ ] `r2StorageEnabled` flag routes correctly
@@ -1766,7 +1831,7 @@ After storage migrates to R2:
 
 ### Do USE
 
-- `context.db` (Drizzle) in all new server functions
+- `context.db` (Prisma) in all new server functions
 - `context.db.execute(sql`SET LOCAL app.current_user_id = ${userId}`)` only in middleware
 - `env.R2_*` bindings for all storage operations
 - Feature flags `neonMigrationEnabled` and `r2StorageEnabled` to gate new code paths
@@ -1783,6 +1848,6 @@ After storage migrates to R2:
 
 ---
 
-*Document last updated: 2026-07-29*
-*Next review: After Stage 1 completion*
-*Owner: Engineering Team*
+_Document last updated: 2026-07-29_
+_Next review: After Stage 1 completion_
+_Owner: Engineering Team_

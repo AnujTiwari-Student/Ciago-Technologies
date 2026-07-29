@@ -8,25 +8,25 @@ Built with a modern, type-safe, server-rendered stack — TanStack Start on Clou
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Framework | [TanStack Start](https://tanstack.com/start) — file-based routing, SSR via Nitro |
-| Deployment | Cloudflare Workers |
-| Build tool | Vite 8, Bun, `@lovable.dev/vite-tanstack-config` |
-| Language | TypeScript 5.8 (strict mode, bundler module resolution, `@/*` path alias) |
-| UI | shadcn/ui (`new-york` style, `slate` base), Tailwind CSS 4, Radix UI, lucide-react |
-| Auth | Clerk (feature-flagged via `USE_CLERK_AUTH`); legacy Supabase auth retained for rollback |
-| Database | Supabase (Lovable Cloud) — planned migration to **Neon** |
-| Storage | Supabase Storage — planned migration to **Cloudflare R2** |
-| Feature flags | ConfigCat (`@configcat/sdk`, `configcat-react`) |
-| Email | Resend (server-side notification templates) |
-| Bot protection | Cloudflare Turnstile + Postgres sliding-window rate limiter + honeypot |
-| Data access | Direct `@supabase/supabase-js` client queries (no ORM) |
-| Testing | Vitest, co-located `__tests__/` directories |
-| Linting/formatting | ESLint 9 + Prettier (`eslint-plugin-prettier`) |
-| Secrets | `.env` (current) → Doppler (planned) |
-| CI/CD | Lovable-managed deployments |
-| Package manager | Bun (`bunfig.toml` enforces a 24-hour supply-chain guard) |
+| Layer              | Choice                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| Framework          | [TanStack Start](https://tanstack.com/start) — file-based routing, SSR via Nitro         |
+| Deployment         | Cloudflare Workers                                                                       |
+| Build tool         | Vite 8, Bun, `@lovable.dev/vite-tanstack-config`                                         |
+| Language           | TypeScript 5.8 (strict mode, bundler module resolution, `@/*` path alias)                |
+| UI                 | shadcn/ui (`new-york` style, `slate` base), Tailwind CSS 4, Radix UI, lucide-react       |
+| Auth               | Clerk (feature-flagged via `USE_CLERK_AUTH`); legacy Supabase auth retained for rollback |
+| Database           | Supabase (Lovable Cloud) — planned migration to **Neon**                                 |
+| Storage            | Supabase Storage — planned migration to **Cloudflare R2**                                |
+| Feature flags      | ConfigCat (`@configcat/sdk`, `configcat-react`)                                          |
+| Email              | Resend (server-side notification templates)                                              |
+| Bot protection     | Cloudflare Turnstile + Postgres sliding-window rate limiter + honeypot                   |
+| Data access        | Direct `@supabase/supabase-js` client queries (no ORM)                                   |
+| Testing            | Vitest, co-located `__tests__/` directories                                              |
+| Linting/formatting | ESLint 9 + Prettier (`eslint-plugin-prettier`)                                           |
+| Secrets            | `.env` (current) → Doppler (planned)                                                     |
+| CI/CD              | Lovable-managed deployments                                                              |
+| Package manager    | Bun (`bunfig.toml` enforces a 24-hour supply-chain guard)                                |
 
 ### Roles
 
@@ -73,13 +73,13 @@ bun dev
 
 ## Available Scripts
 
-| Command | Tool | Purpose |
-|---|---|---|
-| `bun dev` | Vite dev | Start local development server |
-| `bun run test` | Vitest (`vitest run`) | Run all unit tests once |
-| `bun run lint` | ESLint 9 | Lint the entire project |
-| `bun run build` | Vite build | Production build (Nitro → Cloudflare Workers) |
-| `bun run format` | Prettier | Format all files (`prettier --write .`) |
+| Command          | Tool                  | Purpose                                       |
+| ---------------- | --------------------- | --------------------------------------------- |
+| `bun dev`        | Vite dev              | Start local development server                |
+| `bun run test`   | Vitest (`vitest run`) | Run all unit tests once                       |
+| `bun run lint`   | ESLint 9              | Lint the entire project                       |
+| `bun run build`  | Vite build            | Production build (Nitro → Cloudflare Workers) |
+| `bun run format` | Prettier              | Format all files (`prettier --write .`)       |
 
 ---
 

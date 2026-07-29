@@ -1,0 +1,513 @@
+// Prisma schema for Ciago Technologies
+//
+// Target database: Neon (PostgreSQL) — this schema is designed for the
+// post-migration state documented in plans.md (Supabase → Neon migration).
+//
+// For local development, point DATABASE_URL at your Neon dev branch or a
+// local Postgres instance.
+//
+// Cloudflare Workers deployment uses the Neon serverless driver via
+// @prisma/adapter-neon (edge runtime). The `driverAdapters` preview feature
+// enables this. Connection pooling is handled by Neon's built-in pooler.
+//
+// Auth note: user_id fields across all tables reference auth.users(id).
+// In Neon, auth.users is a minimal table with just (id uuid PK) — see
+// plans.md Stage 1 for exact DDL. The auth schema is managed separately
+// and is NOT modelled here to avoid FK complications during migration.
+// RLS is enforced via SET LOCAL app.current_user_id in transactions.
+
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AppRole {
+  admin
+  moderator
+  user
+  employee
+  hr
+  manager
+
+  @@map("app_role")
+}
+
+enum DeptType {
+  engineering
+  operations
+  human_resource
+  management
+  product
+  design
+  finance
+  sales
+  marketing
+  customer_support
+  legal
+  it_infrastructure
+
+  @@map("dept_type")
+}
+
+enum JobPostingStatus {
+  draft
+  published
+  internal_only
+  closed
+  archived
+
+  @@map("job_posting_status")
+}
+
+enum JobTrackType {
+  standard
+  manager_track
+  hr_track
+
+  @@map("job_track_type")
+}
+
+// ---------------------------------------------------------------------------
+// Tables
+// ---------------------------------------------------------------------------
+
+model AttendanceRecord {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String   @db.Uuid @map("user_id")
+  workDate             String   @map("work_date")
+  checkIn              String?  @map("check_in")
+  checkOut             String?  @map("check_out")
+  hours                Float?
+  status               String   @default("absent")
+  regularizationReason String?  @map("regularization_reason")
+  regularizedAt        DateTime? @map("regularized_at")
+  regularizedBy        String?  @db.Uuid @map("regularized_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("attendance_records")
+}
+
+model AuditLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action         String
+  actorId        String?  @db.Uuid @map("actor_id")
+  actorEmail     String?  @map("actor_email")
+  targetResource String?  @map("target_resource")
+  details        Json     @default("{}")
+  timestamp      DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model ClerkUserMap {
+  clerkUserId String   @map("clerk_user_id")
+  authUserId  String   @db.Uuid @map("auth_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@id([clerkUserId])
+  @@map("clerk_user_map")
+}
+
+model Department {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  code        String    @unique
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  jobPostings JobPosting[]
+  userRoles   UserRole[]
+
+  @@map("departments")
+}
+
+model EmployeeTask {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assigneeId       String   @db.Uuid @map("assignee_id")
+  assignedBy       String?  @db.Uuid @map("assigned_by")
+  title            String
+  description      String?
+  status           String   @default("pending")
+  priority         String   @default("medium")
+  dueDate          String?  @map("due_date")
+  projectReference String?  @map("project_reference")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("employee_tasks")
+}
+
+model Employee {
+  userId                String    @db.Uuid @map("user_id")
+  accountStatus         String    @default("active") @map("account_status")
+  probationStatus       String    @default("active") @map("probation_status")
+  probationMonths       Int?      @map("probation_months")
+  backgroundCheckStatus String    @default("pending") @map("background_check_status")
+  docVerificationStatus String    @default("pending") @map("doc_verification_status")
+  department            DeptType? 
+  designation           String?
+  teamName              String?   @map("team_name")
+  doj                   String?
+  employmentType        String?   @map("employment_type")
+  workLocation          String?   @map("work_location")
+  workModel             String?   @map("work_model")
+  workEmail             String?   @map("work_email")
+  personalEmail         String?   @map("personal_email")
+  contactNumber         String?   @map("contact_number")
+  address               String?
+  baseSalary            Float?    @map("base_salary")
+  salaryCurrency        String    @default("INR") @map("salary_currency")
+  reportingManagerId    String?   @db.Uuid @map("reporting_manager_id")
+  reportingHrId         String?   @db.Uuid @map("reporting_hr_id")
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@id([userId])
+  @@map("employees")
+}
+
+model EmploymentType {
+  code      String   @id
+  label     String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("employment_types")
+}
+
+model IdentityDocument {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @db.Uuid @map("user_id")
+  docType     String    @map("doc_type")
+  docNumber   String?   @map("doc_number")
+  storagePath String?   @map("storage_path")
+  status      String    @default("pending")
+  feedback    String?
+  verifiedAt  DateTime? @map("verified_at")
+  verifiedBy  String?   @db.Uuid @map("verified_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("identity_documents")
+}
+
+model InAppNotification {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @db.Uuid @map("user_id")
+  title         String
+  body          String
+  link          String?
+  read          Boolean  @default(false)
+  applicationId String?  @db.Uuid @map("application_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("in_app_notifications")
+}
+
+model InterviewSlot {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId   String   @db.Uuid @map("application_id")
+  candidateUserId String   @db.Uuid @map("candidate_user_id")
+  proposedBy      String   @db.Uuid @map("proposed_by")
+  slotAt          DateTime @map("slot_at")
+  location        String?
+  notes           String?
+  isSelected      Boolean  @default(false) @map("is_selected")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  @@map("interview_slots")
+}
+
+model JobApplication {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @db.Uuid @map("user_id")
+  roleId             String    @db.Uuid @map("role_id")
+  roleTitle          String    @map("role_title")
+  fullName           String    @map("full_name")
+  email              String
+  resumeLink         String?   @map("resume_link")
+  resumeStoragePath  String?   @map("resume_storage_path")
+  portfolioUrl       String?   @map("portfolio_url")
+  status             String    @default("applied")
+  isSoftDeleted      Boolean   @default(false) @map("is_soft_deleted")
+  deletedAt          DateTime? @map("deleted_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  interviewSlots     InterviewSlot[]
+  onboardingRecord   OnboardingRecord?
+
+  @@map("job_applications")
+}
+
+model JobPosting {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                String
+  summary              String
+  description          String
+  department           String
+  departmentId         String?          @db.Uuid @map("department_id")
+  employmentType       String           @default("full_time") @map("employment_type")
+  location             String
+  isRemote             Boolean          @default(false) @map("is_remote")
+  internalOnly         Boolean          @default(false) @map("internal_only")
+  jobCode              String?          @map("job_code")
+  status               JobPostingStatus @default(draft)
+  trackType            JobTrackType     @default(standard) @map("track_type")
+  tags                 String[]         @default([])
+  requirements         String[]         @default([])
+  requiredOnboardingDocs String[]       @default([]) @map("required_onboarding_docs")
+  salaryMinInr         Int?             @map("salary_min_inr")
+  salaryMaxInr         Int?             @map("salary_max_inr")
+  createdBy            String?          @db.Uuid @map("created_by")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  departmentRel        Department?      @relation(fields: [departmentId], references: [id])
+  referrals            Referral[]
+
+  @@map("job_postings")
+}
+
+model LeaveRequest {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @db.Uuid @map("user_id")
+  leaveType    String    @default("casual") @map("leave_type")
+  startDate    String    @map("start_date")
+  endDate      String    @map("end_date")
+  reason       String?
+  status       String    @default("pending")
+  decidedBy    String?   @db.Uuid @map("decided_by")
+  decidedAt    DateTime? @map("decided_at")
+  decisionNote String?   @map("decision_note")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("leave_requests")
+}
+
+model OnboardingDocument {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  onboardingId     String    @db.Uuid @map("onboarding_id")
+  userId           String    @db.Uuid @map("user_id")
+  docKey           String    @map("doc_key")
+  storagePath      String    @map("storage_path")
+  originalFilename String?   @map("original_filename")
+  status           String    @default("pending")
+  feedback         String?
+  version          Int       @default(1)
+  reviewedBy       String?   @db.Uuid @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at")
+  supersededAt     DateTime? @map("superseded_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  onboardingRecord OnboardingRecord @relation(fields: [onboardingId], references: [id])
+
+  @@map("onboarding_documents")
+}
+
+model OnboardingRecord {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @db.Uuid @map("user_id")
+  applicationId      String    @db.Uuid @unique @map("application_id")
+  roleTitle          String    @map("role_title")
+  department         String?
+  doj                String?
+  startDate          String?   @map("start_date")
+  compensationInr    Float?    @map("compensation_inr")
+  status             String    @default("pending")
+  verificationStatus String    @default("pending") @map("verification_status")
+  currentStep        Int       @default(1) @map("current_step")
+  formState          Json      @default("{}") @map("form_state")
+  emergencyContact   Json?     @map("emergency_contact")
+  codeOfConductAck   Boolean   @default(false) @map("code_of_conduct_ack")
+  idAck              Boolean   @default(false) @map("id_ack")
+  offerAcceptedAt    DateTime? @map("offer_accepted_at")
+  offerDeclinedAt    DateTime? @map("offer_declined_at")
+  submittedAt        DateTime? @map("submitted_at")
+  verifiedBy         String?   @db.Uuid @map("verified_by")
+  verifiedAt         DateTime? @map("verified_at")
+  rejectionFeedback  String?   @map("rejection_feedback")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  application        JobApplication     @relation(fields: [applicationId], references: [id])
+  documents          OnboardingDocument[]
+
+  @@map("onboarding_records")
+}
+
+model Profile {
+  userId      String  @db.Uuid @map("user_id")
+  fullName    String? @map("full_name")
+  bio         String?
+  pronouns    String?
+  avatarPath  String? @map("avatar_path")
+  website     String?
+  linkedin    String?
+  portfolio   String?
+  leetcode    String?
+  publicEmail String? @map("public_email")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@id([userId])
+  @@map("profiles")
+}
+
+model ProjectEstimate {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName    String   @map("full_name")
+  email       String
+  company     String
+  projectType String   @map("project_type")
+  scale       String
+  timeline    String
+  budgetLow   Float    @map("budget_low")
+  budgetHigh  Float    @map("budget_high")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("project_estimates")
+}
+
+model RateLimit {
+  id         Int      @id @default(autoincrement())
+  bucket     String
+  key        String
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@map("rate_limits")
+}
+
+model Referral {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId     String   @db.Uuid @map("employee_id")
+  candidateName  String   @map("candidate_name")
+  candidateEmail String   @map("candidate_email")
+  jobPostingId   String?  @db.Uuid @map("job_posting_id")
+  notes          String?
+  referralStatus String   @default("submitted") @map("referral_status")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  jobPosting     JobPosting? @relation(fields: [jobPostingId], references: [id])
+
+  @@map("referrals")
+}
+
+model Resignation {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @db.Uuid @map("user_id")
+  reason         String?
+  lastWorkingDay String    @map("last_working_day")
+  status         String    @default("pending")
+  submittedOn    DateTime  @default(now()) @map("submitted_on")
+  decidedBy      String?   @db.Uuid @map("decided_by")
+  decidedAt      DateTime? @map("decided_at")
+  decisionNote   String?   @map("decision_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("resignations")
+}
+
+model ResourceDownload {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String
+  resourceSlug String   @map("resource_slug")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("resource_downloads")
+}
+
+model SalarySlip {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @db.Uuid @map("user_id")
+  periodMonth      Int      @map("period_month")
+  periodYear       Int      @map("period_year")
+  gross            Float    @default(0)
+  basic            Float    @default(0)
+  hra              Float    @default(0)
+  special          Float    @default(0)
+  pfEmployee       Float    @default(0) @map("pf_employee")
+  pt               Float    @default(0)
+  tds              Float    @default(0)
+  lwpDays          Int      @default(0) @map("lwp_days")
+  workingDays      Int      @default(0) @map("working_days")
+  totalDeductions  Float    @default(0) @map("total_deductions")
+  netPay           Float    @default(0) @map("net_pay")
+  generatedBy      String?  @db.Uuid @map("generated_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("salary_slips")
+}
+
+model SalaryStructure {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String   @db.Uuid @map("user_id")
+  ctcAnnualInr        Float    @map("ctc_annual_inr")
+  basicMonthly        Float    @map("basic_monthly")
+  hraMonthly          Float    @default(0) @map("hra_monthly")
+  specialMonthly      Float    @default(0) @map("special_monthly")
+  pfEmployeeMonthly   Float    @default(0) @map("pf_employee_monthly")
+  ptMonthly           Float    @default(0) @map("pt_monthly")
+  effectiveFrom       DateTime @default(now()) @map("effective_from")
+  createdBy           String?  @db.Uuid @map("created_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("salary_structures")
+}
+
+model StatusOption {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind        String
+  code        String
+  label       String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([kind, code])
+  @@map("status_options")
+}
+
+model Timesheet {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId       String   @db.Uuid @map("employee_id")
+  date             String
+  projectReference String   @map("project_reference")
+  hoursLogged      Float    @map("hours_logged")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("timesheets")
+}
+
+model UserRole {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @db.Uuid @map("user_id")
+  role         AppRole
+  departmentId String?   @db.Uuid @map("department_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  @@map("user_roles")
+}

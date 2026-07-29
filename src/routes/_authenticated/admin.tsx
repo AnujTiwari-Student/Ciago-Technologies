@@ -89,7 +89,7 @@ import {
   type JobPosting,
 } from "@/lib/jobPostings.functions";
 import { useLookups } from "@/hooks/use-lookups";
-import { requireRoles } from "./-guard";
+import { requireRoles, requireDashboardEnabled } from "./-guard";
 import {
   assignTaskToEmployee,
   listAllAssignedTasks,

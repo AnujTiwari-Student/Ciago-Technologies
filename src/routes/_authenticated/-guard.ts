@@ -2,6 +2,7 @@ import { redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { FLAGS } from "@/lib/feature-flags";
 import { getMyAuthUserId, getMyRoles, type MyRolesPayload } from "@/lib/roles.functions";
+import { isDashboardEnabled } from "@/lib/feature-flags.server";
 
 declare global {
   interface Window {
@@ -63,4 +64,16 @@ export async function requireRoles(
     userId: auth.userId!,
     roles: roleSetFromPayload(payload),
   };
+}
+
+/**
+ * Guards any dashboard route.
+ * If the `dashboardEnabled` ConfigCat flag is OFF, redirects to /forbidden.
+ * Call this AFTER requireAuthenticated / requireRoles in beforeLoad.
+ */
+export async function requireDashboardEnabled(): Promise<void> {
+  const enabled = await isDashboardEnabled();
+  if (!enabled) {
+    throw redirect({ to: "/forbidden", search: { reason: "dashboard_disabled" } });
+  }
 }

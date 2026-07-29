@@ -97,7 +97,7 @@ import { getMyOnboarding } from "@/lib/onboarding.functions";
 import { DojHoldingScreen, shouldShowDojHold } from "@/components/site/DojHoldingScreen";
 import { FLAGS } from "@/lib/feature-flags";
 import { getMyEmployeeAccess } from "@/lib/roles.functions";
-import { requireRoles } from "./-guard";
+import { requireRoles, requireDashboardEnabled } from "./-guard";
 
 // ============================================================
 // Route + access gate (employee OR admin)

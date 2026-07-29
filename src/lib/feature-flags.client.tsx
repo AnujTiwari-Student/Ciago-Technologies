@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+﻿import { createContext, useContext, type ReactNode } from "react";
 import { ConfigCatProvider, useFeatureFlag } from "configcat-react";
 import {
   FEATURE_FLAGS,
@@ -43,17 +43,31 @@ export function useFlagSafe(
   defaultValue = getCapabilityDefault(key),
 ): readonly [boolean, boolean] {
   const { enabled } = useContext(FlagProviderStateContext);
-  if (!enabled) return [defaultValue, false] as const;
+  // Always call the hook unconditionally to satisfy Rules of Hooks.
   const { value, loading } = useFeatureFlag(key, defaultValue);
+  if (!enabled) return [defaultValue, false] as const;
   return [value, loading] as const;
+}
+
+/** Returns [isDashboardEnabled, loading]. */
+export function useDashboardFlag(): readonly [boolean, boolean] {
+  return useFlagSafe(FEATURE_FLAGS.dashboard);
 }
 
 export function useMaintenanceMode(): readonly [boolean, boolean] {
   return useFlagSafe(FEATURE_FLAGS.maintenanceMode);
 }
 
+/** Returns [isClerkAuthEnabled, loading]. Mirrors clerkAuthentication ConfigCat key. */
+export function useClerkAuthFlag(): readonly [boolean, boolean] {
+  return useFlagSafe(FEATURE_FLAGS.clerkAuthentication);
+}
+
 export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Capabilities {
   return {
+    clerkAuthentication:
+      flags.clerkAuthentication ?? getCapabilityDefault(FEATURE_FLAGS.clerkAuthentication),
+    dashboardEnabled: flags.dashboardEnabled ?? getCapabilityDefault(FEATURE_FLAGS.dashboard),
     employeePortalEnabled:
       flags.employeePortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.employeePortal),
     managerPortalEnabled:

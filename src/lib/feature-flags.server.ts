@@ -77,3 +77,11 @@ export async function getAllFeatureFlags(target?: FlagTargetContext): Promise<Ca
 export function getDefaultCapabilities(): Capabilities {
   return { ...DEFAULT_CAPABILITIES };
 }
+
+/**
+ * Returns true when the dashboard is enabled for the given target.
+ * Used by route guards and server actions to gate dashboard access.
+ */
+export async function isDashboardEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn("dashboardEnabled", target, DEFAULT_CAPABILITIES.dashboardEnabled);
+}

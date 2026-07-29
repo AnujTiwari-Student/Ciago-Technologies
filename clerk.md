@@ -81,7 +81,7 @@ With the flag ON, the browser eagerly mounts `<ClerkProvider>` via `ClerkProvide
 
 ## 1.4 Authorization flow (one paragraph)
 
-Authorization is **unchanged** by the migration. The `app_role` enum (`admin > hr > manager > employee > user`) is enforced by the same `route-access.ts` rules, the same `user_roles` table, and the same `public.has_role(auth.uid(), …) / auth.uid() = user_id` RLS expressions. After Clerk auth resolves, the worker hands every server function a `context.userId` that is the *mapped* `auth.users.id`, so all role queries (e.g. `getMyRoles`) and all portal routing (`resolveMyPortal`) see the identical UUID they would have seen under the legacy path. There is no Clerk-aware authorization code; authorization remains Supabase-native.
+Authorization is **unchanged** by the migration. The `app_role` enum (`admin > hr > manager > employee > user`) is enforced by the same `route-access.ts` rules, the same `user_roles` table, and the same `public.has_role(auth.uid(), …) / auth.uid() = user_id` RLS expressions. After Clerk auth resolves, the worker hands every server function a `context.userId` that is the _mapped_ `auth.users.id`, so all role queries (e.g. `getMyRoles`) and all portal routing (`resolveMyPortal`) see the identical UUID they would have seen under the legacy path. There is no Clerk-aware authorization code; authorization remains Supabase-native.
 
 ## 1.5 Middleware flow
 
@@ -89,19 +89,18 @@ Two middleware participate. On the **client**, `attachSupabaseAuth` (created via
 
 ## 1.6 Key properties
 
-| Property | Value |
-|---|---|
-| Identity provider | Clerk (`@clerk/tanstack-react-start` ^1.4.23, `@clerk/clerk-react` ^5.61.3) |
-| Authorization source of truth | Supabase `user_roles` + RLS (unchanged) |
-| RLS evaluation subject | `auth.uid()` = mapped `auth.users.id` (unchanged) |
-| Migration strategy | Feature-flagged, non-destructive, reversible |
-| Rollback mechanism | Set `USE_CLERK_AUTH=false` (and `VITE_USE_CLERK_AUTH=false` on the client); redeploy |
-| Code paths | Two parallel branches (`legacySupabaseAuthBranch` / `clerkAuthBranch` / `clerkTokenBranch`) gated by `FLAGS.USE_CLERK_AUTH` |
-| Server runtime | Cloudflare Workers (via Nitro, `@tanstack/react-start` ^1.168.26) |
-| Test invariant | `scripts/rls-audit.ts` + Vitest — every `CREATE POLICY` must route through `auth.uid()` or be an explicitly allow-listed public-read/deny case |
+| Property                      | Value                                                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity provider             | Clerk (`@clerk/tanstack-react-start` ^1.4.23, `@clerk/clerk-react` ^5.61.3)                                                                    |
+| Authorization source of truth | Supabase `user_roles` + RLS (unchanged)                                                                                                        |
+| RLS evaluation subject        | `auth.uid()` = mapped `auth.users.id` (unchanged)                                                                                              |
+| Migration strategy            | Feature-flagged, non-destructive, reversible                                                                                                   |
+| Rollback mechanism            | Set `USE_CLERK_AUTH=false` (and `VITE_USE_CLERK_AUTH=false` on the client); redeploy                                                           |
+| Code paths                    | Two parallel branches (`legacySupabaseAuthBranch` / `clerkAuthBranch` / `clerkTokenBranch`) gated by `FLAGS.USE_CLERK_AUTH`                    |
+| Server runtime                | Cloudflare Workers (via Nitro, `@tanstack/react-start` ^1.168.26)                                                                              |
+| Test invariant                | `scripts/rls-audit.ts` + Vitest — every `CREATE POLICY` must route through `auth.uid()` or be an explicitly allow-listed public-read/deny case |
 
 ---
-
 
 # 2. Current Authentication Architecture
 
@@ -156,7 +155,7 @@ sequenceDiagram
 
 ### 2.1.1 Steps in detail
 
-1. **Provider mount.** `<ClerkProviderBoundary>` in `src/integrations/clerk/client.tsx` reads `FLAGS.USE_CLERK_AUTH`; when ON it synchronously renders `<ClerkProvider publishableKey>` (eager import — *not* lazy, see §6.4). When OFF it short-circuits to `<>{children}</>` so `@clerk/tanstack-react-start` never enters the bundle.
+1. **Provider mount.** `<ClerkProviderBoundary>` in `src/integrations/clerk/client.tsx` reads `FLAGS.USE_CLERK_AUTH`; when ON it synchronously renders `<ClerkProvider publishableKey>` (eager import — _not_ lazy, see §6.4). When OFF it short-circuits to `<>{children}</>` so `@clerk/tanstack-react-start` never enters the bundle.
 2. **Token publication.** `<ClerkTokenBridge>` (sibling of `ClerkProvider`) calls `useAuth().getToken()` inside a `useEffect`, writes the Clerk Session JWT to `window.__clerkAuthToken`, and clears it (`""`) on sign-out. This bridge is the only React component that calls a Clerk hook for token-management purposes; the client middleware cannot call hooks (it is not a component).
 3. **Attacher.** `attachSupabaseAuth` in `src/integrations/supabase/auth-attacher.ts` runs as a client `createMiddleware({ type: "function" }).client(...)`. In the Clerk branch it reads `window.__clerkAuthToken` synchronously and forwards either `Authorization: Bearer <jwt>` (when the bridge has published a token) or no `Authorization` header (when the bridge has published `""` or hasn't mounted yet).
 4. **Server verification.** `requireSupabaseAuth` in `src/integrations/supabase/auth-middleware.ts` runs as a server `createMiddleware({ type: "function" }).server(...)`. In the Clerk branch it:
@@ -211,7 +210,8 @@ flowchart TD
 ```
 
 Points of note:
-- The forms live in `src/integrations/clerk/forms.tsx`. They are **lazily loaded** from `src/routes/auth.tsx` so that `@clerk/tanstack-react-start` only enters the client bundle when the flag is ON. Eager-loading would be incorrect *here* — eager-loading is only required for the *provider* (§6.4).
+
+- The forms live in `src/integrations/clerk/forms.tsx`. They are **lazily loaded** from `src/routes/auth.tsx` so that `@clerk/tanstack-react-start` only enters the client bundle when the flag is ON. Eager-loading would be incorrect _here_ — eager-loading is only required for the _provider_ (§6.4).
 - The sign-up form (`ClerkSignUpForm`) calls `signUp.password({ emailAddress, password, firstName })`, then if `signUp.status === "complete"` calls `signUp.finalize` and routes via `resolveMyPortal({ portal: "candidate", requested })`. If status is `"needs_verification"` it calls `signUp.verifications.sendEmailCode()` and toasts an inbox-confirmation message. **The code does not yet render an email-code verification UI** — see §9.1 production-readiness notes.
 - Social sign-in (`ClerkSocialButton`) calls `signIn.sso({ strategy: oauth_google|oauth_apple|oauth_github, redirectUrl, redirectCallbackUrl })`. On `external_account_not_found` it autofalls through to `signUp.sso` with the same strategy so a new Clerk user is provisioned. Errors are translated by `formatSocialError` into actionable copy (e.g. "Ask an admin to enable Google under Configure → SSO Connections").
 - The post-login destination is computed by `resolveMyPortal` (`src/lib/portal.functions.ts`), a POST server fn composed with `requireSupabaseAuth`. It throws `FORBIDDEN_CORPORATE_ERROR` if a non-staff user attempts the Employee tab, and `STAFF_ON_CANDIDATE_ERROR` if a staff user attempts the Candidate tab. The same error markers are produced in the legacy branch's client-side `resolvePostLoginDestination`. The auth route's `handlePortalError` handler treats both identically.
@@ -243,10 +243,10 @@ The Clerk token bridge clears `window.__clerkAuthToken = ""` on its own when `is
 
 This is the conceptual heart of the migration and deserves explicit emphasis:
 
-| Token | Issued by | Subject (`sub`) | Lifetime | Where stored | Where consumed | Strict necessity |
-|---|---|---|---|---|---|---|
-| Clerk Session JWT | Clerk frontend (`useAuth().getToken()`) | Clerk user id (`user_2vX…`) | Clerk-default 60s | `window.__clerkAuthToken` (in-memory only) | `Authorization: Bearer` on server-fn RPCs | Yes — the worker's only proof of identity |
-| GoTrue JWT (Supabase access token) | Supabase GoTrue via `generateLink`+`verifyOtp` | `auth.users.id` UUID | Supabase-default 1h | Per-process `Map<authUserId, { token, exp }>` cache; *not* surfaced to the browser | `Authorization: Bearer` on the per-user Supabase client | Required so that `auth.uid()` RLS evaluation resolves to a UUID |
+| Token                              | Issued by                                      | Subject (`sub`)             | Lifetime            | Where stored                                                                       | Where consumed                                          | Strict necessity                                                |
+| ---------------------------------- | ---------------------------------------------- | --------------------------- | ------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
+| Clerk Session JWT                  | Clerk frontend (`useAuth().getToken()`)        | Clerk user id (`user_2vX…`) | Clerk-default 60s   | `window.__clerkAuthToken` (in-memory only)                                         | `Authorization: Bearer` on server-fn RPCs               | Yes — the worker's only proof of identity                       |
+| GoTrue JWT (Supabase access token) | Supabase GoTrue via `generateLink`+`verifyOtp` | `auth.users.id` UUID        | Supabase-default 1h | Per-process `Map<authUserId, { token, exp }>` cache; _not_ surfaced to the browser | `Authorization: Bearer` on the per-user Supabase client | Required so that `auth.uid()` RLS evaluation resolves to a UUID |
 
 The two tokens correspond to the two responsibilities the migration deliberately separates: identity (Clerk) and RLS subject (Supabase). The worker is the **only place both tokens are present at the same time**, and the mapping between their `sub`s is exactly the `clerk_user_map` sidecar.
 
@@ -257,12 +257,12 @@ The two tokens correspond to the two responsibilities the migration deliberately
 const linkRes = await supabaseAdmin.auth.admin.generateLink({
   type: "magiclink",
   email,
-});                                       // → { properties: { hashed_token } }
+}); // → { properties: { hashed_token } }
 const verifyRes = await supabaseAnon.auth.verifyOtp({
   email,
   token: linkRes.data.properties.hashed_token,
   type: "email",
-});                                       // → { session: { access_token } }
+}); // → { session: { access_token } }
 ```
 
 This is Supabase's documented issuance path for a hashed-token-exchange session. `supabaseAdmin` (service role) is used to generate the link; `supabaseAnon` (publishable-key client, no persistence) is used to exchange it for a session. The `verifyOtp` call does not send any user-visible email — `generateLink` returns the hashed token directly, and the exchange is fully server-side.
@@ -286,9 +286,9 @@ Tokens in scope:
 
 ## 2.9 Middleware
 
-| Middleware | File | Side | Created via | Composed by |
-|---|---|---|---|---|
-| `attachSupabaseAuth` | `src/integrations/supabase/auth-attacher.ts` | Client | `createMiddleware({ type: "function" }).client(...)` | Every server fn the browser invokes (composed automatically by TanStack Start's `clientFn` wrapping) |
+| Middleware            | File                                           | Side   | Created via                                          | Composed by                                                                                                            |
+| --------------------- | ---------------------------------------------- | ------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `attachSupabaseAuth`  | `src/integrations/supabase/auth-attacher.ts`   | Client | `createMiddleware({ type: "function" }).client(...)` | Every server fn the browser invokes (composed automatically by TanStack Start's `clientFn` wrapping)                   |
 | `requireSupabaseAuth` | `src/integrations/supabase/auth-middleware.ts` | Server | `createMiddleware({ type: "function" }).server(...)` | 28 server fns including `resolveMyPortal`, `getMyRoles`, `ensureClerkMapping`, all route `beforeLoad`s that hit the DB |
 
 Both middleware toggle on `FLAGS.USE_CLERK_AUTH` at the top of their handlers and delegate to per-branch functions. This keeps each branch's logic isolated and reviewable; no inline branching inside hot paths.
@@ -314,7 +314,6 @@ Clerk-relevant client components:
 - Role hooks (`src/hooks/use-my-roles.tsx`, `use-is-admin.tsx`, `use-is-employee.tsx`) — legacy branch queries `user_roles` directly; Clerk branch defers to `getMyRoles` server fn so the auth middleware provisions and scopes the request.
 
 ---
-
 
 # 3. Folder Structure
 
@@ -368,11 +367,11 @@ Owns everything Clerk-specific that ships into either bundle. The folder name fo
 
 ### `src/integrations/supabase/` — MODIFIED
 
-The two orchestration surfaces (`auth-middleware.ts` server-side, `auth-attacher.ts` client-side) were extended with a `clerkAuthBranch` / `clerkTokenBranch` parallel to the existing legacy branch. `client.ts` and `client.server.ts` were not edited (they were already lazy proxies with configurable fetch); they are *consumed* by the Clerk branch (the anon browser client is reused as the `verifyOtp` exchange client, the admin client is reused for `generateLink` and `clerk_user_map` writes).
+The two orchestration surfaces (`auth-middleware.ts` server-side, `auth-attacher.ts` client-side) were extended with a `clerkAuthBranch` / `clerkTokenBranch` parallel to the existing legacy branch. `client.ts` and `client.server.ts` were not edited (they were already lazy proxies with configurable fetch); they are _consumed_ by the Clerk branch (the anon browser client is reused as the `verifyOtp` exchange client, the admin client is reused for `generateLink` and `clerk_user_map` writes).
 
 ### `src/lib/` — MODIFIED
 
-`auth.tsx` was extended with `ClerkAuthProvider` / `ClerkConsumer` / `normalizeClerkUser` that synthesizes a Supabase-shaped `User` from Clerk's `User`. The public `AuthProvider` API surface (`{ user, session, loading, signOut }`) is unchanged; consumers are not edited. `feature-flags.ts` gained `FLAGS.USE_CLERK_AUTH` (the first and currently only entry in `FeatureFlags`). `portal.functions.ts` and `roles.functions.ts` were *added* (they did not exist pre-migration); the legacy branch's `resolvePostLoginDestination` (in `auth.tsx`) and the legacy role-hook logic (in `useMyRoles`) used to query the DB via the browser client directly, so those server fns formalize the pattern that the Clerk branch requires.
+`auth.tsx` was extended with `ClerkAuthProvider` / `ClerkConsumer` / `normalizeClerkUser` that synthesizes a Supabase-shaped `User` from Clerk's `User`. The public `AuthProvider` API surface (`{ user, session, loading, signOut }`) is unchanged; consumers are not edited. `feature-flags.ts` gained `FLAGS.USE_CLERK_AUTH` (the first and currently only entry in `FeatureFlags`). `portal.functions.ts` and `roles.functions.ts` were _added_ (they did not exist pre-migration); the legacy branch's `resolvePostLoginDestination` (in `auth.tsx`) and the legacy role-hook logic (in `useMyRoles`) used to query the DB via the browser client directly, so those server fns formalize the pattern that the Clerk branch requires.
 
 ### `src/routes/` — MODIFIED
 
@@ -449,17 +448,17 @@ graph TD
 
 ## 3.3 Ownership and responsibility summary
 
-| Owner (folder) | Responsibility |
-|---|---|
-| `src/integrations/clerk/` | Clerk-only code (provider boundary, forms, provisioning, token issuance, ensure-mapping fn) |
-| `src/integrations/supabase/` | All Supabase clients + the auth middleware/attacher (which both now branch on the flag) |
-| `src/lib/` | App-wide auth context, feature flags, server fns for portal routing & roles |
-| `src/routes/__root.tsx` | Provider tree composition; CSP; mounting `useEnsureUserMapped` |
-| `src/routes/auth.tsx` | Sign-in/up UX and flag-aware form dispatching |
-| `src/routes/_authenticated/route.tsx` | Path-level guard for any `/...` authenticated route |
-| `src/hooks/` | React hooks adapting auth + role state to consumer components |
-| `supabase/migrations/` | Schema (the `clerk_user_map` table is the only Clerk-related schema artefact) |
-| `scripts/rls-audit.ts` | CI invariant: every RLS policy routes through `auth.uid()` |
+| Owner (folder)                        | Responsibility                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/integrations/clerk/`             | Clerk-only code (provider boundary, forms, provisioning, token issuance, ensure-mapping fn) |
+| `src/integrations/supabase/`          | All Supabase clients + the auth middleware/attacher (which both now branch on the flag)     |
+| `src/lib/`                            | App-wide auth context, feature flags, server fns for portal routing & roles                 |
+| `src/routes/__root.tsx`               | Provider tree composition; CSP; mounting `useEnsureUserMapped`                              |
+| `src/routes/auth.tsx`                 | Sign-in/up UX and flag-aware form dispatching                                               |
+| `src/routes/_authenticated/route.tsx` | Path-level guard for any `/...` authenticated route                                         |
+| `src/hooks/`                          | React hooks adapting auth + role state to consumer components                               |
+| `supabase/migrations/`                | Schema (the `clerk_user_map` table is the only Clerk-related schema artefact)               |
+| `scripts/rls-audit.ts`                | CI invariant: every RLS policy routes through `auth.uid()`                                  |
 
 ---
 
@@ -471,190 +470,190 @@ Every Clerk-related file in the repository, with its purpose, status, dependenci
 
 ### `src/integrations/clerk/client.tsx`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Flag-aware mount point for `<ClerkProvider>`. When flag ON, eagerly mounts ClerkProvider + ClerkTokenBridge. When OFF, renders `<>{children}</>`. |
-| **Status** | Created (Step 6) |
-| **Reason** | Clerk React hooks require the provider in the tree before they can be called. The boundary gates this behind the flag so the Clerk JS bundle is excluded from the client build when the flag is off. |
-| **Dependencies** | `@clerk/tanstack-react-start` (ClerkProvider, useAuth), `@/lib/feature-flags` (FLAGS), `react` (useEffect) |
-| **Imported by** | `src/routes/__root.tsx` |
-| **Exports** | `ClerkProviderBoundary` |
-| **Impact** | Controls the entire Clerk client-side lifecycle. Eager (not lazy) mounting avoids the `useClerkSignal can only be used within <ClerkProvider />` SSR crash that occurred when the provider was lazy-loaded. |
+| Field            | Value                                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Flag-aware mount point for `<ClerkProvider>`. When flag ON, eagerly mounts ClerkProvider + ClerkTokenBridge. When OFF, renders `<>{children}</>`.                                                           |
+| **Status**       | Created (Step 6)                                                                                                                                                                                            |
+| **Reason**       | Clerk React hooks require the provider in the tree before they can be called. The boundary gates this behind the flag so the Clerk JS bundle is excluded from the client build when the flag is off.        |
+| **Dependencies** | `@clerk/tanstack-react-start` (ClerkProvider, useAuth), `@/lib/feature-flags` (FLAGS), `react` (useEffect)                                                                                                  |
+| **Imported by**  | `src/routes/__root.tsx`                                                                                                                                                                                     |
+| **Exports**      | `ClerkProviderBoundary`                                                                                                                                                                                     |
+| **Impact**       | Controls the entire Clerk client-side lifecycle. Eager (not lazy) mounting avoids the `useClerkSignal can only be used within <ClerkProvider />` SSR crash that occurred when the provider was lazy-loaded. |
 
 ### `src/integrations/clerk/forms.tsx`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Clerk-backed auth form components (sign-in, sign-up, social OAuth). Lazy-loaded from auth.tsx only when flag is on. |
-| **Status** | Created (Step 10) |
-| **Reason** | Clerk hooks (useSignIn, useSignUp, useClerk) can only be called inside `<ClerkProvider>`. This file is the only place that invokes those hooks, and it's dynamically imported so it stays out of the flag-off bundle. |
-| **Dependencies** | `@clerk/tanstack-react-start` (useSignIn, useSignUp), `@clerk/types` (OAuthStrategy), `@tanstack/react-router` (useNavigate), `sonner` (toast), `@/lib/portal.functions` (resolveMyPortal), shadcn ui primitives |
-| **Imported by** | `src/routes/auth.tsx` (lazy import via `@/integrations/clerk/forms`) |
-| **Exports** | `ClerkForms` |
-| **Impact** | Replaces all Supabase auth form handlers with Clerk equivalents. Visual UI is identical to the legacy forms — only the action handlers differ (signIn.create vs supabase.auth.signInWithPassword). |
+| Field            | Value                                                                                                                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Clerk-backed auth form components (sign-in, sign-up, social OAuth). Lazy-loaded from auth.tsx only when flag is on.                                                                                                   |
+| **Status**       | Created (Step 10)                                                                                                                                                                                                     |
+| **Reason**       | Clerk hooks (useSignIn, useSignUp, useClerk) can only be called inside `<ClerkProvider>`. This file is the only place that invokes those hooks, and it's dynamically imported so it stays out of the flag-off bundle. |
+| **Dependencies** | `@clerk/tanstack-react-start` (useSignIn, useSignUp), `@clerk/types` (OAuthStrategy), `@tanstack/react-router` (useNavigate), `sonner` (toast), `@/lib/portal.functions` (resolveMyPortal), shadcn ui primitives      |
+| **Imported by**  | `src/routes/auth.tsx` (lazy import via `@/integrations/clerk/forms`)                                                                                                                                                  |
+| **Exports**      | `ClerkForms`                                                                                                                                                                                                          |
+| **Impact**       | Replaces all Supabase auth form handlers with Clerk equivalents. Visual UI is identical to the legacy forms — only the action handlers differ (signIn.create vs supabase.auth.signInWithPassword).                    |
 
 ### `src/integrations/clerk/provision.server.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Clerk→Supabase identity provisioning. Maintains the `clerk_user_map` sidecar. Server-only. |
-| **Status** | Created (Step 2) |
-| **Reason** | Maps opaque Clerk user IDs (strings like `user_2vX1A…`) to canonical Supabase `auth.users.id` UUIDs so RLS policies that evaluate `auth.uid()` continue to fire correctly. |
-| **Dependencies** | `@supabase/supabase-js` (SupabaseClient type), `@/integrations/supabase/types` (Database), `@/integrations/supabase/client.server` (supabaseAdmin, imported by callers) |
-| **Imported by** | `src/integrations/supabase/auth-middleware.ts` (clerkAuthBranch), `src/integrations/clerk/ensure-mapping.server.ts`, `src/integrations/clerk/__tests__/provision.server.test.ts` |
-| **Exports** | `provisionClerkUser`, `lookupClerkIdByAuthUserId`, types: `ClerkIdentity`, `ProvisionResult`, `ProvisionError` |
-| **Impact** | Idempotent provisioning in 4 stages: (1) direct lookup by clerk_user_id, (2) lookup by verified email, (3) create auth.users row if needed, (4) insert mapping. Handles unique-violation races. The only module that writes to `clerk_user_map` (via service-role admin client). |
+| Field            | Value                                                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Clerk→Supabase identity provisioning. Maintains the `clerk_user_map` sidecar. Server-only.                                                                                                                                                                                       |
+| **Status**       | Created (Step 2)                                                                                                                                                                                                                                                                 |
+| **Reason**       | Maps opaque Clerk user IDs (strings like `user_2vX1A…`) to canonical Supabase `auth.users.id` UUIDs so RLS policies that evaluate `auth.uid()` continue to fire correctly.                                                                                                       |
+| **Dependencies** | `@supabase/supabase-js` (SupabaseClient type), `@/integrations/supabase/types` (Database), `@/integrations/supabase/client.server` (supabaseAdmin, imported by callers)                                                                                                          |
+| **Imported by**  | `src/integrations/supabase/auth-middleware.ts` (clerkAuthBranch), `src/integrations/clerk/ensure-mapping.server.ts`, `src/integrations/clerk/__tests__/provision.server.test.ts`                                                                                                 |
+| **Exports**      | `provisionClerkUser`, `lookupClerkIdByAuthUserId`, types: `ClerkIdentity`, `ProvisionResult`, `ProvisionError`                                                                                                                                                                   |
+| **Impact**       | Idempotent provisioning in 4 stages: (1) direct lookup by clerk_user_id, (2) lookup by verified email, (3) create auth.users row if needed, (4) insert mapping. Handles unique-violation races. The only module that writes to `clerk_user_map` (via service-role admin client). |
 
 ### `src/integrations/clerk/issue-token.server.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Per-request Supabase session token issuer. Takes a Clerk-verified identity + mapped auth.users.id and returns a GoTrue-issued access token (signed JWT) whose `sub` matches that UUID. |
-| **Status** | Created (Step 3) |
-| **Reason** | RLS policies evaluate `auth.uid()` which reads the JWT `sub`. The Clerk Session JWT's `sub` is an opaque Clerk user id, not a Supabase UUID. We need a GoTrue JWT with the mapped UUID as `sub` so RLS fires correctly. |
-| **Dependencies** | `@supabase/supabase-js` (SupabaseClient), `@/integrations/supabase/types` (Database) |
-| **Imported by** | `src/integrations/supabase/auth-middleware.ts` (clerkAuthBranch), `src/integrations/clerk/__tests__/issue-token.server.test.ts` |
-| **Exports** | `issueSupabaseTokenForAuthUser`, `invalidateSupabaseToken`, types: `IssuedToken`, `IssueError` |
-| **Impact** | In-memory cache per auth_user_id (~5 min TTL, 60s minimum remaining). Uses `generateLink(magiclink)` + `verifyOtp(email)` exchange — no hand-rolled JWT signing. `invalidateSupabaseToken` clears cache on sign-out to avoid serving stale tokens. |
+| Field            | Value                                                                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Per-request Supabase session token issuer. Takes a Clerk-verified identity + mapped auth.users.id and returns a GoTrue-issued access token (signed JWT) whose `sub` matches that UUID.                                                             |
+| **Status**       | Created (Step 3)                                                                                                                                                                                                                                   |
+| **Reason**       | RLS policies evaluate `auth.uid()` which reads the JWT `sub`. The Clerk Session JWT's `sub` is an opaque Clerk user id, not a Supabase UUID. We need a GoTrue JWT with the mapped UUID as `sub` so RLS fires correctly.                            |
+| **Dependencies** | `@supabase/supabase-js` (SupabaseClient), `@/integrations/supabase/types` (Database)                                                                                                                                                               |
+| **Imported by**  | `src/integrations/supabase/auth-middleware.ts` (clerkAuthBranch), `src/integrations/clerk/__tests__/issue-token.server.test.ts`                                                                                                                    |
+| **Exports**      | `issueSupabaseTokenForAuthUser`, `invalidateSupabaseToken`, types: `IssuedToken`, `IssueError`                                                                                                                                                     |
+| **Impact**       | In-memory cache per auth_user_id (~5 min TTL, 60s minimum remaining). Uses `generateLink(magiclink)` + `verifyOtp(email)` exchange — no hand-rolled JWT signing. `invalidateSupabaseToken` clears cache on sign-out to avoid serving stale tokens. |
 
 ### `src/integrations/clerk/ensure-mapping.server.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | First-login provisioning server fn. Client-callable wrapper around `provisionClerkUser` using `requireSupabaseAuth` middleware. |
-| **Status** | Created (Step 11) |
-| **Reason** | The Clerk branch of `requireSupabaseAuth` provisions on every server-fn invocation, but the client tree didn't have a way to ensure the mapping was created before first page data read. This fn is explicitly invoked by the `useEnsureUserMapped` hook. |
-| **Dependencies** | `@tanstack/react-start` (createServerFn), `@/integrations/clerk/provision.server`, `@/integrations/supabase/auth-middleware` (requireSupabaseAuth), `@/integrations/supabase/client.server` (supabaseAdmin, dynamic) |
-| **Imported by** | `src/hooks/use-ensure-user-mapped.ts` |
-| **Exports** | `ensureClerkMapping`, type `EnsureMappingResult` |
-| **Impact** | Idempotent: re-running on an already-mapped user returns `reused=true`. Fire-and-forget — errors are logged but never block rendering. |
+| Field            | Value                                                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | First-login provisioning server fn. Client-callable wrapper around `provisionClerkUser` using `requireSupabaseAuth` middleware.                                                                                                                           |
+| **Status**       | Created (Step 11)                                                                                                                                                                                                                                         |
+| **Reason**       | The Clerk branch of `requireSupabaseAuth` provisions on every server-fn invocation, but the client tree didn't have a way to ensure the mapping was created before first page data read. This fn is explicitly invoked by the `useEnsureUserMapped` hook. |
+| **Dependencies** | `@tanstack/react-start` (createServerFn), `@/integrations/clerk/provision.server`, `@/integrations/supabase/auth-middleware` (requireSupabaseAuth), `@/integrations/supabase/client.server` (supabaseAdmin, dynamic)                                      |
+| **Imported by**  | `src/hooks/use-ensure-user-mapped.ts`                                                                                                                                                                                                                     |
+| **Exports**      | `ensureClerkMapping`, type `EnsureMappingResult`                                                                                                                                                                                                          |
+| **Impact**       | Idempotent: re-running on an already-mapped user returns `reused=true`. Fire-and-forget — errors are logged but never block rendering.                                                                                                                    |
 
 ### `src/hooks/use-ensure-user-mapped.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Client-side hook mounted in `__root.tsx` that ensures a Clerk user's `clerk_user_map` row exists before any authenticated route touches the database. |
-| **Status** | Created (Step 11) |
-| **Reason** | Most flows are self-provisioning via `requireSupabaseAuth`, but first page mount after Clerk session initialization may read data before any server fn fires. This hook is the fallback. |
-| **Dependencies** | `react` (useEffect, useRef, useState), `@/lib/auth` (useAuth), `@/lib/feature-flags` (FLAGS), `@/integrations/clerk/ensure-mapping.server` (ensureClerkMapping) |
-| **Imported by** | `src/routes/__root.tsx` (EnsureUserMapped wrapper) |
-| **Exports** | `useEnsureUserMapped` |
-| **Impact** | Throttled to 30s per same-session. No-op when flag is off or user is signed out. Errors surface as console warnings, never block UI. |
+| Field            | Value                                                                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Client-side hook mounted in `__root.tsx` that ensures a Clerk user's `clerk_user_map` row exists before any authenticated route touches the database.                                    |
+| **Status**       | Created (Step 11)                                                                                                                                                                        |
+| **Reason**       | Most flows are self-provisioning via `requireSupabaseAuth`, but first page mount after Clerk session initialization may read data before any server fn fires. This hook is the fallback. |
+| **Dependencies** | `react` (useEffect, useRef, useState), `@/lib/auth` (useAuth), `@/lib/feature-flags` (FLAGS), `@/integrations/clerk/ensure-mapping.server` (ensureClerkMapping)                          |
+| **Imported by**  | `src/routes/__root.tsx` (EnsureUserMapped wrapper)                                                                                                                                       |
+| **Exports**      | `useEnsureUserMapped`                                                                                                                                                                    |
+| **Impact**       | Throttled to 30s per same-session. No-op when flag is off or user is signed out. Errors surface as console warnings, never block UI.                                                     |
 
 ### `scripts/rls-audit.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | CLI static audit: reads every `supabase/migrations/*.sql`, extracts `CREATE POLICY` bodies, verifies each routes through `auth.uid()` (or is an allowed public-read / explicit-deny). |
-| **Status** | Created (Step 13) |
-| **Reason** | CI invariant: a future migration that introduces a Clerk-claim-bypass policy (e.g. `request.jwt.claims->>'sub'`) would break the RLS guarantee. The audit catches this before deploy. |
-| **Dependencies** | `node:fs`, `node:path` |
-| **Imported by** | (CLI tool — not imported by application code) |
-| **Exports** | (none — entry point) |
-| **Impact** | Run via `bun scripts/rls-audit.ts` or as the vitest invariant in `rls-audit.test.ts`. Last verified: 104 policies, 0 flagged. |
+| Field            | Value                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | CLI static audit: reads every `supabase/migrations/*.sql`, extracts `CREATE POLICY` bodies, verifies each routes through `auth.uid()` (or is an allowed public-read / explicit-deny). |
+| **Status**       | Created (Step 13)                                                                                                                                                                     |
+| **Reason**       | CI invariant: a future migration that introduces a Clerk-claim-bypass policy (e.g. `request.jwt.claims->>'sub'`) would break the RLS guarantee. The audit catches this before deploy. |
+| **Dependencies** | `node:fs`, `node:path`                                                                                                                                                                |
+| **Imported by**  | (CLI tool — not imported by application code)                                                                                                                                         |
+| **Exports**      | (none — entry point)                                                                                                                                                                  |
+| **Impact**       | Run via `bun scripts/rls-audit.ts` or as the vitest invariant in `rls-audit.test.ts`. Last verified: 104 policies, 0 flagged.                                                         |
 
 ### `scripts/clerk-test-user.ts`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Provisions a dummy Clerk user for E2E verification using `@clerk/backend`'s `createUser`. |
-| **Status** | Created (Step 14) |
-| **Reason** | After the Clerk migration, manual E2E verification requires at least one real signup. This script provisions the user in one shot via the Backend SDK. |
-| **Dependencies** | `@clerk/backend` (createClerkClient) |
-| **Imported by** | (CLI tool) |
-| **Exports** | (none — entry point) |
-| **Impact** | Development/staging only. Never point at production Clerk. |
+| Field            | Value                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Purpose**      | Provisions a dummy Clerk user for E2E verification using `@clerk/backend`'s `createUser`.                                                              |
+| **Status**       | Created (Step 14)                                                                                                                                      |
+| **Reason**       | After the Clerk migration, manual E2E verification requires at least one real signup. This script provisions the user in one shot via the Backend SDK. |
+| **Dependencies** | `@clerk/backend` (createClerkClient)                                                                                                                   |
+| **Imported by**  | (CLI tool)                                                                                                                                             |
+| **Exports**      | (none — entry point)                                                                                                                                   |
+| **Impact**       | Development/staging only. Never point at production Clerk.                                                                                             |
 
 ### `supabase/migrations/20260724201018_26f2d3a1-…-7a0e6f1c9b25.sql`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Creates `public.clerk_user_map` table, indexes, updated_at trigger, and RLS policies. |
-| **Status** | Created (Step 1) |
-| **Reason** | The sidecar mapping table ties Clerk user IDs to Supabase `auth.users` UUIDs, preserving every existing FK and RLS policy. |
-| **Dependencies** | (None — SQL migration) |
-| **Imported by** | (Applied by Supabase migration runner) |
-| **Exports** | (none) |
-| **Impact** | The ONLY schema change required by the entire Clerk migration. `clerk_user_id TEXT PK`, `auth_user_id UUID UNIQUE FK auth.users(id) ON DELETE CASCADE`, `email TEXT UNIQUE`, `primary_email_verified BOOLEAN`. RLS: `service_role` manages (`USING(TRUE)`), `anon+authenticated` denied (`USING(FALSE) WITH CHECK(FALSE)`). |
+| Field            | Value                                                                                                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Purpose**      | Creates `public.clerk_user_map` table, indexes, updated_at trigger, and RLS policies.                                                                                                                                                                                                                                       |
+| **Status**       | Created (Step 1)                                                                                                                                                                                                                                                                                                            |
+| **Reason**       | The sidecar mapping table ties Clerk user IDs to Supabase `auth.users` UUIDs, preserving every existing FK and RLS policy.                                                                                                                                                                                                  |
+| **Dependencies** | (None — SQL migration)                                                                                                                                                                                                                                                                                                      |
+| **Imported by**  | (Applied by Supabase migration runner)                                                                                                                                                                                                                                                                                      |
+| **Exports**      | (none)                                                                                                                                                                                                                                                                                                                      |
+| **Impact**       | The ONLY schema change required by the entire Clerk migration. `clerk_user_id TEXT PK`, `auth_user_id UUID UNIQUE FK auth.users(id) ON DELETE CASCADE`, `email TEXT UNIQUE`, `primary_email_verified BOOLEAN`. RLS: `service_role` manages (`USING(TRUE)`), `anon+authenticated` denied (`USING(FALSE) WITH CHECK(FALSE)`). |
 
 ## 4.2 Modified files
 
 ### `src/lib/auth.tsx`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added `ClerkAuthProvider` branch + `normalizeClerkUser` + `ClerkConsumer`. Legacy `LegacySupabaseAuthProvider` preserved verbatim. `AuthProvider` now branches on `FLAGS.USE_CLERK_AUTH`. |
-| **Why** | The `useAuth()` hook and `displayName()` helper must work identically across the flag boundary. We normalize Clerk's `User` resource into a Supabase-shaped `User` so every consumer (Header, route guard, role hooks) works without edits. |
-| **Backward compatibility** | Flag-off path is byte-equivalent to pre-migration. The `AuthState` type is unchanged. |
+| Field                      | Value                                                                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added `ClerkAuthProvider` branch + `normalizeClerkUser` + `ClerkConsumer`. Legacy `LegacySupabaseAuthProvider` preserved verbatim. `AuthProvider` now branches on `FLAGS.USE_CLERK_AUTH`.                                                   |
+| **Why**                    | The `useAuth()` hook and `displayName()` helper must work identically across the flag boundary. We normalize Clerk's `User` resource into a Supabase-shaped `User` so every consumer (Header, route guard, role hooks) works without edits. |
+| **Backward compatibility** | Flag-off path is byte-equivalent to pre-migration. The `AuthState` type is unchanged.                                                                                                                                                       |
 
 ### `src/lib/feature-flags.ts`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added `USE_CLERK_AUTH` to `FeatureFlags`, added `readFlag` helper, added `FEATURE_FLAGS` constant (15 capability keys), `FeatureKey` type, `Capabilities` type. |
-| **Why** | Single source of truth for the kill-switch flag. Read at runtime; responds to a flag flip without redeploy. |
-| **Backward compatibility** | Flag defaults to `false` — the migration is non-destructive. |
+| Field                      | Value                                                                                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added `USE_CLERK_AUTH` to `FeatureFlags`, added `readFlag` helper, added `FEATURE_FLAGS` constant (15 capability keys), `FeatureKey` type, `Capabilities` type. |
+| **Why**                    | Single source of truth for the kill-switch flag. Read at runtime; responds to a flag flip without redeploy.                                                     |
+| **Backward compatibility** | Flag defaults to `false` — the migration is non-destructive.                                                                                                    |
 
 ### `src/integrations/supabase/auth-middleware.ts`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added `clerkAuthBranch` alongside the preserved `legacySupabaseAuthBranch`. The `requireSupabaseAuth` middleware now branches on `FLAGS.USE_CLERK_AUTH`. Added `buildUserClient` and `createSupabaseFetch` helpers. |
-| **Why** | The server middleware must accept either a Supabase-issued JWT (legacy) or a Clerk Session JWT (new) and output the same `{ supabase, userId, claims }` context shape for all 28 server-fn consumers. |
-| **Backward compatibility** | Legacy branch is preserved verbatim. The injected context shape is identical across both branches. |
+| Field                      | Value                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added `clerkAuthBranch` alongside the preserved `legacySupabaseAuthBranch`. The `requireSupabaseAuth` middleware now branches on `FLAGS.USE_CLERK_AUTH`. Added `buildUserClient` and `createSupabaseFetch` helpers. |
+| **Why**                    | The server middleware must accept either a Supabase-issued JWT (legacy) or a Clerk Session JWT (new) and output the same `{ supabase, userId, claims }` context shape for all 28 server-fn consumers.               |
+| **Backward compatibility** | Legacy branch is preserved verbatim. The injected context shape is identical across both branches.                                                                                                                  |
 
 ### `src/integrations/supabase/auth-attacher.ts`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added `clerkTokenBranch` alongside the preserved `legacySupabaseAuthBranch`. The `attachSupabaseAuth` client middleware now branches on `FLAGS.USE_CLERK_AUTH`. |
-| **Why** | Client middleware must attach a Bearer token to every server-fn RPC. Under Clerk, the token is a Clerk Session JWT (read from `window.__clerkAuthToken`). |
-| **Backward compatibility** | Legacy branch reads `supabase.auth.getSession()` — unchanged. |
+| Field                      | Value                                                                                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added `clerkTokenBranch` alongside the preserved `legacySupabaseAuthBranch`. The `attachSupabaseAuth` client middleware now branches on `FLAGS.USE_CLERK_AUTH`. |
+| **Why**                    | Client middleware must attach a Bearer token to every server-fn RPC. Under Clerk, the token is a Clerk Session JWT (read from `window.__clerkAuthToken`).       |
+| **Backward compatibility** | Legacy branch reads `supabase.auth.getSession()` — unchanged.                                                                                                   |
 
 ### `src/routes/__root.tsx`
 
-| Field | Value |
-|---|---|
-| **What changed** | Wrapped provider tree in `ClerkProviderBoundary`. Added `EnsureUserMapped` wrapper. Extended CSP to include Clerk domains (`*.clerk.com`, `*.clerk.accounts.dev`, `accounts.clerk.com`) for script-src, style-src, frame-src, connect-src. Added `worker-src 'self' blob:` for Clerk's Web Worker. |
-| **Why** | ClerkProvider must be in the tree before any Clerk hook renders, including during SSR. The boundary gates this behind the flag. `useEnsureUserMapped` ensures the sidecar mapping exists before authenticated routes read data. |
-| **Backward compatibility** | Flag-off: boundary renders `<>{children}</>` — no Clerk JS, no behavior change. CSP additions are inert when Clerk isn't loaded. |
+| Field                      | Value                                                                                                                                                                                                                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Wrapped provider tree in `ClerkProviderBoundary`. Added `EnsureUserMapped` wrapper. Extended CSP to include Clerk domains (`*.clerk.com`, `*.clerk.accounts.dev`, `accounts.clerk.com`) for script-src, style-src, frame-src, connect-src. Added `worker-src 'self' blob:` for Clerk's Web Worker. |
+| **Why**                    | ClerkProvider must be in the tree before any Clerk hook renders, including during SSR. The boundary gates this behind the flag. `useEnsureUserMapped` ensures the sidecar mapping exists before authenticated routes read data.                                                                    |
+| **Backward compatibility** | Flag-off: boundary renders `<>{children}</>` — no Clerk JS, no behavior change. CSP additions are inert when Clerk isn't loaded.                                                                                                                                                                   |
 
 ### `src/routes/auth.tsx`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added flag-aware dispatcher: `CandidateForms` and `EmployeeSignIn` now branch on `FLAGS.USE_CLERK_AUTH`. Clerk forms are lazy-loaded via `ClerkFormsLazy` (suspense). Legacy forms preserved. Social buttons also branch. |
-| **Why** | Clerk hooks can only run inside `<ClerkProvider>`. Lazy-loading keeps the Clerk React SDK out of the flag-off bundle. |
-| **Backward compatibility** | Flag-off: legacy forms render, byte-equivalent to pre-migration. |
+| Field                      | Value                                                                                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added flag-aware dispatcher: `CandidateForms` and `EmployeeSignIn` now branch on `FLAGS.USE_CLERK_AUTH`. Clerk forms are lazy-loaded via `ClerkFormsLazy` (suspense). Legacy forms preserved. Social buttons also branch. |
+| **Why**                    | Clerk hooks can only run inside `<ClerkProvider>`. Lazy-loading keeps the Clerk React SDK out of the flag-off bundle.                                                                                                     |
+| **Backward compatibility** | Flag-off: legacy forms render, byte-equivalent to pre-migration.                                                                                                                                                          |
 
 ### `src/routes/_authenticated/route.tsx`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added Clerk branch to `beforeLoad`: reads `window.__clerkAuthToken` (published by ClerkTokenBridge). If undefined/empty → redirect to `/auth`. Legacy branch preserved. |
-| **Why** | The auth guard must know whether the user is signed in. Under Clerk, the session state is published via `window.__clerkAuthToken`. |
-| **Backward compatibility** | Flag-off: calls `supabase.auth.getUser()` — unchanged. |
+| Field                      | Value                                                                                                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added Clerk branch to `beforeLoad`: reads `window.__clerkAuthToken` (published by ClerkTokenBridge). If undefined/empty → redirect to `/auth`. Legacy branch preserved. |
+| **Why**                    | The auth guard must know whether the user is signed in. Under Clerk, the session state is published via `window.__clerkAuthToken`.                                      |
+| **Backward compatibility** | Flag-off: calls `supabase.auth.getUser()` — unchanged.                                                                                                                  |
 
 ### `src/hooks/use-my-roles.tsx`, `use-is-admin.tsx`, `use-is-employee.tsx`
 
-| Field | Value |
-|---|---|
-| **What changed** | Each hook now branches on `FLAGS.USE_CLERK_AUTH`. Flag-on: defers to `getMyRoles()` server fn. Flag-off: direct Supabase query (preserved). |
-| **Why** | Under Clerk, the browser Supabase client's session is not an RLS-enabling session. Role queries must go through the server fn (which uses the per-user client with the GoTrue JWT). |
-| **Backward compatibility** | Flag-off: direct Supabase query — unchanged. |
+| Field                      | Value                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Each hook now branches on `FLAGS.USE_CLERK_AUTH`. Flag-on: defers to `getMyRoles()` server fn. Flag-off: direct Supabase query (preserved).                                         |
+| **Why**                    | Under Clerk, the browser Supabase client's session is not an RLS-enabling session. Role queries must go through the server fn (which uses the per-user client with the GoTrue JWT). |
+| **Backward compatibility** | Flag-off: direct Supabase query — unchanged.                                                                                                                                        |
 
 ### `package.json`
 
-| Field | Value |
-|---|---|
-| **What changed** | Added `@clerk/clerk-react`, `@clerk/tanstack-react-start` (renamed from `@clerk/tanstack-start`), `@clerk/backend` (devDep, used by scripts/), `@configcat/sdk`, `configcat-react`. |
-| **Why** | Clerk SDK packages for the client boundary, forms, and server-side verification. ConfigCat installed for future feature flag integration. |
-| **Backward compatibility** | All new packages — no existing packages removed (except `@lovable.dev/cloud-auth-js` which was the Lovable OAuth helper, deleted in Step 12). |
+| Field                      | Value                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What changed**           | Added `@clerk/clerk-react`, `@clerk/tanstack-react-start` (renamed from `@clerk/tanstack-start`), `@clerk/backend` (devDep, used by scripts/), `@configcat/sdk`, `configcat-react`. |
+| **Why**                    | Clerk SDK packages for the client boundary, forms, and server-side verification. ConfigCat installed for future feature flag integration.                                           |
+| **Backward compatibility** | All new packages — no existing packages removed (except `@lovable.dev/cloud-auth-js` which was the Lovable OAuth helper, deleted in Step 12).                                       |
 
 ## 4.3 Deleted files
 
-| File | Reason | Replacement |
-|------|--------|-------------|
+| File                                | Reason                                                                             | Replacement                                         |
+| ----------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------- |
 | `src/integrations/lovable/index.ts` | Lovable OAuth helper — no longer needed after Clerk migration. Step 12 removed it. | Clerk's `useSignIn().sso()` handles OAuth directly. |
 
 ---
@@ -667,53 +666,58 @@ Every Clerk-related file in the repository, with its purpose, status, dependenci
 
 **Chosen**: `public.clerk_user_map` ties Clerk user IDs to existing `auth.users` UUIDs.
 **Alternatives considered**:
+
 - Replace `auth.users` with a Clerk-managed users table — would require rewriting every FK, every RLS policy, every stored procedure, every trigger. Estimated 200+ file changes.
 - Use Clerk JWT claims directly in RLS (`request.jwt.claims->>'sub'`) — would require Supabase custom JWT signing + breaking the standard `auth.uid()` contract.
-**Trade-offs**: The sidecar adds one table and one provisioning round-trip per session, but preserves the entire existing authorization architecture unchanged. Zero RLS rewrites. Zero FK changes. Zero stored procedure changes.
-**Future scalability**: If we migrate from Supabase to Neon, the sidecar table moves with the rest of the schema; the provisioning logic only needs to change its `createUser` target.
+  **Trade-offs**: The sidecar adds one table and one provisioning round-trip per session, but preserves the entire existing authorization architecture unchanged. Zero RLS rewrites. Zero FK changes. Zero stored procedure changes.
+  **Future scalability**: If we migrate from Supabase to Neon, the sidecar table moves with the rest of the schema; the provisioning logic only needs to change its `createUser` target.
 
 ### Decision: GoTrue JWT issuance via generateLink + verifyOtp
 
 **Chosen**: `supabaseAdmin.auth.admin.generateLink({ type: 'magiclink', email })` → `supabaseAnon.auth.verifyOtp({ email, token: hashedToken, type: 'email' })` → return `session.access_token`.
 **Alternatives considered**:
+
 - Hand-sign a JWT with the Supabase JWT secret (HS256) — requires保管ing the secret server-side, inventing valid claims, and risk of `[email protected]` mismatch.
 - Use Supabase's `auth.admin.generateLink` with `email_otp` type — similar exchange but different API shape.
-**Trade-offs**: Two API calls (generateLink + verifyOtp) instead of one, but uses Supabase's own documented issuance API — no hand-rolled JWT signing, no shared secrets, the JWT's `sub` is guaranteed to match the `auth.users.id` we provisioned.
-**Future scalability**: Token cache (5-min TTL) avoids the round-trip on every server-fn invocation. `invalidateSupabaseToken` clears cache on sign-out.
+  **Trade-offs**: Two API calls (generateLink + verifyOtp) instead of one, but uses Supabase's own documented issuance API — no hand-rolled JWT signing, no shared secrets, the JWT's `sub` is guaranteed to match the `auth.users.id` we provisioned.
+  **Future scalability**: Token cache (5-min TTL) avoids the round-trip on every server-fn invocation. `invalidateSupabaseToken` clears cache on sign-out.
 
 ### Decision: Eager ClerkProvider (not lazy)
 
 **Chosen**: `ClerkProviderBoundary` renders `<ClerkProvider>` eagerly (synchronous import) when flag is on.
 **Alternatives considered**:
+
 - Lazy-load `<ClerkProvider>` — failed: `useClerkSignal can only be used within <ClerkProvider />` crash during SSR because Clerk forms (also lazy) could render before the provider resolved.
-**Trade-offs**: The Clerk bundle is included in the flag-on production build (correct — flag-on means Clerk is active). Flag-off builds still exclude it because the boundary returns `<>{children}</>` without importing.
-**Future scalability**: No issue. The eager import is gated by the runtime flag check.
+  **Trade-offs**: The Clerk bundle is included in the flag-on production build (correct — flag-on means Clerk is active). Flag-off builds still exclude it because the boundary returns `<>{children}</>` without importing.
+  **Future scalability**: No issue. The eager import is gated by the runtime flag check.
 
 ### Decision: window-stored token bridge instead of hook-in-middleware
 
 **Chosen**: `ClerkTokenBridge` component calls `useAuth().getToken()` and publishes to `window.__clerkAuthToken`. The client middleware (`auth-attacher.ts`) reads from window.
 **Alternatives considered**:
+
 - Call Clerk hooks from the client middleware — impossible: TanStack Start `functionMiddleware` callbacks are not React components and cannot call hooks.
 - Use a Zustand/Context store instead of window — adds a dependency for a single string value.
-**Trade-offs**: `window.__clerkAuthToken` is a global; we guard it with a `declare global` block. Undefined = bridge hasn't mounted; empty string = signed out; non-empty = active JWT. This three-state sentinel distinguishes "not mounted" from "signed out" during first render.
-**Future scalability**: Clean, simple, no extra dependencies. The bridge publishes on every Clerk auth state change.
+  **Trade-offs**: `window.__clerkAuthToken` is a global; we guard it with a `declare global` block. Undefined = bridge hasn't mounted; empty string = signed out; non-empty = active JWT. This three-state sentinel distinguishes "not mounted" from "signed out" during first render.
+  **Future scalability**: Clean, simple, no extra dependencies. The bridge publishes on every Clerk auth state change.
 
 ### Decision: normalizeClerkUser into Supabase-shaped User
 
 **Chosen**: Synthesize a `User` object (Supabase shape) from Clerk's `User` resource, rather than extending the `AuthState` type.
 **Alternatives considered**:
+
 - Extend `AuthState` to carry a Clerk `User` — would force every consumer to edit because they destructure `user.email` and `user.user_metadata`.
-**Trade-offs**: We `as unknown as User` cast at the return boundary — a controlled type lie that's contained within one module. Every consumer reads `user.email`, `user.user_metadata.full_name` — both populated correctly.
-**Future scalability**: When the flag is permanently removed (legacy path deleted), this normalization can be simplified to return the Clerk User directly with a clean type.
+  **Trade-offs**: We `as unknown as User` cast at the return boundary — a controlled type lie that's contained within one module. Every consumer reads `user.email`, `user.user_metadata.full_name` — both populated correctly.
+  **Future scalability**: When the flag is permanently removed (legacy path deleted), this normalization can be simplified to return the Clerk User directly with a clean type.
 
 ## 5.2 The two-token system explained
 
 Under the Clerk branch, **two distinct JWTs** are in play, and they must not be confused:
 
-| Token | Issued by | `sub` | Lifetime | Where used |
-|-------|----------|-------|----------|------------|
-| Clerk Session JWT | Clerk frontend | Clerk user id (`user_2vX1A…`) | ~60s (refreshed automatically) | Browser → server-fn Bearer |
-| GoTrue JWT | Supabase GoTrue/Auth | mapped `auth.users.id` (UUID) | ~1h (cached 5 min) | Server → Supabase PostgREST Bearer |
+| Token             | Issued by            | `sub`                         | Lifetime                       | Where used                         |
+| ----------------- | -------------------- | ----------------------------- | ------------------------------ | ---------------------------------- |
+| Clerk Session JWT | Clerk frontend       | Clerk user id (`user_2vX1A…`) | ~60s (refreshed automatically) | Browser → server-fn Bearer         |
+| GoTrue JWT        | Supabase GoTrue/Auth | mapped `auth.users.id` (UUID) | ~1h (cached 5 min)             | Server → Supabase PostgREST Bearer |
 
 The Clerk Session JWT **never** touches Supabase directly. The server middleware exchanges it for a GoTrue JWT via the provisioning + issuance flow. Only the GoTrue JWT is sent to Supabase as the Bearer for RLS evaluation.
 
@@ -744,13 +748,13 @@ The Clerk Session JWT **never** touches Supabase directly. The server middleware
 
 The Content Security Policy in `__root.tsx` was extended to allow Clerk domains:
 
-| Directive | Added sources | Why |
-|-----------|---------------|-----|
-| `script-src` | `https://*.clerk.com https://*.clerk.accounts.dev` | Clerk's browser SDK loads scripts from these origins |
-| `style-src` | `https://*.clerk.com https://*.clerk.accounts.dev` | Clerk injects styles for hosted UI components |
-| `frame-src` | `https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com` | Clerk may render iframe-based UI (e.g. social OAuth redirects) |
-| `connect-src` | `https://*.clerk.com https://*.clerk.accounts.dev` | Clerk SDK makes fetch calls to these origins for session management |
-| `worker-src` | `'self' blob:` | Clerk's browser.js spins up a Web Worker from a blob URL in dev mode |
+| Directive     | Added sources                                                                 | Why                                                                  |
+| ------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `script-src`  | `https://*.clerk.com https://*.clerk.accounts.dev`                            | Clerk's browser SDK loads scripts from these origins                 |
+| `style-src`   | `https://*.clerk.com https://*.clerk.accounts.dev`                            | Clerk injects styles for hosted UI components                        |
+| `frame-src`   | `https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com` | Clerk may render iframe-based UI (e.g. social OAuth redirects)       |
+| `connect-src` | `https://*.clerk.com https://*.clerk.accounts.dev`                            | Clerk SDK makes fetch calls to these origins for session management  |
+| `worker-src`  | `'self' blob:`                                                                | Clerk's browser.js spins up a Web Worker from a blob URL in dev mode |
 
 All additions are inert when the flag is off — the browser never loads Clerk resources.
 
@@ -760,34 +764,36 @@ All additions are inert when the flag is off — the browser never loads Clerk r
 
 ## 6.1 Authentication impact
 
-| Concern | Status | Notes |
-|---------|--------|-------|
-| Token verification | ✅ Secured | Clerk `verifyToken` with `CLERK_SECRET_KEY` — networkless if key is set, otherwise JWKS |
-| Session expiry | ✅ Secured | Clerk Session JWTs expire ~60s; `ClerkTokenBridge` republishes on every auth state change |
-| Sign-out token invalidation | ✅ Best-effort | `invalidateSupabaseToken(authUserId)` clears the GoTrue JWT cache on sign-out |
-| MFA | ✅ Supported | Clerk-native MFA; `signIn.status === "needs_second_factor"` surfaced to user |
-| OAuth | ✅ Supported | Google/Apple/GitHub via Clerk's `signIn.sso()` + `authenticateWithRedirect` |
+| Concern                     | Status         | Notes                                                                                     |
+| --------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Token verification          | ✅ Secured     | Clerk `verifyToken` with `CLERK_SECRET_KEY` — networkless if key is set, otherwise JWKS   |
+| Session expiry              | ✅ Secured     | Clerk Session JWTs expire ~60s; `ClerkTokenBridge` republishes on every auth state change |
+| Sign-out token invalidation | ✅ Best-effort | `invalidateSupabaseToken(authUserId)` clears the GoTrue JWT cache on sign-out             |
+| MFA                         | ✅ Supported   | Clerk-native MFA; `signIn.status === "needs_second_factor"` surfaced to user              |
+| OAuth                       | ✅ Supported   | Google/Apple/GitHub via Clerk's `signIn.sso()` + `authenticateWithRedirect`               |
 
 ## 6.2 Authorization impact
 
-| Concern | Status | Notes |
-|---------|--------|-------|
+| Concern         | Status       | Notes                                                                                    |
+| --------------- | ------------ | ---------------------------------------------------------------------------------------- |
 | RLS enforcement | ✅ Unchanged | `auth.uid()` evaluates to the mapped `auth.users.id` — all 104 policies fire identically |
-| Role hierarchy | ✅ Unchanged | `admin > hr > manager > employee > user` enforced by same `user_roles` + `has_role()` |
-| Track isolation | ✅ Unchanged | `hr_track` applications invisible to HR — enforced in DB + `hr.functions.ts` |
-| HR ≠ Admin | ✅ Unchanged | `prevent_hr_admin_role_change` trigger blocks HR privilege escalation |
+| Role hierarchy  | ✅ Unchanged | `admin > hr > manager > employee > user` enforced by same `user_roles` + `has_role()`    |
+| Track isolation | ✅ Unchanged | `hr_track` applications invisible to HR — enforced in DB + `hr.functions.ts`             |
+| HR ≠ Admin      | ✅ Unchanged | `prevent_hr_admin_role_change` trigger blocks HR privilege escalation                    |
 
 ## 6.3 RLS audit (automated, CI-enforced)
 
 The `rls-audit.ts` script and `rls-audit.test.ts` vitest invariant verify that **no** CREATE POLICY body references Clerk JWT claims directly. All policies must route through `auth.uid()`. Last verified: **104 policies, 0 flagged**.
 
 ### Disallowed patterns (flagged as "review"):
+
 - `request.jwt.claims`
 - `coalesce(..., 'anon')`
 - `clerk.sub`
 - `clerk_user_id` (in policy bodies, not in general SQL)
 
 ### Allowed patterns:
+
 - `auth.uid()` (direct)
 - `public.has_role(auth.uid(), ...)` (role helper)
 - `storage.foldername(name)[1] = auth.uid()::text` (storage RLS)
@@ -797,43 +803,43 @@ The `rls-audit.ts` script and `rls-audit.test.ts` vitest invariant verify that *
 
 ## 6.4 Secrets handling
 
-| Secret | Location | Exposure |
-|--------|----------|----------|
-| `CLERK_SECRET_KEY` | Server-only (process.env) | Never in client bundle, never prefixed with `VITE_` |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Client bundle (safe to ship) | Embedded in JS — this is by design |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only (lazy proxy in `client.server.ts`) | Never in client bundle |
-| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Both client and server | Safe to ship (publishable key) |
+| Secret                                      | Location                                       | Exposure                                            |
+| ------------------------------------------- | ---------------------------------------------- | --------------------------------------------------- |
+| `CLERK_SECRET_KEY`                          | Server-only (process.env)                      | Never in client bundle, never prefixed with `VITE_` |
+| `VITE_CLERK_PUBLISHABLE_KEY`                | Client bundle (safe to ship)                   | Embedded in JS — this is by design                  |
+| `SUPABASE_SERVICE_ROLE_KEY`                 | Server-only (lazy proxy in `client.server.ts`) | Never in client bundle                              |
+| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Both client and server                         | Safe to ship (publishable key)                      |
 
 ## 6.5 Attack surface analysis
 
 ### Replay attacks
 
-| Vector | Risk | Mitigation |
-|--------|------|------------|
-| Stolen Clerk Session JWT replayed | Low — 60s TTL | JWT expires quickly; Clerk rotates signing keys |
-| Stolen GoTrue JWT replayed | Low — 1h TTL, cached 5 min | Short-lived; cache invalidation on sign-out; `hmac`-verified by GoTrue |
-| Cached GoTrue JWT after sign-out | Low | `invalidateSupabaseToken` clears cache; but a stolen token is still valid at Supabase until expiry (1h max) |
+| Vector                            | Risk                       | Mitigation                                                                                                  |
+| --------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Stolen Clerk Session JWT replayed | Low — 60s TTL              | JWT expires quickly; Clerk rotates signing keys                                                             |
+| Stolen GoTrue JWT replayed        | Low — 1h TTL, cached 5 min | Short-lived; cache invalidation on sign-out; `hmac`-verified by GoTrue                                      |
+| Cached GoTrue JWT after sign-out  | Low                        | `invalidateSupabaseToken` clears cache; but a stolen token is still valid at Supabase until expiry (1h max) |
 
 ### CSRF
 
-| Vector | Risk | Mitigation |
-|--------|------|------------|
-| Server-fn CSRF | Low | TanStack Start server fns use POST with JSON body, not cookie-based auth. Bearer token is in `Authorization` header, not auto-attached by browser. |
-| Clerk-hosted form CSRF | Low | Clerk manages its own CSRF tokens for hosted UI |
+| Vector                 | Risk | Mitigation                                                                                                                                         |
+| ---------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Server-fn CSRF         | Low  | TanStack Start server fns use POST with JSON body, not cookie-based auth. Bearer token is in `Authorization` header, not auto-attached by browser. |
+| Clerk-hosted form CSRF | Low  | Clerk manages its own CSRF tokens for hosted UI                                                                                                    |
 
 ### XSS
 
-| Vector | Risk | Mitigation |
-|--------|------|------------|
-| Clerk script injection | Low | CSP restricts script-src to `*.clerk.com` / `*.clerk.accounts.dev` + `self` |
-| Stored XSS in user_metadata | Low | `normalizeClerkUser` only reads `firstName` / `lastName` / `emailAddresses` — all from Clerk's verified user object, not user-editable free-text |
+| Vector                      | Risk | Mitigation                                                                                                                                       |
+| --------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Clerk script injection      | Low  | CSP restricts script-src to `*.clerk.com` / `*.clerk.accounts.dev` + `self`                                                                      |
+| Stored XSS in user_metadata | Low  | `normalizeClerkUser` only reads `firstName` / `lastName` / `emailAddresses` — all from Clerk's verified user object, not user-editable free-text |
 
 ### SSR security
 
-| Vector | Risk | Mitigation |
-|--------|------|------------|
-| ClerkProvider missing during SSR | Fixed | Eager mounting (not lazy) — the `useClerkSignal` crash was resolved by Step 6's fix |
-| `window` reference during SSR | Safe | All `window.__clerkAuthToken` reads are guarded by `typeof window !== "undefined"` |
+| Vector                                  | Risk  | Mitigation                                                                                                      |
+| --------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
+| ClerkProvider missing during SSR        | Fixed | Eager mounting (not lazy) — the `useClerkSignal` crash was resolved by Step 6's fix                             |
+| `window` reference during SSR           | Safe  | All `window.__clerkAuthToken` reads are guarded by `typeof window !== "undefined"`                              |
 | `useState(null)` destructure during SSR | Fixed | `ClerkConsumer` guards against null results; the `impls` state holds a typed null until dynamic import resolves |
 
 ## 6.6 Identified weaknesses
@@ -848,13 +854,13 @@ The `rls-audit.ts` script and `rls-audit.test.ts` vitest invariant verify that *
 
 ## 6.7 Production recommendations
 
-| Priority | Recommendation | Complexity |
-|----------|----------------|------------|
-| P1 | Register Clerk webhook for `user.created`, `user.updated`, `user.deleted` to keep `clerk_user_map.email` in sync | Low |
-| P1 | Verify Clerk Dashboard has production domain in Allowed Origins | Low |
-| P2 | Consider shared token cache (Cloudflare KV) for multi-isolate workers | Medium |
-| P2 | Add structured logging for `[clerk]`-prefixed events (provisioning, token issuance) | Low |
-| P3 | Remove legacy auth branches once cutover is confirmed stable (currently behind flag) | Low — delete dead code |
+| Priority | Recommendation                                                                                                   | Complexity             |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| P1       | Register Clerk webhook for `user.created`, `user.updated`, `user.deleted` to keep `clerk_user_map.email` in sync | Low                    |
+| P1       | Verify Clerk Dashboard has production domain in Allowed Origins                                                  | Low                    |
+| P2       | Consider shared token cache (Cloudflare KV) for multi-isolate workers                                            | Medium                 |
+| P2       | Add structured logging for `[clerk]`-prefixed events (provisioning, token issuance)                              | Low                    |
+| P3       | Remove legacy auth branches once cutover is confirmed stable (currently behind flag)                             | Low — delete dead code |
 
 ---
 
@@ -880,11 +886,11 @@ The `rls-audit.ts` script and `rls-audit.test.ts` vitest invariant verify that *
 
 ### Caveats (not blockers)
 
-| Item | Risk | Resolution |
-|------|------|------------|
-| No Clerk webhook for email sync | Stale `clerk_user_map.email` if user changes email in Clerk UI | Register webhook (P1) |
-| In-memory token cache per isolate | Redundant `generateLink` calls on cold starts | Add shared cache (P2) |
-| Legacy branches still in codebase | Dead code on flag-on (3.3 MB of auth code unused) | Delete after cutover confirmed (P3) |
+| Item                              | Risk                                                           | Resolution                          |
+| --------------------------------- | -------------------------------------------------------------- | ----------------------------------- |
+| No Clerk webhook for email sync   | Stale `clerk_user_map.email` if user changes email in Clerk UI | Register webhook (P1)               |
+| In-memory token cache per isolate | Redundant `generateLink` calls on cold starts                  | Add shared cache (P2)               |
+| Legacy branches still in codebase | Dead code on flag-on (3.3 MB of auth code unused)              | Delete after cutover confirmed (P3) |
 
 ---
 
@@ -930,13 +936,13 @@ The `rls-audit.ts` script and `rls-audit.test.ts` vitest invariant verify that *
 
 ## 9.1 Auth latency
 
-| Phase | Flag OFF | Flag ON | Delta |
-|-------|----------|---------|-------|
-| Client → server-fn Bearer attachment | ~1ms (localStorage read) | ~1ms (window var read) | Negligible |
-| Server middleware: token verification | ~5ms (GoTrue JWT verify via `getClaims`) | ~10-20ms (Clerk verifyToken + createClerkClient.getUser) | +5-15ms |
-| Server middleware: provisioning | 0ms (not called) | ~0ms (cache hit after first call) or ~20-50ms (first call: 2 queries) | +0-50ms on first call only |
-| Server middleware: token issuance | 0ms (not called) | ~0ms (cache hit) or ~30-80ms (generateLink + verifyOtp) | +30-80ms on first call only |
-| Per-user Supabase client construction | ~1ms | ~1ms | Negligible |
+| Phase                                 | Flag OFF                                 | Flag ON                                                               | Delta                       |
+| ------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------- | --------------------------- |
+| Client → server-fn Bearer attachment  | ~1ms (localStorage read)                 | ~1ms (window var read)                                                | Negligible                  |
+| Server middleware: token verification | ~5ms (GoTrue JWT verify via `getClaims`) | ~10-20ms (Clerk verifyToken + createClerkClient.getUser)              | +5-15ms                     |
+| Server middleware: provisioning       | 0ms (not called)                         | ~0ms (cache hit after first call) or ~20-50ms (first call: 2 queries) | +0-50ms on first call only  |
+| Server middleware: token issuance     | 0ms (not called)                         | ~0ms (cache hit) or ~30-80ms (generateLink + verifyOtp)               | +30-80ms on first call only |
+| Per-user Supabase client construction | ~1ms                                     | ~1ms                                                                  | Negligible                  |
 
 **Total added latency for the Clerk branch**: 0ms on cache hits, 60-150ms on first invocation per session (amortized to ~0ms over the session lifetime).
 
@@ -956,10 +962,10 @@ Under the Clerk branch, the browser does not hold a Supabase session. The "sessi
 
 ## 9.5 Caching
 
-| Cache | Location | TTL | Invalidation |
-|-------|----------|-----|-------------|
-| GoTrue JWT | In-memory per worker isolate | ~5 min (min 60s remaining) | `invalidateSupabaseToken(authUserId)` on sign-out |
-| clerk_user_map lookup | Implicit (provisioning returns immediately on direct hit) | Per-request | N/A (idempotent) |
+| Cache                 | Location                                                  | TTL                        | Invalidation                                      |
+| --------------------- | --------------------------------------------------------- | -------------------------- | ------------------------------------------------- |
+| GoTrue JWT            | In-memory per worker isolate                              | ~5 min (min 60s remaining) | `invalidateSupabaseToken(authUserId)` on sign-out |
+| clerk_user_map lookup | Implicit (provisioning returns immediately on direct hit) | Per-request                | N/A (idempotent)                                  |
 
 ---
 
@@ -967,16 +973,16 @@ Under the Clerk branch, the browser does not hold a Supabase session. The "sessi
 
 ## 10.1 Impact assessment
 
-| Concern | Impact | Notes |
-|---------|--------|-------|
-| Public pages SEO | ✅ None | Public routes are unaffected — Clerk JS only loads on authenticated routes |
-| Auth page SEO | ✅ Correct | `/auth` has `<meta name="robots" content="noindex">` — not indexed |
-| SSR | ✅ Unaffected | ClerkProvider mounts during SSR but doesn't alter the rendered HTML for public pages |
-| Hydration | ✅ Correct | ClerkTokenBridge renders null; no hydration mismatch |
-| Metadata | ✅ Unchanged | Per-route `head()` metadata unaffected by auth provider |
-| Sitemap | ✅ Unchanged | `sitemap[.]xml.ts` routes unaffected |
-| robots.txt | ✅ Unchanged | `Disallow: /auth` already in place |
-| CSP | ✅ Extended | Clerk domains added to CSP — does not affect indexing |
+| Concern          | Impact        | Notes                                                                                |
+| ---------------- | ------------- | ------------------------------------------------------------------------------------ |
+| Public pages SEO | ✅ None       | Public routes are unaffected — Clerk JS only loads on authenticated routes           |
+| Auth page SEO    | ✅ Correct    | `/auth` has `<meta name="robots" content="noindex">` — not indexed                   |
+| SSR              | ✅ Unaffected | ClerkProvider mounts during SSR but doesn't alter the rendered HTML for public pages |
+| Hydration        | ✅ Correct    | ClerkTokenBridge renders null; no hydration mismatch                                 |
+| Metadata         | ✅ Unchanged  | Per-route `head()` metadata unaffected by auth provider                              |
+| Sitemap          | ✅ Unchanged  | `sitemap[.]xml.ts` routes unaffected                                                 |
+| robots.txt       | ✅ Unchanged  | `Disallow: /auth` already in place                                                   |
+| CSP              | ✅ Extended   | Clerk domains added to CSP — does not affect indexing                                |
 
 **Conclusion**: Authentication does not affect SEO. The auth page is already `noindex`; public pages render identically under both flag states.
 
@@ -984,16 +990,16 @@ Under the Clerk branch, the browser does not hold a Supabase session. The "sessi
 
 # 11. Accessibility Review
 
-| Concern | Status | Notes |
-|---------|--------|-------|
-| Sign-in form labels | ✅ Preserved | Same `<Label htmlFor>` as legacy forms |
-| Tab navigation | ✅ Preserved | Same tab order as legacy forms |
-| Keyboard navigation | ✅ Preserved | Same form submit flow (Enter to submit) |
-| Screen reader | ✅ Preserved | Semantic HTML (`<form>`, `<label>`, `<input>`) |
-| Color contrast | ✅ Preserved | Same Tailwind classes as legacy forms |
-| Error messages | ✅ Preserved | `toast.error()` for failures — same UX as legacy |
-| ARIA | ✅ Preserved | Suspense fallbacks use `aria-hidden` |
-| Focus management | ✅ Maintained | `useNavigate` preserves focus after redirect |
+| Concern             | Status        | Notes                                            |
+| ------------------- | ------------- | ------------------------------------------------ |
+| Sign-in form labels | ✅ Preserved  | Same `<Label htmlFor>` as legacy forms           |
+| Tab navigation      | ✅ Preserved  | Same tab order as legacy forms                   |
+| Keyboard navigation | ✅ Preserved  | Same form submit flow (Enter to submit)          |
+| Screen reader       | ✅ Preserved  | Semantic HTML (`<form>`, `<label>`, `<input>`)   |
+| Color contrast      | ✅ Preserved  | Same Tailwind classes as legacy forms            |
+| Error messages      | ✅ Preserved  | `toast.error()` for failures — same UX as legacy |
+| ARIA                | ✅ Preserved  | Suspense fallbacks use `aria-hidden`             |
+| Focus management    | ✅ Maintained | `useNavigate` preserves focus after redirect     |
 
 **Conclusion**: The Clerk forms maintain the exact same accessibility patterns as the legacy forms — same HTML, same labels, same tab order, same error messaging.
 
@@ -1004,6 +1010,7 @@ Under the Clerk branch, the browser does not hold a Supabase session. The "sessi
 ## 12.1 Current behaviour
 
 Under the Clerk branch:
+
 1. `requireSupabaseAuth` mints a GoTrue JWT whose `sub` = mapped `auth.users.id`
 2. The per-user Supabase client carries this JWT as Bearer
 3. `auth.uid()` in PostgREST evaluates to the JWT `sub` = the mapped UUID
@@ -1022,11 +1029,11 @@ If the Supabase → Neon migration proceeds, the RLS strategy remains the same: 
 
 ## 12.4 Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Future migration introduces Clerk-claim-bypass policy | Low | High (RLS would not protect rows) | RLS audit catches in CI |
-| GoTrue JWT cache serves expired token (clock skew) | Low | Medium (1 failed request) | 60s minimum TTL buffer; lazy re-issue on 401 |
-| `clerk_user_map` row deleted out-of-band | Low | Medium (user can't access data until next sign-in re-provisions) | RLS audit ensures `USING(FALSE)` on anon/authenticated |
+| Risk                                                  | Probability | Impact                                                           | Mitigation                                             |
+| ----------------------------------------------------- | ----------- | ---------------------------------------------------------------- | ------------------------------------------------------ |
+| Future migration introduces Clerk-claim-bypass policy | Low         | High (RLS would not protect rows)                                | RLS audit catches in CI                                |
+| GoTrue JWT cache serves expired token (clock skew)    | Low         | Medium (1 failed request)                                        | 60s minimum TTL buffer; lazy re-issue on 401           |
+| `clerk_user_map` row deleted out-of-band              | Low         | Medium (user can't access data until next sign-in re-provisions) | RLS audit ensures `USING(FALSE)` on anon/authenticated |
 
 ---
 
@@ -1035,6 +1042,7 @@ If the Supabase → Neon migration proceeds, the RLS strategy remains the same: 
 ## 13.1 Current database (Supabase / Lovable Cloud)
 
 The Clerk integration requires exactly one new table (`clerk_user_map`) and zero changes to existing tables. The migration is **non-destructive**:
+
 - No FK changes
 - No RLS policy changes
 - No stored procedure changes
@@ -1048,14 +1056,14 @@ The `auth.users` table (managed by Supabase/GoTrue) continues to hold the canoni
 
 When migrating from Supabase to Neon:
 
-| Concern | Impact | Mitigation |
-|---------|--------|------------|
-| `auth.users` table | Supabase-specific — must decide to keep auth.users in a residual Supabase instance or migrate to a Neon-managed table | Migrate `auth.users` schema to Neon, replace GoTrue token issuance with a custom JWT signer |
-| `auth.uid()` function | PostgREST-specific — Neon's pgRest or the query layer must provide it | Use PostgREST on Neon, or abstract `auth.uid()` in the query layer |
-| `clerk_user_map` | Moves with the rest of the schema | No change needed — it's a standard table with no Supabase-specific features |
-| `provisionClerkUser` | Currently calls `supabase.auth.admin.createUser` — Supabase-specific | Replace with a direct INSERT into the Neon-managed users table |
-| `issueSupabaseTokenForAuthUser` | Currently calls `generateLink` + `verifyOtp` — Supabase-specific | Replace with a custom JWT signer using Neon's JWT secret |
-| RLS policies | All route through `auth.uid()` — portable as long as PostgREST or equivalent is available | No changes if PostgREST is used; otherwise re-implement `auth.uid()` |
+| Concern                         | Impact                                                                                                                | Mitigation                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `auth.users` table              | Supabase-specific — must decide to keep auth.users in a residual Supabase instance or migrate to a Neon-managed table | Migrate `auth.users` schema to Neon, replace GoTrue token issuance with a custom JWT signer |
+| `auth.uid()` function           | PostgREST-specific — Neon's pgRest or the query layer must provide it                                                 | Use PostgREST on Neon, or abstract `auth.uid()` in the query layer                          |
+| `clerk_user_map`                | Moves with the rest of the schema                                                                                     | No change needed — it's a standard table with no Supabase-specific features                 |
+| `provisionClerkUser`            | Currently calls `supabase.auth.admin.createUser` — Supabase-specific                                                  | Replace with a direct INSERT into the Neon-managed users table                              |
+| `issueSupabaseTokenForAuthUser` | Currently calls `generateLink` + `verifyOtp` — Supabase-specific                                                      | Replace with a custom JWT signer using Neon's JWT secret                                    |
+| RLS policies                    | All route through `auth.uid()` — portable as long as PostgREST or equivalent is available                             | No changes if PostgREST is used; otherwise re-implement `auth.uid()`                        |
 
 **Key insight**: The Clerk migration was designed to be database-agnostic. The sidecar mapping pattern works with any Postgres backend — only the token issuance mechanism needs to change for Neon.
 
@@ -1065,25 +1073,25 @@ When migrating from Supabase to Neon:
 
 ## 14.1 Current state
 
-| Event | Logged where | Level | Format |
-|-------|-------------|-------|--------|
-| Clerk token verification failed | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] token verification failed: <message>` |
-| Clerk user provisioning failed | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] provisioning failed: <message>` |
-| Clerk token issuance failed | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] token issuance failed: <message>` |
-| Clerk user has no verified email | `auth-middleware.ts` clerkAuthBranch | `console.error` | `Unauthorized: Clerk user has no verified primary email address` |
-| Clerk publishable key missing | `client.tsx` ClerkProviderFragment | `console.warn` | `[clerk] USE_CLERK_AUTH is on but VITE_CLERK_PUBLISHABLE_KEY is missing` |
-| ensureClerkMapping failed | `use-ensure-user-mapped.ts` | `console.warn` | `[clerk] ensureClerkMapping failed: <message>` |
-| Reverse lookup failed | `provision.server.ts` | `console.error` | `[clerk] reverse lookup failed: <message>` |
+| Event                            | Logged where                         | Level           | Format                                                                   |
+| -------------------------------- | ------------------------------------ | --------------- | ------------------------------------------------------------------------ |
+| Clerk token verification failed  | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] token verification failed: <message>`                           |
+| Clerk user provisioning failed   | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] provisioning failed: <message>`                                 |
+| Clerk token issuance failed      | `auth-middleware.ts` clerkAuthBranch | `console.error` | `[clerk] token issuance failed: <message>`                               |
+| Clerk user has no verified email | `auth-middleware.ts` clerkAuthBranch | `console.error` | `Unauthorized: Clerk user has no verified primary email address`         |
+| Clerk publishable key missing    | `client.tsx` ClerkProviderFragment   | `console.warn`  | `[clerk] USE_CLERK_AUTH is on but VITE_CLERK_PUBLISHABLE_KEY is missing` |
+| ensureClerkMapping failed        | `use-ensure-user-mapped.ts`          | `console.warn`  | `[clerk] ensureClerkMapping failed: <message>`                           |
+| Reverse lookup failed            | `provision.server.ts`                | `console.error` | `[clerk] reverse lookup failed: <message>`                               |
 
 ## 14.2 Monitoring recommendations
 
-| Signal | Alert threshold | Action |
-|--------|------------------|--------|
+| Signal                                   | Alert threshold   | Action                                                      |
+| ---------------------------------------- | ----------------- | ----------------------------------------------------------- |
 | `[clerk] token verification failed` rate | > 1/min sustained | Check CLERK_SECRET_KEY validity; check Clerk service status |
-| `[clerk] provisioning failed` rate | > 0 | Check Supabase connectivity; check clerk_user_map RLS |
-| `[clerk] token issuance failed` rate | > 0 | Check Supabase GoTrue availability; check API rate limits |
-| 401 rate on server-fns | > 5× baseline | Check Clerk session configuration; check token bridge |
-| `clerk_user_map` insert errors | > 0 | Check unique constraint violations; check FK integrity |
+| `[clerk] provisioning failed` rate       | > 0               | Check Supabase connectivity; check clerk_user_map RLS       |
+| `[clerk] token issuance failed` rate     | > 0               | Check Supabase GoTrue availability; check API rate limits   |
+| 401 rate on server-fns                   | > 5× baseline     | Check Clerk session configuration; check token bridge       |
+| `clerk_user_map` insert errors           | > 0               | Check unique constraint violations; check FK integrity      |
 
 ## 14.3 Auditing
 
@@ -1093,19 +1101,19 @@ Authentication events are not currently written to the `audit_logs` table (that 
 
 # 15. Future Improvements (Prioritised Roadmap)
 
-| Priority | Improvement | Complexity | Impact |
-|----------|-------------|------------|--------|
-| P1 | Register Clerk webhook for `user.created/updated/deleted` to sync `clerk_user_map.email` | Low | Prevents email drift |
-| P1 | Add auth-event logging to `audit_logs` (login, sign-up, sign-out, role grant, role revoke) | Low | Security audit trail |
-| P2 | Delete legacy auth branches once cutover is confirmed stable for 30+ days | Low | Remove ~500 lines of dead code; simplify maintenance |
-| P2 | Add shared token cache (Cloudflare KV) for multi-isolate workers | Medium | Reduce redundant `generateLink` calls; lower Supabase API load |
-| P2 | Add structured logging (JSON) for `[clerk]` events with request ID correlation | Medium | Improve observability; enable log aggregation |
-| P3 | Replace `normalizeClerkUser` type cast with a proper `AuthUser` union type | Medium | Eliminate the `as unknown as User` type lie |
-| P3 | Add Clerk organization support for multi-tenant scenarios | High | Enable org-scoped auth for future SaaS features |
-| P3 | Migrate from `window.__clerkAuthToken` to a non-global communication channel | High | Eliminate global variable; improve security posture |
-| P4 | Add E2E test suite for Clerk auth flows (Playwright/Cypress) | Medium | Automated regression detection |
-| P4 | Add load testing for provisioning + token issuance under concurrent sign-in | Medium | Capacity planning for launch day |
+| Priority | Improvement                                                                                | Complexity | Impact                                                         |
+| -------- | ------------------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------- |
+| P1       | Register Clerk webhook for `user.created/updated/deleted` to sync `clerk_user_map.email`   | Low        | Prevents email drift                                           |
+| P1       | Add auth-event logging to `audit_logs` (login, sign-up, sign-out, role grant, role revoke) | Low        | Security audit trail                                           |
+| P2       | Delete legacy auth branches once cutover is confirmed stable for 30+ days                  | Low        | Remove ~500 lines of dead code; simplify maintenance           |
+| P2       | Add shared token cache (Cloudflare KV) for multi-isolate workers                           | Medium     | Reduce redundant `generateLink` calls; lower Supabase API load |
+| P2       | Add structured logging (JSON) for `[clerk]` events with request ID correlation             | Medium     | Improve observability; enable log aggregation                  |
+| P3       | Replace `normalizeClerkUser` type cast with a proper `AuthUser` union type                 | Medium     | Eliminate the `as unknown as User` type lie                    |
+| P3       | Add Clerk organization support for multi-tenant scenarios                                  | High       | Enable org-scoped auth for future SaaS features                |
+| P3       | Migrate from `window.__clerkAuthToken` to a non-global communication channel               | High       | Eliminate global variable; improve security posture            |
+| P4       | Add E2E test suite for Clerk auth flows (Playwright/Cypress)                               | Medium     | Automated regression detection                                 |
+| P4       | Add load testing for provisioning + token issuance under concurrent sign-in                | Medium     | Capacity planning for launch day                               |
 
 ---
 
-*End of `clerk.md` — Phase 1, Deliverable 1*
+_End of `clerk.md` — Phase 1, Deliverable 1_

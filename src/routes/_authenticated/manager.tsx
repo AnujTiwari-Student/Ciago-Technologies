@@ -41,7 +41,7 @@ import {
 import { decideRegularization, listPendingRegularizations } from "@/lib/attendance.functions";
 import { listMyReports, listInternalJobs, type InternalJob } from "@/lib/mobility.functions";
 import { listAllResignations, decideResignation } from "@/lib/resignation.functions";
-import { requireRoles } from "./-guard";
+import { requireRoles, requireDashboardEnabled } from "./-guard";
 
 const searchSchema = z.object({
   tab: z.enum(["team", "tasks", "approvals", "internal-careers", "resignations"]).optional(),

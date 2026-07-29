@@ -14,6 +14,7 @@
 Ciago Technologies has a nascent feature-flag system. The `USE_CLERK_AUTH` boolean flag (an environment-variable-driven runtime toggle) is the only active flag wired through the codebase. A `FEATURE_FLAGS` constant maps 15 named capability keys — but these are **string labels**, not runtime-evaluated toggles: no code reads them from ConfigCat, no component gates on them. The `@configcat/sdk` and `configcat-react` packages are installed but not integrated; `src/lib/feature-flags.server.ts` is an empty file intended for server-side evaluation.
 
 This document covers:
+
 - the existing flag surface and its limitations
 - a complete ConfigCat integration architecture for client + server evaluation on Cloudflare Workers (edge runtime)
 - a stage-by-stage implementation plan
@@ -61,23 +62,23 @@ export const FLAGS: FeatureFlags = { USE_CLERK_AUTH: readFlag("USE_CLERK_AUTH", 
 
 15 string-valued capability keys (not booleans, not evaluated):
 
-| Key | String Value | Purpose (intended) |
-|-----|-------------|-------------------|
-| `employeePortal` | `"employeePortalEnabled"` | Gate employee portal |
-| `managerPortal` | `"managerPortalEnabled"` | Gate manager portal |
-| `hrPortal` | `"hrPortalEnabled"` | Gate HR portal |
-| `onboardingPortal` | `"onboardingPortalEnabled"` | Gate onboarding wizard |
-| `documentUploads` | `"documentUploadsEnabled"` | Gate file uploads |
+| Key                   | String Value                   | Purpose (intended)             |
+| --------------------- | ------------------------------ | ------------------------------ |
+| `employeePortal`      | `"employeePortalEnabled"`      | Gate employee portal           |
+| `managerPortal`       | `"managerPortalEnabled"`       | Gate manager portal            |
+| `hrPortal`            | `"hrPortalEnabled"`            | Gate HR portal                 |
+| `onboardingPortal`    | `"onboardingPortalEnabled"`    | Gate onboarding wizard         |
+| `documentUploads`     | `"documentUploadsEnabled"`     | Gate file uploads              |
 | `interviewScheduling` | `"interviewSchedulingEnabled"` | Gate interview slot management |
-| `offerManagement` | `"offerManagementEnabled"` | Gate offer creation |
-| `leaveManagement` | `"leaveManagementEnabled"` | Gate leave workflows |
-| `attendance` | `"attendanceEnabled"` | Gate attendance tracking |
-| `timesheets` | `"timesheetsEnabled"` | Gate timesheet entry |
-| `payrollPortal` | `"payrollPortalEnabled"` | Gate payroll views |
-| `referrals` | `"referralsEnabled"` | Gate referral submission |
-| `internalMobility` | `"internalMobilityEnabled"` | Gate internal job posting |
-| `advancedAnalytics` | `"advancedAnalyticsEnabled"` | Gate advanced dashboard |
-| `maintenanceMode` | `"maintenanceMode"` | Global kill-switch banner |
+| `offerManagement`     | `"offerManagementEnabled"`     | Gate offer creation            |
+| `leaveManagement`     | `"leaveManagementEnabled"`     | Gate leave workflows           |
+| `attendance`          | `"attendanceEnabled"`          | Gate attendance tracking       |
+| `timesheets`          | `"timesheetsEnabled"`          | Gate timesheet entry           |
+| `payrollPortal`       | `"payrollPortalEnabled"`       | Gate payroll views             |
+| `referrals`           | `"referralsEnabled"`           | Gate referral submission       |
+| `internalMobility`    | `"internalMobilityEnabled"`    | Gate internal job posting      |
+| `advancedAnalytics`   | `"advancedAnalyticsEnabled"`   | Gate advanced dashboard        |
+| `maintenanceMode`     | `"maintenanceMode"`            | Global kill-switch banner      |
 
 ## 2.2 File: `src/lib/feature-flags.server.ts`
 
@@ -87,19 +88,19 @@ export const FLAGS: FeatureFlags = { USE_CLERK_AUTH: readFlag("USE_CLERK_AUTH", 
 
 11 files read `FLAGS`:
 
-| File | Usage |
-|------|-------|
-| `src/lib/auth.tsx` | Branches AuthProvider (Clerk vs Supabase) |
-| `src/integrations/clerk/client.tsx` | Gates ClerkProvider |
-| `src/integrations/supabase/auth-attacher.ts` | Branches Bearer source |
-| `src/integrations/supabase/auth-middleware.ts` | Branches token verification |
-| `src/routes/auth.tsx` | Branches form components (lazy ClerkForms vs legacy) |
-| `src/routes/_authenticated/route.tsx` | Branches guard (window vs getUser) |
-| `src/hooks/use-ensure-user-mapped.ts` | No-op when flag off |
-| `src/hooks/use-is-admin.tsx` | Branches role-source (server fn vs direct query) |
-| `src/hooks/use-is-employee.tsx` | Same pattern |
-| `src/hooks/use-my-roles.tsx` | Same pattern |
-| `src/lib/feature-flags.ts` | Self (definition) |
+| File                                           | Usage                                                |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| `src/lib/auth.tsx`                             | Branches AuthProvider (Clerk vs Supabase)            |
+| `src/integrations/clerk/client.tsx`            | Gates ClerkProvider                                  |
+| `src/integrations/supabase/auth-attacher.ts`   | Branches Bearer source                               |
+| `src/integrations/supabase/auth-middleware.ts` | Branches token verification                          |
+| `src/routes/auth.tsx`                          | Branches form components (lazy ClerkForms vs legacy) |
+| `src/routes/_authenticated/route.tsx`          | Branches guard (window vs getUser)                   |
+| `src/hooks/use-ensure-user-mapped.ts`          | No-op when flag off                                  |
+| `src/hooks/use-is-admin.tsx`                   | Branches role-source (server fn vs direct query)     |
+| `src/hooks/use-is-employee.tsx`                | Same pattern                                         |
+| `src/hooks/use-my-roles.tsx`                   | Same pattern                                         |
+| `src/lib/feature-flags.ts`                     | Self (definition)                                    |
 
 ## 2.4 What's missing
 
@@ -118,30 +119,30 @@ The 15 existing capability flags are **portal-level gates**. The following addit
 
 ## 3.1 Recommended (high architectural justification)
 
-| Flag Key | Type | Justification |
-|----------|------|---------------|
-| `maintenanceMode` | boolean | **Already in `FEATURE_FLAGS`.** Should be wired as a global banner + read-only banner. Kill-switch for planned downtime. |
-| `neonMigrationEnabled` | boolean | Phase 2 plans a Supabase → Neon migration. A feature flag allows gradual cutover (read from Neon for 10% of requests, then 100%). Mirrors the proven `USE_CLERK_AUTH` pattern. |
-| `r2StorageEnabled` | boolean | Phase 2 plans Supabase Storage → Cloudflare R2. A flag allows gradual cutover of upload/download paths. |
-| `newCandidateExperience` | boolean | If the careers page is redesigned, a flag allows A/B testing the old vs new experience. Justified because the careers page directly affects conversion. |
-| `killApplications` | boolean | Emergency stop for the job application form (e.g. all positions filled). Prevents new submissions without a code change. |
+| Flag Key                 | Type    | Justification                                                                                                                                                                  |
+| ------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `maintenanceMode`        | boolean | **Already in `FEATURE_FLAGS`.** Should be wired as a global banner + read-only banner. Kill-switch for planned downtime.                                                       |
+| `neonMigrationEnabled`   | boolean | Phase 2 plans a Supabase → Neon migration. A feature flag allows gradual cutover (read from Neon for 10% of requests, then 100%). Mirrors the proven `USE_CLERK_AUTH` pattern. |
+| `r2StorageEnabled`       | boolean | Phase 2 plans Supabase Storage → Cloudflare R2. A flag allows gradual cutover of upload/download paths.                                                                        |
+| `newCandidateExperience` | boolean | If the careers page is redesigned, a flag allows A/B testing the old vs new experience. Justified because the careers page directly affects conversion.                        |
+| `killApplications`       | boolean | Emergency stop for the job application form (e.g. all positions filled). Prevents new submissions without a code change.                                                       |
 
 ## 3.2 Consider (medium justification)
 
-| Flag Key | Type | Justification |
-|----------|------|---------------|
-| `advancedAuditLogging` | boolean | Toggle verbose audit logging during security incidents without redeploy. |
+| Flag Key               | Type                 | Justification                                                                                                                |
+| ---------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `advancedAuditLogging` | boolean              | Toggle verbose audit logging during security incidents without redeploy.                                                     |
 | `rateLimitScaleFactor` | number (1.0 default) | Scale rate limits up/down without a code change. Useful during traffic spikes or for temporary relaxation during load tests. |
 
 ## 3.3 Not recommended (low justification)
 
-| Flag Key | Why not |
-|----------|---------|
-| `experimentalUiV2` | Use A/B testing tools (e.g. GrowthBook, PostHog) for UI experiments. ConfigCat is for infrastructure/feature gates, not UI variants. |
-| `percentageRollout` | ConfigCat supports percentage targeting natively; no separate flag needed. |
-| `regionalRollout` | Cloudflare Workers run on edge; geographic targeting at the flag level is not meaningful. Use Cloudflare's built-in geo-routing instead. |
-| `userSpecificFlags` | ConfigCat supports user-level targeting natively (via targeting rules). No special flag needed. |
-| `apiVersioning` | API versioning should be a route-level concern (`/v1/`, `/v2/`), not a feature flag. |
+| Flag Key            | Why not                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `experimentalUiV2`  | Use A/B testing tools (e.g. GrowthBook, PostHog) for UI experiments. ConfigCat is for infrastructure/feature gates, not UI variants.     |
+| `percentageRollout` | ConfigCat supports percentage targeting natively; no separate flag needed.                                                               |
+| `regionalRollout`   | Cloudflare Workers run on edge; geographic targeting at the flag level is not meaningful. Use Cloudflare's built-in geo-routing instead. |
+| `userSpecificFlags` | ConfigCat supports user-level targeting natively (via targeting rules). No special flag needed.                                          |
+| `apiVersioning`     | API versioning should be a route-level concern (`/v1/`, `/v2/`), not a feature flag.                                                     |
 
 ---
 
@@ -149,10 +150,10 @@ The 15 existing capability flags are **portal-level gates**. The following addit
 
 ## 4.1 SDK selection
 
-| Surface | SDK | Why |
-|---------|-----|-----|
-| Client (React) | `configcat-react` ^5.1.0 | Already installed. Provides `<ConfigCatProvider>` + `useFlag()` hook. Polls ConfigCat CDN for config JSON. |
-| Server (server fns, middleware) | `@configcat/sdk` ^1.1.0 | Already installed. Lightweight Node/edge-compatible SDK. No React dependency. |
+| Surface                         | SDK                      | Why                                                                                                        |
+| ------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Client (React)                  | `configcat-react` ^5.1.0 | Already installed. Provides `<ConfigCatProvider>` + `useFlag()` hook. Polls ConfigCat CDN for config JSON. |
+| Server (server fns, middleware) | `@configcat/sdk` ^1.1.0  | Already installed. Lightweight Node/edge-compatible SDK. No React dependency.                              |
 
 ## 4.2 Initialization (server-side)
 
@@ -236,34 +237,33 @@ During SSR, the server-side client (`feature-flags.server.ts`) can evaluate flag
 
 ```typescript
 // server fn
-export const getFeatureFlags = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const client = getConfigCatClient();
-    if (!client) return defaultFlags();
-    const keys = Object.values(FEATURE_FLAGS);
-    const results = await Promise.all(
-      keys.map(async (k) => [k, await client.getBooleanFlagValue(k, false)])
-    );
-    return Object.fromEntries(results);
-  });
+export const getFeatureFlags = createServerFn({ method: "GET" }).handler(async () => {
+  const client = getConfigCatClient();
+  if (!client) return defaultFlags();
+  const keys = Object.values(FEATURE_FLAGS);
+  const results = await Promise.all(
+    keys.map(async (k) => [k, await client.getBooleanFlagValue(k, false)]),
+  );
+  return Object.fromEntries(results);
+});
 ```
 
 ## 4.5 Caching
 
-| Layer | Cache | TTL | Invalidation |
-|-------|-------|-----|-------------|
-| Server (per isolate) | In-memory (auto-poll) | 60s | Auto-refresh; fresh isolate re-fetches |
-| Client (browser) | In-memory (configcat-react) | 60s | Auto-refresh from CDN |
+| Layer                | Cache                       | TTL         | Invalidation                           |
+| -------------------- | --------------------------- | ----------- | -------------------------------------- |
+| Server (per isolate) | In-memory (auto-poll)       | 60s         | Auto-refresh; fresh isolate re-fetches |
+| Client (browser)     | In-memory (configcat-react) | 60s         | Auto-refresh from CDN                  |
 | SSR → client handoff | One-shot (server fn result) | Per-request | Not cached — fetched fresh on each SSR |
 
 ## 4.6 Offline / failure behavior
 
-| Scenario | Behavior |
-|----------|----------|
+| Scenario                           | Behavior                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
 | ConfigCat CDN unreachable (server) | `getBooleanFlagValue()` returns the default value (the `defaultValue` parameter). |
-| ConfigCat CDN unreachable (client) | `useFlag()` returns the default value after a timeout. |
-| `CONFIGCAT_SDK_KEY` missing | `getConfigCatClient()` returns `null`; all flags return defaults. |
-| Worker isolate recycled | New isolate fetches fresh config on first call; ~100ms cold-start cost. |
+| ConfigCat CDN unreachable (client) | `useFlag()` returns the default value after a timeout.                            |
+| `CONFIGCAT_SDK_KEY` missing        | `getConfigCatClient()` returns `null`; all flags return defaults.                 |
+| Worker isolate recycled            | New isolate fetches fresh config on first call; ~100ms cold-start cost.           |
 
 ---
 
@@ -271,23 +271,23 @@ export const getFeatureFlags = createServerFn({ method: "GET" })
 
 ## 5.1 Current state
 
-| Environment | Key | Source |
-|-------------|-----|--------|
+| Environment | Key                 | Source         |
+| ----------- | ------------------- | -------------- |
 | Development | `CONFIGCAT_SDK_KEY` | `.env` (local) |
 
 ## 5.2 Proposed state
 
-| Environment | Variable | Key Type | Managed By |
-|-------------|----------|----------|------------|
-| Development | `CONFIGCAT_SDK_KEY` | Client SDK key (dev environment) | `.env` (temporary, → Doppler) |
-| Development | `VITE_CONFIGCAT_SDK_KEY` | Client SDK key (dev, Vite-injected) | `.env` |
-| Development | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (dev) | `.env` |
-| Staging | `CONFIGCAT_SDK_KEY` | Client SDK key (staging) | Doppler |
-| Staging | `VITE_CONFIGCAT_SDK_KEY` | Client SDK key (staging, Vite-injected) | Doppler |
-| Staging | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (staging) | Doppler |
-| Production | `CONFIGCAT_SDK_KEY` | Client SDK key (production) | Doppler |
-| Production | `VITE_CONFIGCAT_SDK_KEY` | Client SDK key (production, Vite-injected) | Doppler |
-| Production | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (production) | Doppler |
+| Environment | Variable                   | Key Type                                   | Managed By                    |
+| ----------- | -------------------------- | ------------------------------------------ | ----------------------------- |
+| Development | `CONFIGCAT_SDK_KEY`        | Client SDK key (dev environment)           | `.env` (temporary, → Doppler) |
+| Development | `VITE_CONFIGCAT_SDK_KEY`   | Client SDK key (dev, Vite-injected)        | `.env`                        |
+| Development | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (dev)                       | `.env`                        |
+| Staging     | `CONFIGCAT_SDK_KEY`        | Client SDK key (staging)                   | Doppler                       |
+| Staging     | `VITE_CONFIGCAT_SDK_KEY`   | Client SDK key (staging, Vite-injected)    | Doppler                       |
+| Staging     | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (staging)                   | Doppler                       |
+| Production  | `CONFIGCAT_SDK_KEY`        | Client SDK key (production)                | Doppler                       |
+| Production  | `VITE_CONFIGCAT_SDK_KEY`   | Client SDK key (production, Vite-injected) | Doppler                       |
+| Production  | `CONFIGCAT_SERVER_SDK_KEY` | Server SDK key (production)                | Doppler                       |
 
 ## 5.3 Naming convention
 
@@ -297,6 +297,7 @@ export const getFeatureFlags = createServerFn({ method: "GET" })
 ## 5.4 Secret rotation
 
 ConfigCat SDK keys are long-lived tokens (not JWTs). Rotation procedure:
+
 1. Create a new SDK key in the ConfigCat Dashboard (Product → SDK keys → Add).
 2. Update the key in Doppler (or `.env` for development).
 3. Redeploy.
@@ -336,19 +337,19 @@ src/integrations/
 
 ## 6.3 Files to modify
 
-| File | Change |
-|------|--------|
-| `src/routes/__root.tsx` | Wrap provider tree in `<ConfigCatProvider>` |
+| File                              | Change                                                         |
+| --------------------------------- | -------------------------------------------------------------- |
+| `src/routes/__root.tsx`           | Wrap provider tree in `<ConfigCatProvider>`                    |
 | `src/lib/feature-flags.server.ts` | Replace empty file with ConfigCat server client + `isFlagOn()` |
-| `package.json` | No change — packages already installed |
+| `package.json`                    | No change — packages already installed                         |
 
 ## 6.4 Ownership
 
-| Owner | Responsibility |
-|-------|---------------|
-| Platform engineering | SDK initialization, server client, key rotation |
-| Feature teams | Flag creation in ConfigCat Dashboard, targeting rules |
-| DevOps | Doppler integration, staging/production keys |
+| Owner                | Responsibility                                        |
+| -------------------- | ----------------------------------------------------- |
+| Platform engineering | SDK initialization, server client, key rotation       |
+| Feature teams        | Flag creation in ConfigCat Dashboard, targeting rules |
+| DevOps               | Doppler integration, staging/production keys          |
 
 ---
 
@@ -359,16 +360,19 @@ src/integrations/
 **Objective**: Initialize the `@configcat/sdk` client and expose `isFlagOn()`.
 
 **Files**:
+
 - Modify: `src/lib/feature-flags.server.ts`
 - Create: `src/integrations/configcat/server.ts`
 
 **Implementation**:
+
 1. Write `getConfigCatClient()` singleton in `feature-flags.server.ts`.
 2. Write `isFlagOn(key, defaultValue)` async helper.
 3. Write `getConfigCatAllValues()` helper for bulk evaluation.
 4. Handle missing key gracefully (return defaults).
 
 **Validation**:
+
 - `bun run build` passes.
 - `bun run test` passes.
 - Manual: call `isFlagOn("maintenanceMode", false)` — returns a boolean.
@@ -386,16 +390,19 @@ src/integrations/
 **Objective**: Mount `<ConfigCatProvider>` in the React tree and expose `useFlagSafe()`.
 
 **Files**:
+
 - Create: `src/lib/feature-flags.client.tsx`
 - Modify: `src/routes/__root.tsx`
 
 **Implementation**:
+
 1. Write `ConfigCatProviderWrapper` component that reads `VITE_CONFIGCAT_SDK_KEY` and mounts `<ConfigCatProvider>`.
 2. If key is missing, render children without provider (graceful degradation).
 3. Write `useFlagSafe(key, defaultValue)` hook that falls back when provider is absent.
 4. Wrap `__root.tsx` provider tree in `ConfigCatProviderWrapper`.
 
 **Validation**:
+
 - `bun run build` passes.
 - `bun run test` passes.
 - Manual: `useFlagSafe("maintenanceMode", false)` in a test component.
@@ -413,14 +420,17 @@ src/integrations/
 **Objective**: Expose a server fn that returns all flag values for SSR.
 
 **Files**:
+
 - Create: `src/lib/feature-flags.functions.ts`
 
 **Implementation**:
+
 1. `getFeatureFlags()` server fn using `createServerFn({ method: "GET" })`.
 2. Reads all `FEATURE_FLAGS` values and evaluates each via `isFlagOn()`.
 3. Returns `Capabilities`-shaped object.
 
 **Validation**:
+
 - `bun run build` passes.
 - `bun run test` passes.
 - Manual: call `getFeatureFlags()` — returns a `Record<string, boolean>`.
@@ -438,14 +448,17 @@ src/integrations/
 **Objective**: First real flag integration — the `maintenanceMode` kill-switch.
 
 **Files**:
+
 - Modify: `src/routes/__root.tsx` or a new `MaintenanceBanner` component
 - Modify: `src/routes/_authenticated/route.tsx` (optional: redirect to maintenance page)
 
 **Implementation**:
+
 1. If `maintenanceMode` is ON, render a full-screen maintenance banner.
 2. Optionally: prevent access to authenticated routes (redirect to `/maintenance`).
 
 **Validation**:
+
 - `bun run build` passes.
 - Manual: toggle `maintenanceMode` in ConfigCat Dashboard; verify banner appears.
 
@@ -471,31 +484,31 @@ src/integrations/
 
 # 8. Required Environment Variables
 
-| Variable | Environment | Scope | Purpose | Required | Runtime |
-|----------|-------------|-------|---------|----------|---------|
-| `CONFIGCAT_SDK_KEY` | Development | Server | ConfigCat client SDK key (dev) | Yes | Server fns |
-| `VITE_CONFIGCAT_SDK_KEY` | Development | Client | ConfigCat client SDK key (dev, Vite-injected) | Yes | Browser |
-| `CONFIGCAT_SERVER_SDK_KEY` | Development | Server | ConfigCat server SDK key (dev) | Optional (for targeting) | Server fns |
-| `CONFIGCAT_SDK_KEY` | Staging | Server | ConfigCat client SDK key (staging) | Yes (Doppler) | Server fns |
-| `VITE_CONFIGCAT_SDK_KEY` | Staging | Client | ConfigCat client SDK key (staging, Vite-injected) | Yes (Doppler) | Browser |
-| `CONFIGCAT_SERVER_SDK_KEY` | Staging | Server | ConfigCat server SDK key (staging) | Optional (Doppler) | Server fns |
-| `CONFIGCAT_SDK_KEY` | Production | Server | ConfigCat client SDK key (production) | Yes (Doppler) | Server fns |
-| `VITE_CONFIGCAT_SDK_KEY` | Production | Client | ConfigCat client SDK key (production, Vite-injected) | Yes (Doppler) | Browser |
-| `CONFIGCAT_SERVER_SDK_KEY` | Production | Server | ConfigCat server SDK key (production) | Optional (Doppler) | Server fns |
+| Variable                   | Environment | Scope  | Purpose                                              | Required                 | Runtime    |
+| -------------------------- | ----------- | ------ | ---------------------------------------------------- | ------------------------ | ---------- |
+| `CONFIGCAT_SDK_KEY`        | Development | Server | ConfigCat client SDK key (dev)                       | Yes                      | Server fns |
+| `VITE_CONFIGCAT_SDK_KEY`   | Development | Client | ConfigCat client SDK key (dev, Vite-injected)        | Yes                      | Browser    |
+| `CONFIGCAT_SERVER_SDK_KEY` | Development | Server | ConfigCat server SDK key (dev)                       | Optional (for targeting) | Server fns |
+| `CONFIGCAT_SDK_KEY`        | Staging     | Server | ConfigCat client SDK key (staging)                   | Yes (Doppler)            | Server fns |
+| `VITE_CONFIGCAT_SDK_KEY`   | Staging     | Client | ConfigCat client SDK key (staging, Vite-injected)    | Yes (Doppler)            | Browser    |
+| `CONFIGCAT_SERVER_SDK_KEY` | Staging     | Server | ConfigCat server SDK key (staging)                   | Optional (Doppler)       | Server fns |
+| `CONFIGCAT_SDK_KEY`        | Production  | Server | ConfigCat client SDK key (production)                | Yes (Doppler)            | Server fns |
+| `VITE_CONFIGCAT_SDK_KEY`   | Production  | Client | ConfigCat client SDK key (production, Vite-injected) | Yes (Doppler)            | Browser    |
+| `CONFIGCAT_SERVER_SDK_KEY` | Production  | Server | ConfigCat server SDK key (production)                | Optional (Doppler)       | Server fns |
 
 ---
 
 # 9. Security Review
 
-| Concern | Risk | Mitigation |
-|---------|------|------------|
-| Client SDK key exposure | Low | ConfigCat client SDK keys are safe to ship in the browser — they can only read flag values, not modify them. |
-| Server SDK key exposure | Medium | `CONFIGCAT_SERVER_SDK_KEY` must never be in the client bundle. Use `.server.ts` suffix and dynamic imports. |
-| SSR evaluation | Low | Server client initialises with server key; client bundle uses the client key. No cross-contamination. |
-| Stale values | Low | Auto-poll refreshes every 60s. For critical kill-switches, consider manual refresh on demand. |
-| Fallback behaviour | Acceptable | Missing key → all flags return defaults. Defaults must be conservative (defaults = current behavior). |
-| CSP | Verify | ConfigCat client SDK fetches from `https://cdn.configcat.com`. Add to `connect-src` in CSP. |
-| Targeting rule injection | Low | Targeting rules are set in the ConfigCat Dashboard (not in code). No user-controllable input reaches the SDK. |
+| Concern                  | Risk       | Mitigation                                                                                                    |
+| ------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Client SDK key exposure  | Low        | ConfigCat client SDK keys are safe to ship in the browser — they can only read flag values, not modify them.  |
+| Server SDK key exposure  | Medium     | `CONFIGCAT_SERVER_SDK_KEY` must never be in the client bundle. Use `.server.ts` suffix and dynamic imports.   |
+| SSR evaluation           | Low        | Server client initialises with server key; client bundle uses the client key. No cross-contamination.         |
+| Stale values             | Low        | Auto-poll refreshes every 60s. For critical kill-switches, consider manual refresh on demand.                 |
+| Fallback behaviour       | Acceptable | Missing key → all flags return defaults. Defaults must be conservative (defaults = current behavior).         |
+| CSP                      | Verify     | ConfigCat client SDK fetches from `https://cdn.configcat.com`. Add to `connect-src` in CSP.                   |
+| Targeting rule injection | Low        | Targeting rules are set in the ConfigCat Dashboard (not in code). No user-controllable input reaches the SDK. |
 
 ### CSP addition required
 
@@ -509,25 +522,25 @@ connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.
 
 # 10. Performance Review
 
-| Concern | Impact | Mitigation |
-|---------|--------|------------|
-| Server cold-start | +100ms on first flag eval per isolate | Auto-poll fetches on client creation; subsequent calls are cache hits. |
-| Client cold-start | +50ms on first flag eval | `configcat-react` uses lazy-init on first `useFlag` call; subsequent renders read cache. |
-| Polling overhead | Negligible | Config JSON is ~2KB; one fetch per 60s per isolate/browser. |
-| Render blocking | Low | `useFlagSafe` returns `isLoading=true` on first render; component shows fallthrough. Use Suspense or default-value patterns. |
-| SSR latency | +50ms per SSR request (server fn for flag values) | Only called when SSR needs flag values (optional). Client-side eval handles the rest. |
+| Concern           | Impact                                            | Mitigation                                                                                                                   |
+| ----------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Server cold-start | +100ms on first flag eval per isolate             | Auto-poll fetches on client creation; subsequent calls are cache hits.                                                       |
+| Client cold-start | +50ms on first flag eval                          | `configcat-react` uses lazy-init on first `useFlag` call; subsequent renders read cache.                                     |
+| Polling overhead  | Negligible                                        | Config JSON is ~2KB; one fetch per 60s per isolate/browser.                                                                  |
+| Render blocking   | Low                                               | `useFlagSafe` returns `isLoading=true` on first render; component shows fallthrough. Use Suspense or default-value patterns. |
+| SSR latency       | +50ms per SSR request (server fn for flag values) | Only called when SSR needs flag values (optional). Client-side eval handles the rest.                                        |
 
 ---
 
 # 11. CI/CD Impact
 
-| Area | Impact |
-|------|--------|
-| Deployments | No new build step. ConfigCat config is fetched at runtime, not build-time. |
-| Feature rollout | Flags can be toggled in ConfigCat Dashboard without redeploy. Immediate effect on next poll cycle (60s). |
-| Release strategy | Use flags to gate new features. Release code with flag OFF; enable in Dashboard post-deploy. |
-| Rollback | Disable flag in Dashboard (no redeploy). Code path reverts to default behavior. |
-| Approvals | ConfigCat Dashboard can require approval workflows for production environment flags (ConfigCat feature). |
+| Area             | Impact                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Deployments      | No new build step. ConfigCat config is fetched at runtime, not build-time.                               |
+| Feature rollout  | Flags can be toggled in ConfigCat Dashboard without redeploy. Immediate effect on next poll cycle (60s). |
+| Release strategy | Use flags to gate new features. Release code with flag OFF; enable in Dashboard post-deploy.             |
+| Rollback         | Disable flag in Dashboard (no redeploy). Code path reverts to default behavior.                          |
+| Approvals        | ConfigCat Dashboard can require approval workflows for production environment flags (ConfigCat feature). |
 
 ---
 
@@ -535,32 +548,32 @@ connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.
 
 ## 12.1 Unit tests
 
-| Test | File | What it verifies |
-|------|------|-----------------|
-| `isFlagOn()` returns default when client is null | `src/lib/__tests__/feature-flags.server.test.ts` | Graceful degradation |
-| `isFlagOn()` returns ConfigCat value when client is initialized | Same | Correct flag evaluation |
-| `useFlagSafe()` returns default when provider is absent | `src/lib/__tests__/feature-flags.client.test.tsx` | Graceful degradation |
+| Test                                                            | File                                              | What it verifies        |
+| --------------------------------------------------------------- | ------------------------------------------------- | ----------------------- |
+| `isFlagOn()` returns default when client is null                | `src/lib/__tests__/feature-flags.server.test.ts`  | Graceful degradation    |
+| `isFlagOn()` returns ConfigCat value when client is initialized | Same                                              | Correct flag evaluation |
+| `useFlagSafe()` returns default when provider is absent         | `src/lib/__tests__/feature-flags.client.test.tsx` | Graceful degradation    |
 
 ## 12.2 Integration tests
 
-| Test | What it verifies |
-|------|-----------------|
-| `getFeatureFlags()` server fn returns all 15 flags | Server fn wiring |
-| `maintenanceMode` ON → banner visible | Flag → UI routing |
+| Test                                               | What it verifies  |
+| -------------------------------------------------- | ----------------- |
+| `getFeatureFlags()` server fn returns all 15 flags | Server fn wiring  |
+| `maintenanceMode` ON → banner visible              | Flag → UI routing |
 
 ## 12.3 E2E tests
 
-| Test | What it verifies |
-|------|-----------------|
+| Test                                                              | What it verifies           |
+| ----------------------------------------------------------------- | -------------------------- |
 | Toggle `maintenanceMode` in ConfigCat → banner appears within 60s | End-to-end flag evaluation |
-| Toggle `killApplications` → application form disabled | Kill-switch effect |
+| Toggle `killApplications` → application form disabled             | Kill-switch effect         |
 
 ## 12.4 Manual / staging validation
 
-| Test | What it verifies |
-|------|-----------------|
-| All 15 `FEATURE_FLAGS` keys exist in ConfigCat Dashboard | Key parity |
-| Staging SDK key evaluates against staging environment | Environment isolation |
+| Test                                                        | What it verifies      |
+| ----------------------------------------------------------- | --------------------- |
+| All 15 `FEATURE_FLAGS` keys exist in ConfigCat Dashboard    | Key parity            |
+| Staging SDK key evaluates against staging environment       | Environment isolation |
 | Production SDK key evaluates against production environment | Environment isolation |
 
 ---
@@ -582,4 +595,4 @@ connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.
 
 ---
 
-*End of `feature-flags.md` — Phase 3*
+_End of `feature-flags.md` — Phase 3_
