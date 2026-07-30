@@ -372,4 +372,45 @@ The root route (`src/routes/__root.tsx`) provides the shell + CSP headers only �
 
 ---
 
+## 8. Migration: Supabase → Neon + Cloudflare R2
+
+### 8.1 Migration State
+
+| Stage | Description | Status |
+|-------|-------------|--------|
+| 1 | Neon Project Setup + Schema Migration | **COMPLETE** |
+| 2 | auth.uid() RLS Compatibility Layer | **COMPLETE** |
+| 3 | Prisma ORM Setup + Schema Definition | NOT STARTED |
+| 4 | Clerk Authentication Simplified | NOT STARTED |
+| 5 | Database Client Migration | NOT STARTED |
+| 6 | Storage Migration (R2) | NOT STARTED |
+| 7 | Dual-Write Period + Validation | NOT STARTED |
+| 8 | Cutover + Decommission | NOT STARTED |
+
+### 8.2 Neon Database
+
+- **Connection**: `NEON_DATABASE_URL` in `.env`
+- **Schema**: 26 public tables + `auth.users` + `auth.uid()` custom function
+- **RLS**: 83 public-schema policies active (storage policies excluded — moving to R2)
+- **Roles**: `anon`, `authenticated`, `service_role` created for DDL/policy validation
+- **Auth function**: `auth.uid()` reads `current_setting('app.current_user_id', true)` — set via `SET LOCAL` per transaction
+
+### 8.3 Key Decisions
+
+1. `auth.uid()` uses `current_setting('app.current_user_id', true)` — transaction-scoped via `SET LOCAL`
+2. Storage policies NOT migrated (R2 handles access control at application layer)
+3. `GRANT`/`REVOKE` to Supabase roles retained as no-ops for DDL validity
+4. Migration executes per-statement (not per-file batch) to isolate failures
+5. The "104+ policies" in `plans.md` includes ~20 `storage.objects` policies — net public-schema count is 83
+
+### 8.4 Migration Tooling
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/migrate-schema.ts` | Applies Supabase migrations to Neon (v5, working) |
+| `scripts/neon-validate.ts` | Validates Stage 1 acceptance criteria |
+| `supabase/migrations-neon.sql` | Generated combined SQL output |
+
+---
+
 _Last generated as a companion to `WORKFLOW.md`._
