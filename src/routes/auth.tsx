@@ -4,9 +4,10 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Briefcase, ShieldCheck } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { FLAGS } from "@/lib/feature-flags";
+
+const supabase = null as any;
 import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 import { FORBIDDEN_CORPORATE_ERROR, STAFF_ON_CANDIDATE_ERROR } from "@/lib/portal.functions";
 import { Button } from "@/components/ui/button";

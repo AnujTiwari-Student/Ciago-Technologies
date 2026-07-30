@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 import { docLabel } from "@/lib/onboarding.functions";
 
 export type OnboardingQueueRow = {
@@ -32,7 +33,6 @@ export type OnboardingAuditEntry = {
   actor_email: string | null;
   action: string;
   target_resource: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details: any;
 };
 
@@ -62,14 +62,12 @@ export type OnboardingDetail = {
     current_step: number;
     doj: string | null;
     submitted_at: string | null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emergency_contact: any;
     id_ack: boolean;
     code_of_conduct_ack: boolean;
     rejection_feedback: string | null;
     verified_by: string | null;
     verified_at: string | null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     form_state: Record<string, any> | null;
     created_at: string;
     updated_at: string;
@@ -84,114 +82,91 @@ export type OnboardingDetail = {
   audit: OnboardingAuditEntry[];
 };
 
-async function assertHrOrAdmin(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  userId: string,
-): Promise<void> {
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["hr", "admin"])
-    .limit(1)
-    .maybeSingle();
-  if (!data) throw new Error("Forbidden");
+async function assertHrOrAdmin(db: any, userId: string): Promise<void> {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["hr", "admin"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export const listOnboardingQueue = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<OnboardingQueueRow[]> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    // Admin sees every track. Pure HR (non-admin) never sees HR-track candidates —
-    // HR-track finalization is admin-only and HR should not review their own peers.
-    const { data: adminRow } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    const isAdmin = !!adminRow;
+    const adminRoleCount = await context.db.withRLS((tx) =>
+      tx.userRole.count({ where: { userId: context.userId, role: "admin" } }),
+    );
+    const isAdmin = (adminRoleCount as number) > 0;
 
-    const { data: recs, error } = await context.supabase
-      .from("onboarding_records")
-      .select(
-        "id, user_id, application_id, role_title, department, status, verification_status, current_step, doj, submitted_at, updated_at",
-      )
-      .in("status", ["accepted", "submitted"])
-      .order("updated_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    const rows = recs ?? [];
-    if (rows.length === 0) return [];
+    const recs = await adminDb.onboardingRecord.findMany({
+      where: { status: { in: ["accepted", "submitted"] } },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (recs.length === 0) return [];
 
-    // Never surface the caller's own onboarding to themselves — HR must not
-    // review their own paperwork (or Admin theirs). Track isolation still applies below.
-    const selfFiltered = rows.filter((r: any) => r.user_id !== context.userId);
-    const appIds = selfFiltered.map((r: any) => r.application_id);
-    const { data: apps } = appIds.length
-      ? await context.supabase
-          .from("job_applications")
-          .select("id, email, full_name, role_id")
-          .in("id", appIds)
-      : { data: [] as any[] };
-    const appMap = new Map((apps ?? []).map((a: any) => [a.id, a]));
-    const roleIds = Array.from(new Set((apps ?? []).map((a: any) => a.role_id).filter(Boolean)));
+    const selfFiltered = recs.filter((r) => r.userId !== context.userId);
+    if (selfFiltered.length === 0) return [];
+
+    const appIds = selfFiltered.map((r) => r.applicationId);
+    const apps = await adminDb.jobApplication.findMany({
+      where: { id: { in: appIds } },
+      select: { id: true, email: true, fullName: true, roleId: true },
+    });
+    const appMap = new Map(apps.map((a) => [a.id, a]));
+
+    const roleIds = Array.from(new Set(apps.map((a) => a.roleId).filter(Boolean)));
     const postings = roleIds.length
-      ? ((
-          await context.supabase
-            .from("job_postings")
-            .select("id, job_code, track_type, employment_type")
-            .in("id", roleIds)
-        ).data ?? [])
+      ? await adminDb.jobPosting.findMany({
+          where: { id: { in: roleIds } },
+          select: { id: true, jobCode: true, trackType: true, employmentType: true },
+        })
       : [];
-    const postingMap = new Map(postings.map((p: any) => [p.id, p]));
+    const postingMap = new Map(postings.map((p) => [p.id, p]));
 
-    const ids = selfFiltered.map((r: any) => r.id);
-    if (ids.length === 0) return [];
-    const { data: docs } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("onboarding_id, status")
-      .in("onboarding_id", ids)
-      .is("superseded_at", null);
+    const ids = selfFiltered.map((r) => r.id);
+    const docs = await adminDb.onboardingDocument.findMany({
+      where: { onboardingId: { in: ids }, supersededAt: null },
+      select: { onboardingId: true, status: true },
+    });
     const docsAgg = new Map<
       string,
       { total: number; approved: number; pending: number; issues: number }
     >();
-    for (const d of (docs ?? []) as any[]) {
-      const agg = docsAgg.get(d.onboarding_id) ?? { total: 0, approved: 0, pending: 0, issues: 0 };
+    for (const d of docs) {
+      const agg = docsAgg.get(d.onboardingId) ?? { total: 0, approved: 0, pending: 0, issues: 0 };
       agg.total++;
       if (d.status === "approved") agg.approved++;
       else if (d.status === "pending") agg.pending++;
       else agg.issues++;
-      docsAgg.set(d.onboarding_id, agg);
+      docsAgg.set(d.onboardingId, agg);
     }
 
     const out: OnboardingQueueRow[] = [];
-    for (const r of selfFiltered as any[]) {
-      const app = appMap.get(r.application_id) as any;
-      const posting = app ? (postingMap.get(app.role_id) as any) : null;
-      const track = (posting?.track_type ?? null) as OnboardingQueueRow["track_type"];
-      // Track isolation: HR-only users don't see HR-track candidates.
+    for (const r of selfFiltered) {
+      const app = appMap.get(r.applicationId);
+      const posting = app ? postingMap.get(app.roleId) : null;
+      const track = (posting?.trackType ?? null) as OnboardingQueueRow["track_type"];
       if (!isAdmin && track === "hr_track") continue;
       const agg = docsAgg.get(r.id) ?? { total: 0, approved: 0, pending: 0, issues: 0 };
       out.push({
         onboarding_id: r.id,
-        user_id: r.user_id,
-        application_id: r.application_id,
-        role_title: r.role_title,
+        user_id: r.userId,
+        application_id: r.applicationId,
+        role_title: r.roleTitle,
         department: r.department,
-        job_code: posting?.job_code ?? null,
+        job_code: posting?.jobCode ?? null,
         track_type: track,
-        employment_type: posting?.employment_type ?? null,
-        candidate_name: app?.full_name ?? null,
+        employment_type: posting?.employmentType ?? null,
+        candidate_name: app?.fullName ?? null,
         candidate_email: app?.email ?? null,
         status: r.status,
-        verification_status: r.verification_status,
-        current_step: r.current_step,
+        verification_status: r.verificationStatus,
+        current_step: r.currentStep,
         doj: r.doj,
-        submitted_at: r.submitted_at,
-        updated_at: r.updated_at,
+        submitted_at: r.submittedAt?.toISOString() ?? null,
+        updated_at: r.updatedAt.toISOString(),
         docs_total: agg.total,
         docs_approved: agg.approved,
         docs_pending: agg.pending,
@@ -203,102 +178,102 @@ export const listOnboardingQueue = createServerFn({ method: "GET" })
 
 export const getOnboardingDetail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ onboarding_id: z.string().uuid() }).parse(d))
+  .validator((d: unknown) => z.object({ onboarding_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<OnboardingDetail> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const { data: rec, error } = await context.supabase
-      .from("onboarding_records")
-      .select("*")
-      .eq("id", data.onboarding_id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: data.onboarding_id },
+    });
     if (!rec) throw new Error("Onboarding not found");
 
-    const { data: app } = await context.supabase
-      .from("job_applications")
-      .select("email, full_name, role_id")
-      .eq("id", (rec as any).application_id)
-      .maybeSingle();
-    const { data: posting } = app
-      ? await context.supabase
-          .from("job_postings")
-          .select("job_code, required_onboarding_docs")
-          .eq("id", (app as any).role_id)
-          .maybeSingle()
-      : { data: null };
+    const app = await adminDb.jobApplication.findUnique({
+      where: { id: rec.applicationId },
+      select: { email: true, fullName: true, roleId: true },
+    });
+    const posting = app
+      ? await adminDb.jobPosting.findUnique({
+          where: { id: app.roleId },
+          select: { jobCode: true, requiredOnboardingDocs: true },
+        })
+      : null;
 
-    const { data: docs } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("*")
-      .eq("onboarding_id", data.onboarding_id)
-      .order("created_at", { ascending: true });
+    const docs = await adminDb.onboardingDocument.findMany({
+      where: { onboardingId: data.onboarding_id },
+      orderBy: { createdAt: "asc" },
+    });
 
-    // Signed URLs for HR review (private bucket, valid 15 minutes).
+    // Signed URLs for HR review (private bucket, valid 15 minutes) — R2
+    const { getStorage } = await import("@/lib/storage");
+    const storage = getStorage();
     const documents: OnboardingDocDetail[] = [];
-    for (const d of (docs ?? []) as any[]) {
+    for (const d of docs) {
       let signed: string | null = null;
       try {
-        const { data: s } = await context.supabase.storage
-          .from("onboarding-docs")
-          .createSignedUrl(d.storage_path, 60 * 15);
-        signed = s?.signedUrl ?? null;
+        const result = await storage.createSignedUrl("onboarding-docs", d.storagePath, 60 * 15);
+        signed = result.signedUrl;
       } catch {
         signed = null;
       }
       documents.push({
         id: d.id,
-        doc_key: d.doc_key,
-        status: d.status,
+        doc_key: d.docKey,
+        status: d.status as OnboardingDocDetail["status"],
         feedback: d.feedback,
-        storage_path: d.storage_path,
-        original_filename: d.original_filename,
-        reviewed_by: d.reviewed_by,
-        reviewed_at: d.reviewed_at,
-        created_at: d.created_at,
-        updated_at: d.updated_at,
+        storage_path: d.storagePath,
+        original_filename: d.originalFilename,
+        reviewed_by: d.reviewedBy,
+        reviewed_at: d.reviewedAt?.toISOString() ?? null,
+        created_at: d.createdAt.toISOString(),
+        updated_at: d.updatedAt.toISOString(),
         signed_url: signed,
       });
     }
 
-    const { data: audit } = await context.supabase
-      .from("audit_logs")
-      .select("id, timestamp, actor_email, action, target_resource, details")
-      .eq("target_resource", `onboarding_records/${data.onboarding_id}`)
-      .order("timestamp", { ascending: false })
-      .limit(200);
+    const auditRows = await adminDb.auditLog.findMany({
+      where: { targetResource: `onboarding_records/${data.onboarding_id}` },
+      orderBy: { timestamp: "desc" },
+      take: 200,
+    });
 
-    const r = rec as any;
     return {
       onboarding: {
-        id: r.id,
-        user_id: r.user_id,
-        application_id: r.application_id,
-        role_title: r.role_title,
-        department: r.department,
-        status: r.status,
-        verification_status: r.verification_status,
-        current_step: r.current_step,
-        doj: r.doj,
-        submitted_at: r.submitted_at,
-        emergency_contact: r.emergency_contact,
-        id_ack: r.id_ack,
-        code_of_conduct_ack: r.code_of_conduct_ack,
-        rejection_feedback: r.rejection_feedback,
-        verified_by: r.verified_by,
-        verified_at: r.verified_at,
-        form_state: r.form_state ?? null,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
+        id: rec.id,
+        user_id: rec.userId,
+        application_id: rec.applicationId,
+        role_title: rec.roleTitle,
+        department: rec.department,
+        status: rec.status,
+        verification_status: rec.verificationStatus,
+        current_step: rec.currentStep,
+        doj: rec.doj,
+        submitted_at: rec.submittedAt?.toISOString() ?? null,
+        emergency_contact: rec.emergencyContact,
+        id_ack: rec.idAck,
+        code_of_conduct_ack: rec.codeOfConductAck,
+        rejection_feedback: rec.rejectionFeedback,
+        verified_by: rec.verifiedBy,
+        verified_at: rec.verifiedAt?.toISOString() ?? null,
+        form_state: (rec.formState as Record<string, any>) ?? null,
+        created_at: rec.createdAt.toISOString(),
+        updated_at: rec.updatedAt.toISOString(),
       },
       candidate: {
-        email: (app as any)?.email ?? null,
-        full_name: (app as any)?.full_name ?? null,
-        job_code: (posting as any)?.job_code ?? null,
+        email: app?.email ?? null,
+        full_name: app?.fullName ?? null,
+        job_code: posting?.jobCode ?? null,
       },
-      required_docs: ((posting as any)?.required_onboarding_docs as string[] | null) ?? [],
+      required_docs: posting?.requiredOnboardingDocs ?? [],
       documents,
-      audit: (audit ?? []) as OnboardingAuditEntry[],
+      audit: auditRows.map((a) => ({
+        id: a.id,
+        timestamp: a.timestamp.toISOString(),
+        actor_email: a.actorEmail,
+        action: a.action,
+        target_resource: a.targetResource,
+        details: a.details,
+      })),
     };
   });
 
@@ -393,88 +368,83 @@ const reviewDocSchema = z.object({
 
 export const reviewOnboardingDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => reviewDocSchema.parse(d))
+  .validator((d: unknown) => reviewDocSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting a document.");
     }
+    const adminDb = getAdminDb();
 
-    const { data: doc } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("id, onboarding_id, user_id, doc_key, status")
-      .eq("id", data.document_id)
-      .maybeSingle();
+    const doc = await adminDb.onboardingDocument.findUnique({
+      where: { id: data.document_id },
+      select: { id: true, onboardingId: true, userId: true, docKey: true, status: true },
+    });
     if (!doc) throw new Error("Document not found");
 
-    const { error: upErr } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .update({
+    await adminDb.onboardingDocument.update({
+      where: { id: data.document_id },
+      data: {
         status: data.status,
         feedback: data.feedback ?? null,
-        reviewed_by: context.userId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", data.document_id);
-    if (upErr) throw new Error(upErr.message);
-
-    // Pull candidate info & role
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("id, application_id, role_title, user_id")
-      .eq("id", (doc as any).onboarding_id)
-      .maybeSingle();
-    const { data: app } = rec
-      ? await context.supabase
-          .from("job_applications")
-          .select("email, full_name")
-          .eq("id", (rec as any).application_id)
-          .maybeSingle()
-      : { data: null };
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Audit log
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actor_email: (context.claims as any)?.email ?? null,
-      action: "ONBOARDING_DOC_REVIEWED",
-      target_resource: `onboarding_records/${(doc as any).onboarding_id}`,
-      details: {
-        document_id: data.document_id,
-        doc_key: (doc as any).doc_key,
-        from: (doc as any).status,
-        to: data.status,
-        feedback: data.feedback ?? null,
-        candidate_email: (app as any)?.email ?? null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+        reviewedBy: context.userId,
+        reviewedAt: new Date(),
+      },
     });
 
-    // In-app notification + email
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: doc.onboardingId },
+      select: { id: true, applicationId: true, roleTitle: true, userId: true },
+    });
+    const app = rec
+      ? await adminDb.jobApplication.findUnique({
+          where: { id: rec.applicationId },
+          select: { email: true, fullName: true },
+        })
+      : null;
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "ONBOARDING_DOC_REVIEWED",
+        targetResource: `onboarding_records/${doc.onboardingId}`,
+        details: {
+          document_id: data.document_id,
+          doc_key: doc.docKey,
+          from: doc.status,
+          to: data.status,
+          feedback: data.feedback ?? null,
+          candidate_email: app?.email ?? null,
+        },
+      },
+    });
+
     const content = docStatusEmail(
-      (app as any)?.full_name ?? "",
-      (rec as any)?.role_title ?? "your role",
-      docLabel((doc as any).doc_key),
+      app?.fullName ?? "",
+      rec?.roleTitle ?? "your role",
+      docLabel(doc.docKey),
       data.status,
       data.feedback ?? null,
     );
 
-    if ((doc as any).user_id) {
-      await supabaseAdmin.from("in_app_notifications").insert({
-        user_id: (doc as any).user_id,
-        application_id: (rec as any)?.application_id ?? null,
-        title: content.inAppTitle,
-        body: content.inAppBody,
-        link: "/onboarding",
+    if (doc.userId) {
+      await adminDb.inAppNotification.create({
+        data: {
+          userId: doc.userId,
+          applicationId: rec?.applicationId ?? null,
+          title: content.inAppTitle,
+          body: content.inAppBody,
+          link: "/onboarding",
+        },
       });
     }
 
-    if ((app as any)?.email) {
+    if (app?.email) {
       try {
         const { sendResendEmail } = await import("@/lib/notifications.server");
         await sendResendEmail({
-          to: (app as any).email,
+          to: app.email,
           subject: data.email_subject?.trim() || content.subject,
           html: data.email_html?.trim() || content.html,
         });
@@ -492,7 +462,6 @@ const bulkReviewSchema = z.object({
   onboarding_ids: z.array(z.string().uuid()).min(1).max(100),
   status: z.enum(["approved", "changes_requested", "rejected"]),
   feedback: z.string().trim().max(1000).optional(),
-  // Restrict to pending docs by default; HR can override to also re-review changes/rejected.
   include_statuses: z
     .array(z.enum(["pending", "changes_requested", "rejected", "approved"]))
     .optional(),
@@ -500,114 +469,112 @@ const bulkReviewSchema = z.object({
 
 export const bulkReviewOnboardingDocuments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => bulkReviewSchema.parse(d))
+  .validator((d: unknown) => bulkReviewSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting.");
     }
+    const adminDb = getAdminDb();
     const targetStatuses = data.include_statuses ?? ["pending"];
 
-    const { data: docs } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("id, onboarding_id, user_id, doc_key, status")
-      .in("onboarding_id", data.onboarding_ids)
-      .in("status", targetStatuses);
+    const docs = await adminDb.onboardingDocument.findMany({
+      where: {
+        onboardingId: { in: data.onboarding_ids },
+        status: { in: targetStatuses },
+      },
+      select: { id: true, onboardingId: true, userId: true, docKey: true, status: true },
+    });
 
-    const rows = ((docs ?? []) as any[]).filter((d) => d.status !== data.status);
+    const rows = docs.filter((d) => d.status !== data.status);
     if (rows.length === 0) return { ok: true, reviewed: 0 };
 
-    // Pull candidate context for all affected onboardings (name/email/role) in one round-trip.
-    const onbIds = Array.from(new Set(rows.map((r) => r.onboarding_id)));
-    const { data: recs } = await context.supabase
-      .from("onboarding_records")
-      .select("id, application_id, role_title, user_id")
-      .in("id", onbIds);
-    const recMap = new Map(((recs ?? []) as any[]).map((r) => [r.id, r]));
-    const appIds = Array.from(
-      new Set(((recs ?? []) as any[]).map((r) => r.application_id).filter(Boolean)),
-    );
-    const { data: apps } = appIds.length
-      ? await context.supabase
-          .from("job_applications")
-          .select("id, email, full_name")
-          .in("id", appIds)
-      : { data: [] };
-    const appMap = new Map(((apps ?? []) as any[]).map((a) => [a.id, a]));
+    const onbIds = Array.from(new Set(rows.map((r) => r.onboardingId)));
+    const recs = await adminDb.onboardingRecord.findMany({
+      where: { id: { in: onbIds } },
+      select: { id: true, applicationId: true, roleTitle: true, userId: true },
+    });
+    const recMap = new Map(recs.map((r) => [r.id, r]));
 
-    const { error: upErr } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .update({
+    const appIds = Array.from(new Set(recs.map((r) => r.applicationId).filter(Boolean)));
+    const apps = appIds.length
+      ? await adminDb.jobApplication.findMany({
+          where: { id: { in: appIds } },
+          select: { id: true, email: true, fullName: true },
+        })
+      : [];
+    const appMap = new Map(apps.map((a) => [a.id, a]));
+
+    await adminDb.onboardingDocument.updateMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+      data: {
         status: data.status,
         feedback: data.feedback ?? null,
-        reviewed_by: context.userId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .in(
-        "id",
-        rows.map((r) => r.id),
-      );
-    if (upErr) throw new Error(upErr.message);
+        reviewedBy: context.userId,
+        reviewedAt: new Date(),
+      },
+    });
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { sendResendEmail } = await import("@/lib/notifications.server");
     const actorEmail = (context.claims as any)?.email ?? null;
 
-    // One audit entry per affected onboarding summarizing the bulk change.
-    const perOnb = new Map<string, any[]>();
+    const perOnb = new Map<string, typeof rows>();
     for (const r of rows) {
-      const arr = perOnb.get(r.onboarding_id) ?? [];
+      const arr = perOnb.get(r.onboardingId) ?? [];
       arr.push(r);
-      perOnb.set(r.onboarding_id, arr);
-    }
-    const auditPayload = Array.from(perOnb.entries()).map(([onbId, list]) => ({
-      actor_id: context.userId,
-      actor_email: actorEmail,
-      action: "ONBOARDING_DOCS_BULK_REVIEWED",
-      target_resource: `onboarding_records/${onbId}`,
-      details: {
-        to: data.status,
-        feedback: data.feedback ?? null,
-        document_ids: list.map((d) => d.id),
-        doc_keys: list.map((d) => d.doc_key),
-        candidate_email:
-          (appMap.get((recMap.get(onbId) as any)?.application_id) as any)?.email ?? null,
-      } as any,
-    }));
-    if (auditPayload.length > 0) {
-      await supabaseAdmin.from("audit_logs").insert(auditPayload);
+      perOnb.set(r.onboardingId, arr);
     }
 
-    // Notify + email each affected candidate (one grouped message per onboarding).
     for (const [onbId, list] of perOnb.entries()) {
-      const rec = recMap.get(onbId) as any;
+      await adminDb.auditLog.create({
+        data: {
+          actorId: context.userId,
+          actorEmail: actorEmail,
+          action: "ONBOARDING_DOCS_BULK_REVIEWED",
+          targetResource: `onboarding_records/${onbId}`,
+          details: {
+            to: data.status,
+            feedback: data.feedback ?? null,
+            document_ids: list.map((d) => d.id),
+            doc_keys: list.map((d) => d.docKey),
+            candidate_email:
+              appMap.get(recMap.get(onbId)?.applicationId ?? "")?.email ?? null,
+          },
+        },
+      });
+    }
+
+    const { sendResendEmail } = await import("@/lib/notifications.server");
+    for (const [onbId, list] of perOnb.entries()) {
+      const rec = recMap.get(onbId);
       if (!rec) continue;
-      const app = appMap.get(rec.application_id) as any;
+      const app = appMap.get(rec.applicationId);
       const label =
         data.status === "approved"
           ? "Approved"
           : data.status === "changes_requested"
             ? "Changes requested"
             : "Rejected";
-      const docNames = list.map((d) => docLabel(d.doc_key)).join(", ");
+      const docNames = list.map((d) => docLabel(d.docKey)).join(", ");
       const title = `Documents ${label.toLowerCase()}: ${docNames}`;
       const body = data.feedback
         ? `HR ${label.toLowerCase()} ${list.length} document${list.length > 1 ? "s" : ""}. ${data.feedback}`
         : `HR ${label.toLowerCase()} ${list.length} document${list.length > 1 ? "s" : ""}: ${docNames}.`;
 
-      if (rec.user_id) {
-        await supabaseAdmin.from("in_app_notifications").insert({
-          user_id: rec.user_id,
-          application_id: rec.application_id,
-          title,
-          body,
-          link: "/onboarding",
+      if (rec.userId) {
+        await adminDb.inAppNotification.create({
+          data: {
+            userId: rec.userId,
+            applicationId: rec.applicationId,
+            title,
+            body,
+            link: "/onboarding",
+          },
         });
       }
       if (app?.email) {
         const content = docStatusEmail(
-          app.full_name ?? "",
-          rec.role_title ?? "your role",
+          app.fullName ?? "",
+          rec.roleTitle ?? "your role",
           docNames,
           data.status,
           data.feedback ?? null,
@@ -630,11 +597,11 @@ const dojSchema = z.object({
 
 export const setOnboardingDoj = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => dojSchema.parse(d))
+  .validator((d: unknown) => dojSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    // Validate DOJ >= today (ignoring time zone drift by comparing yyyy-mm-dd strings)
     const today = new Date();
     const y = today.getUTCFullYear();
     const m = String(today.getUTCMonth() + 1).padStart(2, "0");
@@ -644,73 +611,96 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
       throw new Error("Date of Joining cannot be in the past.");
     }
 
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("id, application_id, role_title, user_id, doj, verification_status")
-      .eq("id", data.onboarding_id)
-      .maybeSingle();
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: data.onboarding_id },
+      select: {
+        id: true,
+        applicationId: true,
+        roleTitle: true,
+        userId: true,
+        doj: true,
+        verificationStatus: true,
+      },
+    });
     if (!rec) throw new Error("Onboarding not found");
-    if ((rec as any).verification_status !== "approved") {
+    if (rec.verificationStatus !== "approved") {
       throw new Error("Approve the candidate's paperwork before assigning a DOJ.");
     }
 
-    const priorDoj = (rec as any).doj as string | null;
-    const { error } = await context.supabase
-      .from("onboarding_records")
-      .update({ doj: data.doj })
-      .eq("id", data.onboarding_id);
-    if (error) throw new Error(error.message);
-
-    // Grant the correct staff role (employee/manager/hr) based on job track.
-    // HR-track finalization is admin-only (enforced inside the RPC).
-    const { error: roleErr } = await context.supabase.rpc("finalize_onboarding_role", {
-      _onboarding_id: data.onboarding_id,
+    const priorDoj = rec.doj;
+    await adminDb.onboardingRecord.update({
+      where: { id: data.onboarding_id },
+      data: { doj: data.doj },
     });
-    if (roleErr) {
-      // Do not swallow — HR should know the role grant failed even though DOJ was saved.
-      throw new Error(`DOJ saved, but role finalization failed: ${roleErr.message}`);
+
+    // Finalize role: determine track from job posting, grant appropriate staff role.
+    const app = await adminDb.jobApplication.findUnique({
+      where: { id: rec.applicationId },
+      select: { email: true, fullName: true, roleId: true },
+    });
+    const posting = app
+      ? await adminDb.jobPosting.findUnique({
+          where: { id: app.roleId },
+          select: { trackType: true },
+        })
+      : null;
+
+    const track = posting?.trackType ?? "standard";
+    // HR-track finalization is admin-only
+    if (track === "hr_track") {
+      const isAdmin = await context.db.withRLS((tx: any) =>
+        tx.userRole.count({ where: { userId: context.userId, role: "admin" } }),
+      );
+      if (isAdmin === 0) {
+        throw new Error("HR-track candidates must be finalized by an admin");
+      }
     }
+    const targetRole =
+      track === "hr_track" ? "hr" : track === "manager_track" ? "manager" : "employee";
 
-    const { data: app } = await context.supabase
-      .from("job_applications")
-      .select("email, full_name")
-      .eq("id", (rec as any).application_id)
-      .maybeSingle();
+    await adminDb.userRole.upsert({
+      where: { userId_role: { userId: rec.userId, role: targetRole as any } },
+      create: { userId: rec.userId, role: targetRole as any },
+      update: {},
+    });
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actor_email: (context.claims as any)?.email ?? null,
-      action: "ONBOARDING_DOJ_SET",
-      target_resource: `onboarding_records/${data.onboarding_id}`,
-      details: {
-        from: priorDoj,
-        to: data.doj,
-        candidate_email: (app as any)?.email ?? null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "ONBOARDING_DOJ_SET",
+        targetResource: `onboarding_records/${data.onboarding_id}`,
+        details: {
+          from: priorDoj,
+          to: data.doj,
+          candidate_email: app?.email ?? null,
+          role_granted: targetRole,
+          track,
+        },
+      },
     });
 
     const content = dojEmail(
-      (app as any)?.full_name ?? "",
-      (rec as any).role_title ?? "your role",
+      app?.fullName ?? "",
+      rec.roleTitle ?? "your role",
       data.doj,
     );
-    if ((rec as any).user_id) {
-      await supabaseAdmin.from("in_app_notifications").insert({
-        user_id: (rec as any).user_id,
-        application_id: (rec as any).application_id,
-        title: content.inAppTitle,
-        body: content.inAppBody,
-        link: "/employee",
+    if (rec.userId) {
+      await adminDb.inAppNotification.create({
+        data: {
+          userId: rec.userId,
+          applicationId: rec.applicationId,
+          title: content.inAppTitle,
+          body: content.inAppBody,
+          link: "/employee",
+        },
       });
     }
-    if ((app as any)?.email) {
+    if (app?.email) {
       try {
         const { sendResendEmail } = await import("@/lib/notifications.server");
         await sendResendEmail({
-          to: (app as any).email,
+          to: app.email,
           subject: content.subject,
           html: content.html,
         });
@@ -730,66 +720,65 @@ const verifSchema = z.object({
 
 export const setOnboardingVerification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => verifSchema.parse(d))
+  .validator((d: unknown) => verifSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting.");
     }
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("id, user_id, application_id, role_title, verification_status")
-      .eq("id", data.onboarding_id)
-      .maybeSingle();
+    const adminDb = getAdminDb();
+
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: data.onboarding_id },
+      select: { id: true, userId: true, applicationId: true, roleTitle: true, verificationStatus: true },
+    });
     if (!rec) throw new Error("Not found");
 
-    const { error } = await context.supabase
-      .from("onboarding_records")
-      .update({
-        verification_status: data.status,
-        rejection_feedback: data.status === "approved" ? null : (data.feedback ?? null),
-        verified_by: data.status === "approved" ? context.userId : null,
-        verified_at: data.status === "approved" ? new Date().toISOString() : null,
-      })
-      .eq("id", data.onboarding_id);
-    if (error) throw new Error(error.message);
-
-    const { data: app } = await context.supabase
-      .from("job_applications")
-      .select("email, full_name")
-      .eq("id", (rec as any).application_id)
-      .maybeSingle();
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actor_email: (context.claims as any)?.email ?? null,
-      action: "ONBOARDING_VERIFICATION_UPDATED",
-      target_resource: `onboarding_records/${data.onboarding_id}`,
-      details: {
-        from: (rec as any).verification_status,
-        to: data.status,
-        feedback: data.feedback ?? null,
-        candidate_email: (app as any)?.email ?? null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+    await adminDb.onboardingRecord.update({
+      where: { id: data.onboarding_id },
+      data: {
+        verificationStatus: data.status,
+        rejectionFeedback: data.status === "approved" ? null : (data.feedback ?? null),
+        verifiedBy: data.status === "approved" ? context.userId : null,
+        verifiedAt: data.status === "approved" ? new Date() : null,
+      },
     });
 
-    // In-app notification for candidate
-    if ((rec as any).user_id) {
+    const app = await adminDb.jobApplication.findUnique({
+      where: { id: rec.applicationId },
+      select: { email: true, fullName: true },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "ONBOARDING_VERIFICATION_UPDATED",
+        targetResource: `onboarding_records/${data.onboarding_id}`,
+        details: {
+          from: rec.verificationStatus,
+          to: data.status,
+          feedback: data.feedback ?? null,
+          candidate_email: app?.email ?? null,
+        },
+      },
+    });
+
+    if (rec.userId) {
       const label =
         data.status === "approved"
           ? "Approved"
           : data.status === "changes_requested"
             ? "Changes requested"
             : "Rejected";
-      await supabaseAdmin.from("in_app_notifications").insert({
-        user_id: (rec as any).user_id,
-        application_id: (rec as any).application_id,
-        title: `Onboarding paperwork: ${label}`,
-        body: data.feedback ?? `HR has ${label.toLowerCase()} your onboarding paperwork.`,
-        link: "/onboarding",
+      await adminDb.inAppNotification.create({
+        data: {
+          userId: rec.userId,
+          applicationId: rec.applicationId,
+          title: `Onboarding paperwork: ${label}`,
+          body: data.feedback ?? `HR has ${label.toLowerCase()} your onboarding paperwork.`,
+          link: "/onboarding",
+        },
       });
     }
     return { ok: true };
@@ -799,7 +788,7 @@ export const setOnboardingVerification = createServerFn({ method: "POST" })
 
 export const previewDocReviewEmail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         document_id: z.string().uuid(),
@@ -809,29 +798,30 @@ export const previewDocReviewEmail = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { data: doc } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("doc_key, onboarding_id")
-      .eq("id", data.document_id)
-      .maybeSingle();
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const doc = await adminDb.onboardingDocument.findUnique({
+      where: { id: data.document_id },
+      select: { docKey: true, onboardingId: true },
+    });
     if (!doc) throw new Error("Document not found");
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("application_id, role_title")
-      .eq("id", (doc as any).onboarding_id)
-      .maybeSingle();
-    const { data: app } = rec
-      ? await context.supabase
-          .from("job_applications")
-          .select("email, full_name")
-          .eq("id", (rec as any).application_id)
-          .maybeSingle()
-      : { data: null };
+
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: doc.onboardingId },
+      select: { applicationId: true, roleTitle: true },
+    });
+    const app = rec
+      ? await adminDb.jobApplication.findUnique({
+          where: { id: rec.applicationId },
+          select: { email: true, fullName: true },
+        })
+      : null;
+
     return docStatusEmail(
-      (app as any)?.full_name ?? "",
-      (rec as any)?.role_title ?? "your role",
-      docLabel((doc as any).doc_key),
+      app?.fullName ?? "",
+      rec?.roleTitle ?? "your role",
+      docLabel(doc.docKey),
       data.status,
       data.feedback ?? null,
     );
@@ -851,33 +841,43 @@ export type OnboardingDocVersion = {
 
 export const listDocumentVersions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({ onboarding_id: z.string().uuid(), doc_key: z.string().trim().min(1).max(60) })
       .parse(d),
   )
   .handler(async ({ data, context }): Promise<OnboardingDocVersion[]> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { data: rows } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select(
-        "id, version, status, feedback, original_filename, storage_path, created_at, superseded_at",
-      )
-      .eq("onboarding_id", data.onboarding_id)
-      .eq("doc_key", data.doc_key)
-      .order("version", { ascending: false });
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const rows = await adminDb.onboardingDocument.findMany({
+      where: { onboardingId: data.onboarding_id, docKey: data.doc_key },
+      orderBy: { version: "desc" },
+    });
+
+    // Signed URLs — R2
+    const { getStorage } = await import("@/lib/storage");
+    const storage = getStorage();
     const out: OnboardingDocVersion[] = [];
-    for (const r of (rows ?? []) as any[]) {
+    for (const r of rows) {
       let signed: string | null = null;
       try {
-        const { data: s } = await context.supabase.storage
-          .from("onboarding-docs")
-          .createSignedUrl(r.storage_path, 60 * 15);
-        signed = s?.signedUrl ?? null;
+        const result = await storage.createSignedUrl("onboarding-docs", r.storagePath, 60 * 15);
+        signed = result.signedUrl;
       } catch {
         signed = null;
       }
-      out.push({ ...r, signed_url: signed });
+      out.push({
+        id: r.id,
+        version: r.version,
+        status: r.status,
+        feedback: r.feedback,
+        original_filename: r.originalFilename,
+        storage_path: r.storagePath,
+        signed_url: signed,
+        created_at: r.createdAt.toISOString(),
+        superseded_at: r.supersededAt?.toISOString() ?? null,
+      });
     }
     return out;
   });

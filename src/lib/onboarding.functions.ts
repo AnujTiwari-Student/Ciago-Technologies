@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 import {
   CONDITIONAL_DOC_LABELS,
   computeDocRequirements,
@@ -33,7 +34,6 @@ export type OnboardingRecord = {
   rejection_feedback: string | null;
   verified_by: string | null;
   verified_at: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form_state: Record<string, any> | null;
   created_at: string;
   updated_at: string;
@@ -62,13 +62,11 @@ export type OnboardingOffer = {
   status: string;
   created_at: string;
   onboarding: OnboardingRecord | null;
-  /** Legacy: mandatory doc keys only. Use `doc_requirements` for the full list with optional docs. */
   required_docs: string[];
   doc_requirements: DocRequirement[];
   documents: OnboardingDocument[];
 };
 
-// Canonical labels for document keys HR can require on a posting.
 export const ONBOARDING_DOC_LABELS: Record<string, string> = {
   aadhaar: "Aadhaar Card",
   pan: "PAN Card",
@@ -95,65 +93,95 @@ export function docLabel(key: string): string {
   );
 }
 
-// Return the *latest* offered application for the signed-in user
+function toOnboardingRecord(r: any): OnboardingRecord {
+  return {
+    id: r.id,
+    user_id: r.userId,
+    application_id: r.applicationId,
+    role_title: r.roleTitle,
+    department: r.department,
+    start_date: r.startDate,
+    compensation_inr: r.compensationInr,
+    offer_accepted_at: r.offerAcceptedAt?.toISOString() ?? null,
+    offer_declined_at: r.offerDeclinedAt?.toISOString() ?? null,
+    emergency_contact: r.emergencyContact as OnboardingRecord["emergency_contact"],
+    id_ack: r.idAck,
+    code_of_conduct_ack: r.codeOfConductAck,
+    submitted_at: r.submittedAt?.toISOString() ?? null,
+    status: r.status as OnboardingRecord["status"],
+    doj: r.doj,
+    verification_status: r.verificationStatus as OnboardingRecord["verification_status"],
+    current_step: r.currentStep,
+    rejection_feedback: r.rejectionFeedback,
+    verified_by: r.verifiedBy,
+    verified_at: r.verifiedAt?.toISOString() ?? null,
+    form_state: (r.formState as Record<string, any>) ?? null,
+    created_at: r.createdAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
+  };
+}
+
+function toOnboardingDocument(d: any): OnboardingDocument {
+  return {
+    id: d.id,
+    onboarding_id: d.onboardingId,
+    user_id: d.userId,
+    doc_key: d.docKey,
+    storage_path: d.storagePath,
+    original_filename: d.originalFilename,
+    status: d.status as OnboardingDocument["status"],
+    feedback: d.feedback,
+    created_at: d.createdAt.toISOString(),
+    updated_at: d.updatedAt.toISOString(),
+  };
+}
 
 export const getMyOnboarding = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<OnboardingOffer | null> => {
-    const { data: app, error } = await context.supabase
-      .from("job_applications")
-      .select("id, role_id, role_title, status, created_at, is_soft_deleted")
-      .eq("user_id", context.userId)
-      .eq("status", "offered")
-      .eq("is_soft_deleted", false)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
+    const app = await context.db.withRLS((tx) =>
+      tx.jobApplication.findFirst({
+        where: { userId: context.userId, status: "offered", isSoftDeleted: false },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, roleId: true, roleTitle: true, status: true, createdAt: true },
+      }),
+    );
     if (!app) return null;
 
-    const { data: posting } = await context.supabase
-      .from("job_postings")
-      .select("job_code, department, required_onboarding_docs, employment_type, track_type")
-      .eq("id", app.role_id)
-      .maybeSingle();
+    const adminDb = getAdminDb();
+    const posting = await adminDb.jobPosting.findUnique({
+      where: { id: app.roleId },
+      select: { jobCode: true, department: true, requiredOnboardingDocs: true, employmentType: true, trackType: true },
+    });
 
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("*")
-      .eq("application_id", app.id)
-      .maybeSingle();
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { applicationId: app.id },
+    });
 
     let documents: OnboardingDocument[] = [];
     if (rec) {
-      const { data: docs } = await (context.supabase as any)
-        .from("onboarding_documents")
-        .select("*")
-        .eq("onboarding_id", (rec as any).id)
-        .is("superseded_at", null)
-        .order("created_at", { ascending: true });
-      documents = (docs ?? []) as OnboardingDocument[];
+      const docs = await adminDb.onboardingDocument.findMany({
+        where: { onboardingId: rec.id, supersededAt: null },
+        orderBy: { createdAt: "asc" },
+      });
+      documents = docs.map(toOnboardingDocument);
     }
 
-    const employmentType = ((posting as any)?.employment_type ?? null) as string | null;
-    const trackType = ((posting as any)?.track_type ?? null) as OnboardingOffer["track_type"];
-    const postingRequired = ((posting as any)?.required_onboarding_docs as string[] | null) ?? [
-      "aadhaar",
-      "pan",
-      "bank_details",
-    ];
+    const employmentType = posting?.employmentType ?? null;
+    const trackType = (posting?.trackType ?? null) as OnboardingOffer["track_type"];
+    const postingRequired = posting?.requiredOnboardingDocs ?? ["aadhaar", "pan", "bank_details"];
     const docRequirements = computeDocRequirements(employmentType, postingRequired);
 
     return {
       application_id: app.id,
-      role_title: app.role_title,
-      job_code: (posting as any)?.job_code ?? null,
-      department: (posting as any)?.department ?? null,
+      role_title: app.roleTitle,
+      job_code: posting?.jobCode ?? null,
+      department: posting?.department ?? null,
       employment_type: employmentType,
       track_type: trackType,
       status: app.status,
-      created_at: app.created_at,
-      onboarding: (rec as OnboardingRecord | null) ?? null,
+      created_at: app.createdAt.toISOString(),
+      onboarding: rec ? toOnboardingRecord(rec) : null,
       required_docs: docRequirements.filter((d) => d.mandatory).map((d) => d.key),
       doc_requirements: docRequirements,
       documents,
@@ -164,69 +192,74 @@ const acceptSchema = z.object({ application_id: z.string().uuid() });
 
 export const acceptOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => acceptSchema.parse(d))
+  .validator((d: unknown) => acceptSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { data: app, error } = await context.supabase
-      .from("job_applications")
-      .select("id, user_id, role_title, role_id, status")
-      .eq("id", data.application_id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!app || app.user_id !== context.userId) throw new Error("Not found");
+    const app = await context.db.withRLS((tx) =>
+      tx.jobApplication.findFirst({
+        where: { id: data.application_id, userId: context.userId },
+        select: { id: true, userId: true, roleTitle: true, roleId: true, status: true },
+      }),
+    );
+    if (!app) throw new Error("Not found");
     if (app.status !== "offered") throw new Error("Offer not available");
 
-    const { data: posting } = await context.supabase
-      .from("job_postings")
-      .select("department")
-      .eq("id", app.role_id)
-      .maybeSingle();
+    const adminDb = getAdminDb();
+    const posting = await adminDb.jobPosting.findUnique({
+      where: { id: app.roleId },
+      select: { department: true },
+    });
 
-    const { data: rec, error: upErr } = await context.supabase
-      .from("onboarding_records")
-      .upsert(
-        {
-          user_id: context.userId,
-          application_id: app.id,
-          role_title: app.role_title,
-          department: (posting as any)?.department ?? null,
-          status: "accepted",
-          offer_accepted_at: new Date().toISOString(),
-          offer_declined_at: null,
-          current_step: 2,
-        },
-        { onConflict: "application_id" },
-      )
-      .select("*")
-      .maybeSingle();
-    if (upErr) throw new Error(upErr.message);
-    return rec as OnboardingRecord;
+    const rec = await adminDb.onboardingRecord.upsert({
+      where: { applicationId: app.id },
+      create: {
+        userId: context.userId,
+        applicationId: app.id,
+        roleTitle: app.roleTitle,
+        department: posting?.department ?? null,
+        status: "accepted",
+        offerAcceptedAt: new Date(),
+        currentStep: 2,
+      },
+      update: {
+        status: "accepted",
+        offerAcceptedAt: new Date(),
+        offerDeclinedAt: null,
+        currentStep: 2,
+      },
+    });
+    return toOnboardingRecord(rec);
   });
 
 export const declineOffer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => acceptSchema.parse(d))
+  .validator((d: unknown) => acceptSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { data: app } = await context.supabase
-      .from("job_applications")
-      .select("id, user_id, role_title")
-      .eq("id", data.application_id)
-      .maybeSingle();
-    if (!app || (app as any).user_id !== context.userId) throw new Error("Not found");
-    const { error } = await context.supabase.from("onboarding_records").upsert(
-      {
-        user_id: context.userId,
-        application_id: (app as any).id,
-        role_title: (app as any).role_title,
-        status: "declined",
-        offer_declined_at: new Date().toISOString(),
-      },
-      { onConflict: "application_id" },
+    const app = await context.db.withRLS((tx) =>
+      tx.jobApplication.findFirst({
+        where: { id: data.application_id, userId: context.userId },
+        select: { id: true, roleTitle: true },
+      }),
     );
-    if (error) throw new Error(error.message);
+    if (!app) throw new Error("Not found");
+
+    const adminDb = getAdminDb();
+    await adminDb.onboardingRecord.upsert({
+      where: { applicationId: app.id },
+      create: {
+        userId: context.userId,
+        applicationId: app.id,
+        roleTitle: app.roleTitle,
+        status: "declined",
+        offerDeclinedAt: new Date(),
+      },
+      update: {
+        status: "declined",
+        offerDeclinedAt: new Date(),
+      },
+    });
     return { ok: true };
   });
 
-// Auto-save partial wizard state (called from onChange, debounced client-side).
 const draftSchema = z.object({
   onboarding_id: z.string().uuid(),
   form_state: z.record(z.string(), z.any()).optional(),
@@ -244,22 +277,22 @@ const draftSchema = z.object({
 
 export const saveOnboardingDraft = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => draftSchema.parse(d))
+  .validator((d: unknown) => draftSchema.parse(d))
   .handler(async ({ data, context }) => {
     const patch: Record<string, unknown> = {};
-    if (data.form_state !== undefined) patch.form_state = data.form_state;
-    if (data.emergency_contact !== undefined) patch.emergency_contact = data.emergency_contact;
-    if (data.id_ack !== undefined) patch.id_ack = data.id_ack;
-    if (data.code_of_conduct_ack !== undefined)
-      patch.code_of_conduct_ack = data.code_of_conduct_ack;
-    if (data.current_step !== undefined) patch.current_step = data.current_step;
+    if (data.form_state !== undefined) patch.formState = data.form_state;
+    if (data.emergency_contact !== undefined) patch.emergencyContact = data.emergency_contact;
+    if (data.id_ack !== undefined) patch.idAck = data.id_ack;
+    if (data.code_of_conduct_ack !== undefined) patch.codeOfConductAck = data.code_of_conduct_ack;
+    if (data.current_step !== undefined) patch.currentStep = data.current_step;
     if (Object.keys(patch).length === 0) return { ok: true };
-    const { error } = await (context.supabase as any)
-      .from("onboarding_records")
-      .update(patch)
-      .eq("id", data.onboarding_id)
-      .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
+
+    await context.db.withRLS((tx) =>
+      tx.onboardingRecord.updateMany({
+        where: { id: data.onboarding_id, userId: context.userId },
+        data: patch,
+      }),
+    );
     return { ok: true };
   });
 
@@ -276,26 +309,25 @@ const paperworkSchema = z.object({
 
 export const savePaperwork = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => paperworkSchema.parse(d))
+  .validator((d: unknown) => paperworkSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("onboarding_records")
-      .update({
-        emergency_contact: data.emergency_contact,
-        id_ack: data.id_ack,
-        code_of_conduct_ack: data.code_of_conduct_ack,
-        current_step: 3,
-      })
-      .eq("id", data.onboarding_id)
-      .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
+    await context.db.withRLS((tx) =>
+      tx.onboardingRecord.updateMany({
+        where: { id: data.onboarding_id, userId: context.userId },
+        data: {
+          emergencyContact: data.emergency_contact,
+          idAck: data.id_ack,
+          codeOfConductAck: data.code_of_conduct_ack,
+          currentStep: 3,
+        },
+      }),
+    );
     return { ok: true };
   });
 
-// Persist the wizard's current step so users can resume where they left off.
 export const updateOnboardingStep = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         onboarding_id: z.string().uuid(),
@@ -304,16 +336,15 @@ export const updateOnboardingStep = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("onboarding_records")
-      .update({ current_step: data.current_step })
-      .eq("id", data.onboarding_id)
-      .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
+    await context.db.withRLS((tx) =>
+      tx.onboardingRecord.updateMany({
+        where: { id: data.onboarding_id, userId: context.userId },
+        data: { currentStep: data.current_step },
+      }),
+    );
     return { ok: true };
   });
 
-// Record a document that was just uploaded to storage into onboarding_documents.
 const recordDocSchema = z.object({
   onboarding_id: z.string().uuid(),
   doc_key: z.string().trim().min(1).max(60),
@@ -323,69 +354,66 @@ const recordDocSchema = z.object({
 
 export const recordUploadedDoc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => recordDocSchema.parse(d))
+  .validator((d: unknown) => recordDocSchema.parse(d))
   .handler(async ({ data, context }) => {
-    // Verify onboarding row belongs to caller
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("id, user_id")
-      .eq("id", data.onboarding_id)
-      .maybeSingle();
-    if (!rec || (rec as any).user_id !== context.userId) throw new Error("Not found");
+    const rec = await context.db.withRLS((tx) =>
+      tx.onboardingRecord.findFirst({
+        where: { id: data.onboarding_id, userId: context.userId },
+        select: { id: true },
+      }),
+    );
+    if (!rec) throw new Error("Not found");
 
-    // Versioning: mark any current version as superseded (keep the file + row for HR history).
-    const { data: existing } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("id, version")
-      .eq("onboarding_id", data.onboarding_id)
-      .eq("doc_key", data.doc_key)
-      .is("superseded_at", null)
-      .maybeSingle();
-    const nextVersion = existing ? ((existing as any).version ?? 1) + 1 : 1;
+    const adminDb = getAdminDb();
+
+    const existing = await adminDb.onboardingDocument.findFirst({
+      where: { onboardingId: data.onboarding_id, docKey: data.doc_key, supersededAt: null },
+      select: { id: true, version: true },
+    });
+    const nextVersion = existing ? (existing.version ?? 1) + 1 : 1;
     if (existing) {
-      await (context.supabase as any)
-        .from("onboarding_documents")
-        .update({ superseded_at: new Date().toISOString() })
-        .eq("id", (existing as any).id);
+      await adminDb.onboardingDocument.update({
+        where: { id: existing.id },
+        data: { supersededAt: new Date() },
+      });
     }
 
-    const { data: row, error } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .insert({
-        user_id: context.userId,
-        onboarding_id: data.onboarding_id,
-        doc_key: data.doc_key,
-        storage_path: data.storage_path,
-        original_filename: data.original_filename ?? null,
+    const row = await adminDb.onboardingDocument.create({
+      data: {
+        userId: context.userId,
+        onboardingId: data.onboarding_id,
+        docKey: data.doc_key,
+        storagePath: data.storage_path,
+        originalFilename: data.original_filename ?? null,
         status: "pending",
         feedback: null,
         version: nextVersion,
-      })
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return row as OnboardingDocument;
+      },
+    });
+    return toOnboardingDocument(row);
   });
 
 export const deleteUploadedDoc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: doc } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .select("id, user_id, storage_path, status")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (!doc || (doc as any).user_id !== context.userId) throw new Error("Not found");
-    if (!["pending", "changes_requested"].includes((doc as any).status)) {
+    const adminDb = getAdminDb();
+
+    const doc = await adminDb.onboardingDocument.findUnique({
+      where: { id: data.id },
+      select: { id: true, userId: true, storagePath: true, status: true },
+    });
+    if (!doc || doc.userId !== context.userId) throw new Error("Not found");
+    if (!["pending", "changes_requested"].includes(doc.status)) {
       throw new Error("This document is locked by HR and can no longer be replaced.");
     }
-    await context.supabase.storage.from("onboarding-docs").remove([(doc as any).storage_path]);
-    const { error } = await (context.supabase as any)
-      .from("onboarding_documents")
-      .delete()
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+
+    // Storage: delete from R2
+    const { getStorage } = await import("@/lib/storage");
+    const storage = getStorage();
+    await storage.remove("onboarding-docs", [doc.storagePath]);
+
+    await adminDb.onboardingDocument.delete({ where: { id: data.id } });
     return { ok: true };
   });
 
@@ -393,38 +421,44 @@ const submitSchema = z.object({ onboarding_id: z.string().uuid() });
 
 export const submitOnboarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => submitSchema.parse(d))
+  .validator((d: unknown) => submitSchema.parse(d))
   .handler(async ({ data, context }) => {
-    // Verify every required document is uploaded before allowing submission.
-    const { data: rec } = await context.supabase
-      .from("onboarding_records")
-      .select("id, user_id, application_id")
-      .eq("id", data.onboarding_id)
-      .maybeSingle();
-    if (!rec || (rec as any).user_id !== context.userId) throw new Error("Not found");
+    const rec = await context.db.withRLS((tx) =>
+      tx.onboardingRecord.findFirst({
+        where: { id: data.onboarding_id, userId: context.userId },
+        select: { id: true, applicationId: true, emergencyContact: true, idAck: true, codeOfConductAck: true, status: true },
+      }),
+    );
+    if (!rec) throw new Error("Not found");
+    if (rec.status === "declined") throw new Error("Offer already declined");
+    if (!rec.emergencyContact || !rec.idAck || !rec.codeOfConductAck) {
+      throw new Error("Onboarding paperwork incomplete");
+    }
 
-    const { data: app } = await context.supabase
-      .from("job_applications")
-      .select("role_id")
-      .eq("id", (rec as any).application_id)
-      .maybeSingle();
-    const { data: posting } = await context.supabase
-      .from("job_postings")
-      .select("required_onboarding_docs, employment_type")
-      .eq("id", (app as any)?.role_id)
-      .maybeSingle();
+    const adminDb = getAdminDb();
+
+    const app = await adminDb.jobApplication.findUnique({
+      where: { id: rec.applicationId },
+      select: { roleId: true },
+    });
+    const posting = app
+      ? await adminDb.jobPosting.findUnique({
+          where: { id: app.roleId },
+          select: { requiredOnboardingDocs: true, employmentType: true },
+        })
+      : null;
+
     const required: string[] = mandatoryDocKeys(
-      (posting as any)?.employment_type ?? null,
-      ((posting as any)?.required_onboarding_docs as string[] | null) ?? [],
+      posting?.employmentType ?? null,
+      posting?.requiredOnboardingDocs ?? [],
     );
 
     if (required.length > 0) {
-      const { data: docs } = await (context.supabase as any)
-        .from("onboarding_documents")
-        .select("doc_key")
-        .eq("onboarding_id", data.onboarding_id)
-        .is("superseded_at", null);
-      const have = new Set(((docs ?? []) as any[]).map((d) => d.doc_key));
+      const docs = await adminDb.onboardingDocument.findMany({
+        where: { onboardingId: data.onboarding_id, supersededAt: null },
+        select: { docKey: true },
+      });
+      const have = new Set(docs.map((d) => d.docKey));
       const missing = required.filter((k) => !have.has(k));
       if (missing.length > 0) {
         throw new Error(
@@ -433,20 +467,17 @@ export const submitOnboarding = createServerFn({ method: "POST" })
       }
     }
 
-    // SECURITY DEFINER RPC validates paperwork and marks the record as submitted.
-    // It does NOT grant any staff role — HR must approve documents AND set a DOJ
-    // before `finalize_onboarding_role` grants the appropriate role.
-    const { error } = await context.supabase.rpc("complete_onboarding", {
-      _onboarding_id: data.onboarding_id,
-    });
-    if (error) throw new Error(error.message);
-
-    // Mark verification as pending (HR still needs to review documents & set DOJ).
-    await context.supabase
-      .from("onboarding_records")
-      .update({ verification_status: "pending", current_step: 4 })
-      .eq("id", data.onboarding_id)
-      .eq("user_id", context.userId);
+    await context.db.withRLS((tx) =>
+      tx.onboardingRecord.updateMany({
+        where: { id: data.onboarding_id, userId: context.userId },
+        data: {
+          status: "submitted",
+          submittedAt: new Date(),
+          verificationStatus: "pending",
+          currentStep: 4,
+        },
+      }),
+    );
 
     return { ok: true };
   });

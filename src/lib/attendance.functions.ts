@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type AttendanceRecord = {
   id: string;
@@ -24,58 +25,68 @@ export const checkInToday = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date().toISOString();
-    const { data, error } = await context.supabase
-      .from("attendance_records")
-      .upsert(
-        { user_id: context.userId, work_date: today, check_in: now, status: "present" },
-        { onConflict: "user_id,work_date", ignoreDuplicates: false },
-      )
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return data as AttendanceRecord;
+    const row = await context.db.withRLS((tx) =>
+      tx.attendanceRecord.upsert({
+        where: { id: "00000000-0000-0000-0000-000000000000" },
+        create: {
+          userId: context.userId,
+          workDate: today,
+          checkIn: now,
+          status: "present",
+        },
+        update: {
+          checkIn: now,
+          status: "present",
+        },
+      }),
+    );
+    return row as unknown as AttendanceRecord;
   });
 
 export const checkOutToday = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const today = new Date().toISOString().slice(0, 10);
-    const { data: existing } = await context.supabase
-      .from("attendance_records")
-      .select("*")
-      .eq("user_id", context.userId)
-      .eq("work_date", today)
-      .maybeSingle();
-    if (!existing || !existing.check_in) throw new Error("You have not checked in today.");
+    const existing = await context.db.withRLS((tx) =>
+      tx.attendanceRecord.findFirst({
+        where: { userId: context.userId, workDate: today },
+      }),
+    );
+    if (!existing || !existing.checkIn) throw new Error("You have not checked in today.");
     const now = new Date();
-    const hours = Math.max(0, (now.getTime() - new Date(existing.check_in).getTime()) / 3_600_000);
-    const { data, error } = await context.supabase
-      .from("attendance_records")
-      .update({ check_out: now.toISOString(), hours: Number(hours.toFixed(2)) })
-      .eq("id", existing.id)
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return data as AttendanceRecord;
+    const hours = Math.max(0, (now.getTime() - new Date(existing.checkIn).getTime()) / 3_600_000);
+    const row = await context.db.withRLS((tx) =>
+      tx.attendanceRecord.update({
+        where: { id: existing.id },
+        data: { checkOut: now.toISOString(), hours: Number(hours.toFixed(2)) },
+      }),
+    );
+    return row as unknown as AttendanceRecord;
   });
 
 export const listMyAttendance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) =>
+  .validator((d: any) =>
     z.object({ from: isoDate.optional(), to: isoDate.optional() }).parse(d ?? {}),
   )
   .handler(async ({ data, context }): Promise<AttendanceRecord[]> => {
-    let q = context.supabase.from("attendance_records").select("*").eq("user_id", context.userId);
-    if (data.from) q = q.gte("work_date", data.from);
-    if (data.to) q = q.lte("work_date", data.to);
-    const { data: rows, error } = await q.order("work_date", { ascending: false }).limit(400);
-    if (error) throw new Error(error.message);
-    return (rows ?? []) as AttendanceRecord[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.attendanceRecord.findMany({
+        where: {
+          userId: context.userId,
+          ...(data.from && { workDate: { gte: data.from } }),
+          ...(data.to && { workDate: { lte: data.to } }),
+        },
+        orderBy: { workDate: "desc" },
+        take: 400,
+      }),
+    );
+    return rows as unknown as AttendanceRecord[];
   });
 
 export const requestRegularization = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) =>
+  .validator((d: any) =>
     z
       .object({
         work_date: isoDate,
@@ -84,26 +95,27 @@ export const requestRegularization = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { data: row, error } = await context.supabase
-      .from("attendance_records")
-      .upsert(
-        {
-          user_id: context.userId,
-          work_date: data.work_date,
+    const row = await context.db.withRLS((tx) =>
+      tx.attendanceRecord.upsert({
+        where: { id: "00000000-0000-0000-0000-000000000000" },
+        create: {
+          userId: context.userId,
+          workDate: data.work_date,
           status: "pending_regularization",
-          regularization_reason: data.reason,
+          regularizationReason: data.reason,
         },
-        { onConflict: "user_id,work_date", ignoreDuplicates: false },
-      )
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return row as AttendanceRecord;
+        update: {
+          status: "pending_regularization",
+          regularizationReason: data.reason,
+        },
+      }),
+    );
+    return row as unknown as AttendanceRecord;
   });
 
 export const decideRegularization = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) =>
+  .validator((d: any) =>
     z
       .object({
         id: z.string().uuid(),
@@ -112,42 +124,46 @@ export const decideRegularization = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { data: row, error } = await context.supabase
-      .from("attendance_records")
-      .update({
+    const adminDb = getAdminDb();
+    const row = await adminDb.attendanceRecord.update({
+      where: { id: data.id },
+      data: {
         status: data.approve ? "regularized" : "absent",
-        regularized_by: context.userId,
-        regularized_at: new Date().toISOString(),
-      })
-      .eq("id", data.id)
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return row as AttendanceRecord;
+        regularizedBy: context.userId,
+        regularizedAt: new Date(),
+      },
+    });
+    return row as unknown as AttendanceRecord;
   });
 
 export const listPendingRegularizations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: rows, error } = await context.supabase
-      .from("attendance_records")
-      .select("*")
-      .eq("status", "pending_regularization")
-      .order("work_date", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    const ids = Array.from(new Set((rows ?? []).map((r: any) => r.user_id)));
-    let byId = new Map<string, any>();
+    const adminDb = getAdminDb();
+    const rows = await adminDb.attendanceRecord.findMany({
+      where: { status: "pending_regularization" },
+      orderBy: { workDate: "desc" },
+      take: 200,
+    });
+    const ids = Array.from(new Set(rows.map((r) => r.userId)));
+    let profileMap = new Map<string, string | null>();
     if (ids.length) {
-      const { data: profiles } = await context.supabase
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", ids);
-      byId = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
+      const profiles = await adminDb.profile.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, fullName: true },
+      });
+      profileMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
     }
-    return (rows ?? []).map((r: any) => ({
-      ...r,
-      applicant_name: byId.get(r.user_id)?.full_name ?? null,
+    return rows.map((r) => ({
+      id: r.id,
+      user_id: r.userId,
+      work_date: r.workDate,
+      check_in: r.checkIn,
+      check_out: r.checkOut,
+      hours: r.hours,
+      status: r.status,
+      regularization_reason: r.regularizationReason,
+      applicant_name: profileMap.get(r.userId) ?? null,
       applicant_email: null,
     }));
   });

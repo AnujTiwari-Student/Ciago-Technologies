@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 import { computeSalarySlip } from "@/lib/payroll-utils";
 
 export type SalaryStructure = {
@@ -38,46 +39,41 @@ export type SalarySlip = {
   updated_at: string;
 };
 
-async function requireHr(context: any) {
-  const { data } = await context.supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", context.userId);
-  const roles = new Set((data ?? []).map((r: any) => r.role));
-  if (!roles.has("hr") && !roles.has("admin")) throw new Error("Forbidden");
+async function requireHr(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["hr", "admin"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export const getMySalaryStructure = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<SalaryStructure | null> => {
-    const { data, error } = await context.supabase
-      .from("salary_structures")
-      .select("*")
-      .eq("user_id", context.userId)
-      .order("effective_from", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return (data ?? null) as SalaryStructure | null;
+    const row = await context.db.withRLS((tx) =>
+      tx.salaryStructure.findFirst({
+        where: { userId: context.userId },
+        orderBy: { effectiveFrom: "desc" },
+      }),
+    );
+    return (row as unknown as SalaryStructure) ?? null;
   });
 
 export const listMySalarySlips = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<SalarySlip[]> => {
-    const { data, error } = await context.supabase
-      .from("salary_slips")
-      .select("*")
-      .eq("user_id", context.userId)
-      .order("period_year", { ascending: false })
-      .order("period_month", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as SalarySlip[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.salarySlip.findMany({
+        where: { userId: context.userId },
+        orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+      }),
+    );
+    return rows as unknown as SalarySlip[];
   });
 
 // ============ HR / Admin ============
 export const upsertSalaryStructure = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) =>
+  .validator((d: any) =>
     z
       .object({
         user_id: z.string().uuid(),
@@ -92,19 +88,27 @@ export const upsertSalaryStructure = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    await requireHr(context);
-    const { data: row, error } = await context.supabase
-      .from("salary_structures")
-      .insert({ ...data, created_by: context.userId })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return row as SalaryStructure;
+    await requireHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+    const row = await adminDb.salaryStructure.create({
+      data: {
+        userId: data.user_id,
+        ctcAnnualInr: data.ctc_annual_inr,
+        basicMonthly: data.basic_monthly,
+        hraMonthly: data.hra_monthly,
+        specialMonthly: data.special_monthly,
+        pfEmployeeMonthly: data.pf_employee_monthly,
+        ptMonthly: data.pt_monthly,
+        effectiveFrom: new Date(data.effective_from),
+        createdBy: context.userId,
+      },
+    });
+    return row as unknown as SalaryStructure;
   });
 
 export const generateSalarySlip = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) =>
+  .validator((d: any) =>
     z
       .object({
         user_id: z.string().uuid(),
@@ -117,81 +121,98 @@ export const generateSalarySlip = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    await requireHr(context);
-    const { data: structure } = await context.supabase
-      .from("salary_structures")
-      .select("*")
-      .eq("user_id", data.user_id)
-      .order("effective_from", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    await requireHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const structure = await adminDb.salaryStructure.findFirst({
+      where: { userId: data.user_id },
+      orderBy: { effectiveFrom: "desc" },
+    });
     if (!structure) throw new Error("No salary structure set for this employee.");
 
     const { basic, hra, special, gross, pf, pt, total_deductions, net_pay } = computeSalarySlip(
-      structure,
+      {
+        basic_monthly: structure.basicMonthly,
+        hra_monthly: structure.hraMonthly,
+        special_monthly: structure.specialMonthly,
+        pf_employee_monthly: structure.pfEmployeeMonthly,
+        pt_monthly: structure.ptMonthly,
+      },
       { working_days: data.working_days, lwp_days: data.lwp_days, tds: data.tds },
     );
 
-    const { data: row, error } = await context.supabase
-      .from("salary_slips")
-      .upsert(
-        {
-          user_id: data.user_id,
-          period_month: data.period_month,
-          period_year: data.period_year,
-          working_days: data.working_days,
-          lwp_days: data.lwp_days,
-          basic,
-          hra,
-          special,
-          gross,
-          pf_employee: pf,
-          pt,
-          tds: data.tds,
-          total_deductions,
-          net_pay,
-          generated_by: context.userId,
-        },
-        { onConflict: "user_id,period_year,period_month" },
-      )
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return row as SalarySlip;
+    const row = await adminDb.salarySlip.upsert({
+      where: {
+        id: "00000000-0000-0000-0000-000000000000",
+      },
+      create: {
+        userId: data.user_id,
+        periodMonth: data.period_month,
+        periodYear: data.period_year,
+        workingDays: data.working_days,
+        lwpDays: data.lwp_days,
+        basic,
+        hra,
+        special,
+        gross,
+        pfEmployee: pf,
+        pt,
+        tds: data.tds,
+        totalDeductions: total_deductions,
+        netPay: net_pay,
+        generatedBy: context.userId,
+      },
+      update: {
+        workingDays: data.working_days,
+        lwpDays: data.lwp_days,
+        basic,
+        hra,
+        special,
+        gross,
+        pfEmployee: pf,
+        pt,
+        tds: data.tds,
+        totalDeductions: total_deductions,
+        netPay: net_pay,
+        generatedBy: context.userId,
+      },
+    });
+    return row as unknown as SalarySlip;
   });
 
 export const listEmployeeDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireHr(context);
-    const { data: roles } = await context.supabase
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["employee", "manager", "hr", "admin"]);
-    const ids = Array.from(new Set((roles ?? []).map((r: any) => r.user_id)));
+    await requireHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const roles = await adminDb.userRole.findMany({
+      where: { role: { in: ["employee", "manager", "hr", "admin"] } },
+      select: { userId: true },
+    });
+    const ids = Array.from(new Set(roles.map((r) => r.userId)));
     if (!ids.length) return [];
-    const { data: profiles } = await context.supabase
-      .from("profiles")
-      .select("user_id, full_name")
-      .in("user_id", ids);
-    return ((profiles ?? []) as any[]).map((p) => ({
-      id: p.user_id as string,
-      full_name: (p.full_name as string | null) ?? null,
+
+    const profiles = await adminDb.profile.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true, fullName: true },
+    });
+    return profiles.map((p) => ({
+      id: p.userId,
+      full_name: p.fullName ?? null,
       email: null as string | null,
     }));
   });
 
 export const listSalarySlipsForUser = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .validator((d: any) => z.object({ user_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<SalarySlip[]> => {
-    await requireHr(context);
-    const { data: rows, error } = await context.supabase
-      .from("salary_slips")
-      .select("*")
-      .eq("user_id", data.user_id)
-      .order("period_year", { ascending: false })
-      .order("period_month", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (rows ?? []) as SalarySlip[];
+    await requireHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+    const rows = await adminDb.salarySlip.findMany({
+      where: { userId: data.user_id },
+      orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+    });
+    return rows as unknown as SalarySlip[];
   });

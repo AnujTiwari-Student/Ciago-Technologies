@@ -1,26 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
-/**
- * HR internal task manager — dedicated to HR/admin duty tracking
- * (offer-letter drafts, verifications, payroll cutoffs, etc.).
- * Reuses `employee_tasks` with a fixed `project_reference` marker so
- * these do not mix with candidate/employee work items.
- */
 const HR_MARKER = "HR_INTERNAL";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getRoles(supabase: any, userId: string): Promise<Set<string>> {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  return new Set((data ?? []).map((r: { role: string }) => r.role));
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function assertHrOrAdmin(supabase: any, userId: string) {
-  const roles = await getRoles(supabase, userId);
-  if (!roles.has("hr") && !roles.has("admin")) throw new Error("Forbidden");
-  return roles;
+async function assertHrOrAdmin(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["hr", "admin"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export type HrTask = {
@@ -43,63 +32,72 @@ export type HrPeer = { id: string; full_name: string | null; email: string | nul
 export const listHrPeers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<HrPeer[]> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: roles } = await supabaseAdmin
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["hr", "admin"]);
-    const ids = Array.from(new Set((roles ?? []).map((r) => r.user_id as string)));
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const roles = await adminDb.userRole.findMany({
+      where: { role: { in: ["hr", "admin"] } },
+      select: { userId: true },
+    });
+    const ids = Array.from(new Set(roles.map((r) => r.userId)));
     if (ids.length === 0) return [];
-    const { data: profiles } = await supabaseAdmin
-      .from("profiles")
-      .select("user_id, full_name")
-      .in("user_id", ids);
-    const nameMap = new Map<string, string | null>();
-    (profiles ?? []).forEach((p) =>
-      nameMap.set(p.user_id as string, (p.full_name as string) ?? null),
-    );
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    const emailMap = new Map<string, string | null>();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (usersData?.users ?? []).forEach((u: any) => emailMap.set(u.id, u.email ?? null));
+
+    const [profiles, mappings] = await Promise.all([
+      adminDb.profile.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, fullName: true },
+      }),
+      adminDb.clerkUserMap.findMany({
+        where: { authUserId: { in: ids } },
+        select: { authUserId: true, email: true },
+      }),
+    ]);
+
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
+    const emailMap = new Map(mappings.map((m) => [m.authUserId, m.email]));
+
     return ids
-      .map((id) => ({ id, full_name: nameMap.get(id) ?? null, email: emailMap.get(id) ?? null }))
+      .map((id) => ({
+        id,
+        full_name: nameMap.get(id) ?? null,
+        email: emailMap.get(id) ?? null,
+      }))
       .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""));
   });
 
 export const listHrTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<HrTask[]> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("employee_tasks")
-      .select("*")
-      .eq("project_reference", HR_MARKER)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
-    const ids = Array.from(new Set(rows.map((r) => r.assignee_id as string)));
-    const nameMap = new Map<string, string | null>();
-    const emailMap = new Map<string, string | null>();
-    if (ids.length > 0) {
-      const { data: profiles } = await supabaseAdmin
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", ids);
-      (profiles ?? []).forEach((p) =>
-        nameMap.set(p.user_id as string, (p.full_name as string) ?? null),
-      );
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (usersData?.users ?? []).forEach((u: any) => emailMap.set(u.id, u.email ?? null));
-    }
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const rows = await adminDb.employeeTask.findMany({
+      where: { projectReference: HR_MARKER },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const ids = Array.from(new Set(rows.map((r) => r.assigneeId)));
+    const [profiles, mappings] = ids.length
+      ? await Promise.all([
+          adminDb.profile.findMany({
+            where: { userId: { in: ids } },
+            select: { userId: true, fullName: true },
+          }),
+          adminDb.clerkUserMap.findMany({
+            where: { authUserId: { in: ids } },
+            select: { authUserId: true, email: true },
+          }),
+        ])
+      : [[], []];
+
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
+    const emailMap = new Map(mappings.map((m) => [m.authUserId, m.email]));
+
     return rows.map((r) => ({
       ...(r as unknown as HrTask),
-      assignee_name: nameMap.get(r.assignee_id as string) ?? null,
-      assignee_email: emailMap.get(r.assignee_id as string) ?? null,
+      assignee_name: nameMap.get(r.assigneeId) ?? null,
+      assignee_email: emailMap.get(r.assigneeId) ?? null,
     }));
   });
 
@@ -113,51 +111,51 @@ const createSchema = z.object({
 
 export const createHrTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => createSchema.parse(d))
+  .validator((d: unknown) => createSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Assignee must also be HR/admin — reject cross-role tasks.
-    const { data: roleRows } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.assignee_id);
-    const roles = new Set((roleRows ?? []).map((r) => r.role as string));
-    if (!roles.has("hr") && !roles.has("admin")) {
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const roleCount = await adminDb.userRole.count({
+      where: { userId: data.assignee_id, role: { in: ["hr", "admin"] } },
+    });
+    if (roleCount === 0) {
       throw new Error("HR tasks may only be assigned to HR or admin users.");
     }
-    const { data: row, error } = await supabaseAdmin
-      .from("employee_tasks")
-      .insert({
-        assignee_id: data.assignee_id,
+
+    const row = await adminDb.employeeTask.create({
+      data: {
+        assigneeId: data.assignee_id,
         title: data.title,
         description: data.description ?? null,
         priority: data.priority,
-        due_date: data.due_date || null,
-        project_reference: HR_MARKER,
-        assigned_by: context.userId,
+        dueDate: data.due_date || null,
+        projectReference: HR_MARKER,
+        assignedBy: context.userId,
         status: "to_do",
-      })
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-
-    await supabaseAdmin.from("in_app_notifications").insert({
-      user_id: data.assignee_id,
-      title: "New HR task assigned",
-      body: data.title,
-      link: "/hr?tab=tasks",
+      },
     });
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actor_email: (context.claims as any)?.email ?? null,
-      action: "HR_TASK_CREATED",
-      target_resource: row?.id ?? null,
-      details: {
-        assignee_id: data.assignee_id,
-        title: data.title,
-        due_date: data.due_date || null,
+
+    await adminDb.inAppNotification.create({
+      data: {
+        userId: data.assignee_id,
+        title: "New HR task assigned",
+        body: data.title,
+        link: "/hr?tab=tasks",
+      },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "HR_TASK_CREATED",
+        targetResource: row.id,
+        details: {
+          assignee_id: data.assignee_id,
+          title: data.title,
+          due_date: data.due_date || null,
+        },
       },
     });
     return row as unknown as HrTask;
@@ -170,25 +168,24 @@ const statusSchema = z.object({
 
 export const updateHrTaskStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => statusSchema.parse(d))
+  .validator((d: unknown) => statusSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
-      .from("employee_tasks")
-      .update({ status: data.status })
-      .eq("id", data.id)
-      .eq("project_reference", HR_MARKER)
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actor_email: (context.claims as any)?.email ?? null,
-      action: "HR_TASK_STATUS_UPDATED",
-      target_resource: data.id,
-      details: { to: data.status },
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const row = await adminDb.employeeTask.updateMany({
+      where: { id: data.id, projectReference: HR_MARKER },
+      data: { status: data.status },
     });
-    return row as unknown as HrTask;
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "HR_TASK_STATUS_UPDATED",
+        targetResource: data.id,
+        details: { to: data.status },
+      },
+    });
+    return { ok: true };
   });

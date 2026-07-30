@@ -26,7 +26,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -95,9 +94,7 @@ import {
 } from "@/lib/resignation.functions";
 import { getMyOnboarding } from "@/lib/onboarding.functions";
 import { DojHoldingScreen, shouldShowDojHold } from "@/components/site/DojHoldingScreen";
-import { FLAGS } from "@/lib/feature-flags";
 import { getMyEmployeeAccess } from "@/lib/roles.functions";
-import { requireRoles, requireDashboardEnabled } from "./-guard";
 
 // ============================================================
 // Route + access gate (employee OR admin)
@@ -126,31 +123,14 @@ export const Route = createFileRoute("/_authenticated/employee")({
     }),
   ),
   beforeLoad: async () => {
-    if (FLAGS.USE_CLERK_AUTH) {
-      const access = await getMyEmployeeAccess();
-      if (access.isAdmin) throw redirect({ to: "/admin" });
-      if (access.isHr) throw redirect({ to: "/hr" as any });
-      if (access.isManager) throw redirect({ to: "/manager" as any });
-      if (!access.isEmployee && !access.hasPreDojOnboarding) {
-        throw redirect({ to: "/forbidden", search: { reason: "role" } });
-      }
-      return { currentUserId: access.userId };
+    const access = await getMyEmployeeAccess();
+    if (access.isAdmin) throw redirect({ to: "/admin" });
+    if (access.isHr) throw redirect({ to: "/hr" as any });
+    if (access.isManager) throw redirect({ to: "/manager" as any });
+    if (!access.isEmployee && !access.hasPreDojOnboarding) {
+      throw redirect({ to: "/forbidden", search: { reason: "role" } });
     }
-
-    const { userId, roles } = await requireRoles("/employee");
-    if (roles.has("admin")) throw redirect({ to: "/admin" });
-    if (roles.has("hr")) throw redirect({ to: "/hr" as any });
-    if (roles.has("manager")) throw redirect({ to: "/manager" as any });
-    if (!roles.has("employee")) {
-      const { data: onb } = await supabase
-        .from("onboarding_records")
-        .select("id, status")
-        .eq("user_id", userId)
-        .in("status", ["accepted", "submitted"])
-        .maybeSingle();
-      if (!onb) throw redirect({ to: "/forbidden", search: { reason: "role" } });
-    }
-    return { currentUserId: userId };
+    return { currentUserId: access.userId };
   },
   head: () => ({
     meta: [

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 // ============================================================
 // Shared types
@@ -24,76 +25,75 @@ export type StaffUser = {
 
 const STAFF_ROLES = ["employee", "manager", "hr", "admin"] as const;
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden");
+async function assertAdmin(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: "admin" } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 // ============================================================
-// Departments — readable by any signed-in staff via RLS
+// Departments
 // ============================================================
 export const listDepartments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Department[]> => {
-    const { data, error } = await context.supabase
-      .from("departments")
-      .select("id, name, code, description")
-      .order("name", { ascending: true });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Department[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.department.findMany({
+        select: { id: true, name: true, code: true, description: true },
+        orderBy: { name: "asc" },
+      }),
+    );
+    return rows as Department[];
   });
 
 // ============================================================
-// Staff directory (admin only) — joins auth users with their
-// highest current staff role and the department attached to it.
+// Staff directory (admin only)
 // ============================================================
 export const listStaffUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<StaffUser[]> => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const [{ data: usersData, error: usersErr }, { data: rolesData }, { data: depts }] =
-      await Promise.all([
-        supabaseAdmin.auth.admin.listUsers({ perPage: 500 }),
-        supabaseAdmin
-          .from("user_roles")
-          .select("user_id, role, department_id")
-          .in("role", STAFF_ROLES as any),
-        supabaseAdmin.from("departments").select("id, name"),
-      ]);
-    if (usersErr) throw new Error(usersErr.message);
+    const [roles, depts, mappings, profiles] = await Promise.all([
+      adminDb.userRole.findMany({
+        where: { role: { in: STAFF_ROLES as any } },
+        select: { userId: true, role: true, departmentId: true },
+      }),
+      adminDb.department.findMany({ select: { id: true, name: true } }),
+      adminDb.clerkUserMap.findMany({
+        select: { authUserId: true, email: true, createdAt: true },
+      }),
+      adminDb.profile.findMany({
+        select: { userId: true, fullName: true },
+      }),
+    ]);
 
-    const deptMap = new Map<string, string>();
-    for (const d of (depts ?? []) as any[]) deptMap.set(d.id, d.name);
+    const deptMap = new Map(depts.map((d) => [d.id, d.name]));
+    const emailMap = new Map(mappings.map((m) => [m.authUserId, { email: m.email, createdAt: m.createdAt }]));
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
 
-    // Role priority: admin > hr > manager > employee
     const priority: Record<string, number> = { admin: 4, hr: 3, manager: 2, employee: 1 };
     const bestByUser = new Map<string, { role: string; department_id: string | null }>();
-    for (const r of (rolesData ?? []) as any[]) {
-      const cur = bestByUser.get(r.user_id);
+    for (const r of roles) {
+      const cur = bestByUser.get(r.userId);
       if (!cur || (priority[r.role] ?? 0) > (priority[cur.role] ?? 0)) {
-        bestByUser.set(r.user_id, { role: r.role, department_id: r.department_id ?? null });
+        bestByUser.set(r.userId, { role: r.role, department_id: r.departmentId ?? null });
       }
     }
 
-    return usersData.users.map((u): StaffUser => {
-      const best = bestByUser.get(u.id);
+    const userIds = Array.from(new Set(roles.map((r) => r.userId)));
+    return userIds.map((id): StaffUser => {
+      const best = bestByUser.get(id);
       const role = (best?.role ?? "user") as StaffUser["role"];
       const department_id = best?.department_id ?? null;
+      const info = emailMap.get(id);
       return {
-        id: u.id,
-        email: u.email ?? null,
-        created_at: u.created_at,
-        full_name: ((u.user_metadata as any)?.full_name ||
-          (u.user_metadata as any)?.name ||
-          null) as string | null,
+        id,
+        email: info?.email ?? null,
+        created_at: info?.createdAt?.toISOString() ?? "",
+        full_name: nameMap.get(id) ?? null,
         role,
         department_id,
         department_name: department_id ? (deptMap.get(department_id) ?? null) : null,
@@ -102,8 +102,7 @@ export const listStaffUsers = createServerFn({ method: "GET" })
   });
 
 // ============================================================
-// Promotion / demotion (admin only) — routed through the
-// admin_set_user_role RPC which enforces admin and audit-logs.
+// Role assignment (admin only)
 // ============================================================
 const setRoleSchema = z.object({
   userId: z.string().uuid(),
@@ -113,38 +112,40 @@ const setRoleSchema = z.object({
 
 export const setStaffUserRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => setRoleSchema.parse(d))
+  .validator((d: unknown) => setRoleSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
     if (data.userId === context.userId && data.role !== "admin") {
       throw new Error("You cannot remove your own admin role.");
     }
 
     if (data.role === "user") {
-      // Strip every staff role — user drops back to standard candidate.
-      const { error } = await context.supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", data.userId)
-        .in("role", STAFF_ROLES as any);
-      if (error) throw new Error(error.message);
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await supabaseAdmin.from("audit_logs").insert({
-        actor_id: context.userId,
-        actor_email: (context.claims as any)?.email ?? null,
-        action: "role.updated",
-        target_resource: data.userId,
-        details: { new_role: "user", department_id: null } as any,
+      await adminDb.userRole.deleteMany({
+        where: { userId: data.userId, role: { in: STAFF_ROLES as any } },
       });
-      return { ok: true };
+    } else {
+      await adminDb.userRole.deleteMany({
+        where: { userId: data.userId, role: { in: STAFF_ROLES as any } },
+      });
+      await adminDb.userRole.create({
+        data: {
+          userId: data.userId,
+          role: data.role as any,
+          departmentId: data.departmentId ?? null,
+        },
+      });
     }
 
-    const { error } = await (context.supabase as any).rpc("admin_set_user_role", {
-      _target_user_id: data.userId,
-      _new_role: data.role,
-      _department_id: data.departmentId ?? null,
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "role.updated",
+        targetResource: data.userId,
+        details: { new_role: data.role, department_id: data.departmentId ?? null },
+      },
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });

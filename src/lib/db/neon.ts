@@ -43,19 +43,17 @@ export function createUserDb(databaseUrl: string, userId: string): UserPrismaCli
     log: process.env["NODE_ENV"] === "development" ? ["error", "warn"] : ["error"],
   });
 
-  return {
-    ...prisma,
-
+  return Object.assign(prisma, {
     async withRLS<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
       return prisma.$transaction(async (tx) => {
-        // Set RLS context for this transaction
-        await tx.$executeRaw`SET LOCAL app.current_user_id = ${userId}::uuid`;
+        // Use dollar-quoted string to avoid escaping issues with UUID casting
+        await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = $$${userId}$$::uuid`);
         return fn(tx);
       });
     },
 
     unsafe: prisma,
-  };
+  }) as unknown as UserPrismaClient;
 }
 
 /**

@@ -15,14 +15,14 @@ export type InAppNotification = {
 export const listMyNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("in_app_notifications")
-      .select("id, application_id, title, body, link, read, created_at")
-      .eq("user_id", context.userId)
-      .order("created_at", { ascending: false })
-      .limit(30);
-    if (error) throw new Error(error.message);
-    return (data ?? []) as InAppNotification[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.inAppNotification.findMany({
+        where: { userId: context.userId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+    );
+    return rows as unknown as InAppNotification[];
   });
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -31,23 +31,23 @@ export const markNotificationRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: unknown) => idSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("in_app_notifications")
-      .update({ read: true })
-      .eq("id", data.id)
-      .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
+    await context.db.withRLS((tx) =>
+      tx.inAppNotification.updateMany({
+        where: { id: data.id, userId: context.userId },
+        data: { read: true },
+      }),
+    );
     return { ok: true };
   });
 
 export const markAllNotificationsRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { error } = await context.supabase
-      .from("in_app_notifications")
-      .update({ read: true })
-      .eq("user_id", context.userId)
-      .eq("read", false);
-    if (error) throw new Error(error.message);
+    await context.db.withRLS((tx) =>
+      tx.inAppNotification.updateMany({
+        where: { userId: context.userId, read: false },
+        data: { read: true },
+      }),
+    );
     return { ok: true };
   });

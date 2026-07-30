@@ -1,16 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden");
+async function assertAdmin(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: "admin" } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export type EmployeeOption = {
@@ -38,30 +35,34 @@ export type AdminTask = {
 export const listEmployeesForAssignment = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<EmployeeOption[]> => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: roles, error: rolesErr } = await supabaseAdmin
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["employee", "admin"]);
-    if (rolesErr) throw new Error(rolesErr.message);
-    const ids = Array.from(new Set((roles ?? []).map((r: any) => r.user_id as string)));
-    if (ids.length === 0) return [];
-    const { data: profiles } = await supabaseAdmin
-      .from("profiles")
-      .select("user_id, full_name")
-      .in("user_id", ids);
-    const profileMap = new Map<string, string | null>();
-    (profiles ?? []).forEach((p: any) => profileMap.set(p.user_id, p.full_name));
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    const emailMap = new Map<string, string | null>();
-    (usersData?.users ?? []).forEach((u: any) => emailMap.set(u.id, u.email ?? null));
+    const roles = await adminDb.userRole.findMany({
+      where: { role: { in: ["employee", "admin"] } },
+      select: { userId: true },
+    });
+    const ids = Array.from(new Set(roles.map((r) => r.userId)));
+    if (ids.length === 0) return [];
+
+    const [profiles, mappings] = await Promise.all([
+      adminDb.profile.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, fullName: true },
+      }),
+      adminDb.clerkUserMap.findMany({
+        where: { authUserId: { in: ids } },
+        select: { authUserId: true, email: true },
+      }),
+    ]);
+
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
+    const emailMap = new Map(mappings.map((m) => [m.authUserId, m.email]));
 
     return ids
       .map((id) => ({
         id,
-        full_name: profileMap.get(id) ?? null,
+        full_name: nameMap.get(id) ?? null,
         email: emailMap.get(id) ?? null,
       }))
       .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""));
@@ -70,32 +71,36 @@ export const listEmployeesForAssignment = createServerFn({ method: "GET" })
 export const listAllAssignedTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdminTask[]> => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("employee_tasks")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as any[];
-    const ids = Array.from(new Set(rows.map((r) => r.assignee_id)));
-    const profileMap = new Map<string, string | null>();
-    const emailMap = new Map<string, string | null>();
-    if (ids.length > 0) {
-      const { data: profiles } = await supabaseAdmin
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", ids);
-      (profiles ?? []).forEach((p: any) => profileMap.set(p.user_id, p.full_name));
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      (usersData?.users ?? []).forEach((u: any) => emailMap.set(u.id, u.email ?? null));
-    }
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const rows = await adminDb.employeeTask.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const ids = Array.from(new Set(rows.map((r) => r.assigneeId)));
+    const [profiles, mappings] = ids.length
+      ? await Promise.all([
+          adminDb.profile.findMany({
+            where: { userId: { in: ids } },
+            select: { userId: true, fullName: true },
+          }),
+          adminDb.clerkUserMap.findMany({
+            where: { authUserId: { in: ids } },
+            select: { authUserId: true, email: true },
+          }),
+        ])
+      : [[], []];
+
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
+    const emailMap = new Map(mappings.map((m) => [m.authUserId, m.email]));
+
     return rows.map((r) => ({
-      ...r,
-      assignee_name: profileMap.get(r.assignee_id) ?? null,
-      assignee_email: emailMap.get(r.assignee_id) ?? null,
-    })) as AdminTask[];
+      ...(r as unknown as AdminTask),
+      assignee_name: nameMap.get(r.assigneeId) ?? null,
+      assignee_email: emailMap.get(r.assigneeId) ?? null,
+    }));
   });
 
 const assignSchema = z.object({
@@ -109,48 +114,47 @@ const assignSchema = z.object({
 
 export const assignTaskToEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => assignSchema.parse(d))
+  .validator((d: unknown) => assignSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const { data: row, error } = await supabaseAdmin
-      .from("employee_tasks")
-      .insert({
-        assignee_id: data.assignee_id,
+    const row = await adminDb.employeeTask.create({
+      data: {
+        assigneeId: data.assignee_id,
         title: data.title,
         description: data.description ?? null,
         priority: data.priority,
-        due_date: data.due_date || null,
-        project_reference: data.project_reference || null,
-        assigned_by: context.userId,
+        dueDate: data.due_date || null,
+        projectReference: data.project_reference || null,
+        assignedBy: context.userId,
         status: "to_do",
-      })
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-
-    // Best-effort in-app notification
-    await supabaseAdmin.from("in_app_notifications").insert({
-      user_id: data.assignee_id,
-      title: "New task assigned",
-      body: data.title,
-      link: "/employee",
-    });
-
-    // Best-effort audit log
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      actor_email: context.claims?.email ?? null,
-      action: "TASK_ASSIGNED",
-      target_resource: row?.id ?? null,
-      details: {
-        assignee_id: data.assignee_id,
-        title: data.title,
-        priority: data.priority,
-        due_date: data.due_date || null,
       },
     });
 
-    return row as AdminTask;
+    await adminDb.inAppNotification.create({
+      data: {
+        userId: data.assignee_id,
+        title: "New task assigned",
+        body: data.title,
+        link: "/employee",
+      },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "TASK_ASSIGNED",
+        targetResource: row.id,
+        details: {
+          assignee_id: data.assignee_id,
+          title: data.title,
+          priority: data.priority,
+          due_date: data.due_date || null,
+        },
+      },
+    });
+
+    return row as unknown as AdminTask;
   });

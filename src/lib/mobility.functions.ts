@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type InternalJob = {
   id: string;
@@ -22,54 +23,61 @@ export type InternalJob = {
 
 export const listInternalJobs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: any) => z.object({ q: z.string().max(120).optional() }).parse(d ?? {}))
+  .validator((d: any) => z.object({ q: z.string().max(120).optional() }).parse(d ?? {}))
   .handler(async ({ data, context }): Promise<InternalJob[]> => {
-    let q = context.supabase
-      .from("job_postings")
-      .select("*")
-      .in("status", ["published", "internal_only"]);
-    if (data.q && data.q.trim()) {
-      const t = `%${data.q.trim()}%`;
-      q = q.or(`title.ilike.${t},department.ilike.${t},job_code.ilike.${t}`);
-    }
-    const { data: rows, error } = await q.order("created_at", { ascending: false }).limit(120);
-    if (error) throw new Error(error.message);
-    return (rows ?? []) as InternalJob[];
+    const search = data.q?.trim();
+    const rows = await context.db.withRLS((tx) =>
+      tx.jobPosting.findMany({
+        where: {
+          status: { in: ["published", "internal_only"] },
+          ...(search && {
+            OR: [
+              { title: { contains: search, mode: "insensitive" as const } },
+              { department: { contains: search, mode: "insensitive" as const } },
+              { jobCode: { contains: search, mode: "insensitive" as const } },
+            ],
+          }),
+        },
+        orderBy: { createdAt: "desc" },
+        take: 120,
+      }),
+    );
+    return rows as unknown as InternalJob[];
   });
 
 export const listMyReports = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    // Managers see peers/reports in their department. RLS on user_roles allows
-    // reading other members in the same department when the caller has manager+ role.
-    const { data: myRoles } = await context.supabase
-      .from("user_roles")
-      .select("role, department_id")
-      .eq("user_id", context.userId);
-    const deptIds = Array.from(
-      new Set((myRoles ?? []).map((r: any) => r.department_id).filter(Boolean)),
-    );
-    if (deptIds.length === 0) return [];
-    const { data: roles, error } = await context.supabase
-      .from("user_roles")
-      .select("user_id, role, department_id")
-      .in("department_id", deptIds)
-      .in("role", ["employee", "manager"])
-      .neq("user_id", context.userId);
-    if (error) throw new Error(error.message);
-    const ids = Array.from(new Set((roles ?? []).map((r: any) => r.user_id)));
-    const profileMap: Record<string, { full_name: string | null }> = {};
-    if (ids.length) {
-      const { data: profs } = await context.supabase
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", ids);
-      for (const p of profs ?? []) profileMap[p.user_id] = { full_name: p.full_name };
-    }
-    return (roles ?? []).map((r: any) => ({
-      user_id: r.user_id,
-      role: r.role,
-      department_id: r.department_id,
-      full_name: profileMap[r.user_id]?.full_name ?? null,
-    }));
+    return context.db.withRLS(async (tx) => {
+      const myRoles = await tx.userRole.findMany({
+        where: { userId: context.userId },
+        select: { role: true, departmentId: true },
+      });
+      const deptIds = [...new Set(myRoles.map((r) => r.departmentId).filter(Boolean))] as string[];
+      if (deptIds.length === 0) return [];
+
+      const roles = await tx.userRole.findMany({
+        where: {
+          departmentId: { in: deptIds },
+          role: { in: ["employee", "manager"] },
+          userId: { not: context.userId },
+        },
+        select: { userId: true, role: true, departmentId: true },
+      });
+      const ids = [...new Set(roles.map((r) => r.userId))];
+      const profiles = ids.length
+        ? await tx.profile.findMany({
+            where: { userId: { in: ids } },
+            select: { userId: true, fullName: true },
+          })
+        : [];
+      const profileMap = Object.fromEntries(profiles.map((p) => [p.userId, p.fullName]));
+
+      return roles.map((r) => ({
+        user_id: r.userId,
+        role: r.role,
+        department_id: r.departmentId,
+        full_name: profileMap[r.userId] ?? null,
+      }));
+    });
   });

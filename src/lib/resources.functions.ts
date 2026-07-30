@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { enforceRateLimit, getClientIp, getClientHost } from "@/lib/rateLimit.server";
 import { verifyTurnstile } from "@/lib/turnstile.server";
+import { getAdminDb } from "@/lib/db/admin";
 
 const inputSchema = z.object({
   email: z.string().trim().email().max(200),
@@ -16,7 +17,7 @@ const inputSchema = z.object({
 });
 
 export const requestResource = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => inputSchema.parse(data))
+  .validator((data: unknown) => inputSchema.parse(data))
   .handler(async ({ data }) => {
     if (data.hp && data.hp.trim().length > 0) return { ok: true };
     const ip = getClientIp();
@@ -28,11 +29,9 @@ export const requestResource = createServerFn({ method: "POST" })
     });
     await verifyTurnstile(data.turnstileToken || undefined, ip, getClientHost());
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("resource_downloads").insert({
-      email: data.email,
-      resource_slug: data.slug,
+    const adminDb = getAdminDb();
+    await adminDb.resourceDownload.create({
+      data: { email: data.email, resourceSlug: data.slug },
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });

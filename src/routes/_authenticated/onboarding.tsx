@@ -5,7 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { CheckCircle2, FileSignature, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -204,7 +203,6 @@ function OnboardingPage() {
     onSuccess: async () => {
       toast.success("Onboarding submitted — HR will verify your documents shortly.");
       await qc.invalidateQueries();
-      await supabase.auth.refreshSession();
       setTimeout(() => navigate({ to: "/employee" }), 800);
     },
     onError: (e: any) => toast.error(e?.message || "Submission failed"),

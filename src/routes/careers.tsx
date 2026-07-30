@@ -32,7 +32,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { useAuth, displayName } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/lib/upload.functions";
 import { submitApplication } from "@/lib/applications.functions";
 import { listActiveJobPostings, type JobPosting } from "@/lib/jobPostings.functions";
 import { listMyApplications } from "@/lib/applications.query";
@@ -134,6 +134,7 @@ function Careers() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const submit = useServerFn(submitApplication);
+  const upload = useServerFn(uploadFile);
   const fetchPostings = useServerFn(listActiveJobPostings);
   const { data: postings, isLoading: postingsLoading } = useQuery({
     queryKey: ["public-postings"],
@@ -269,13 +270,11 @@ function Careers() {
       if (resumeFile) {
         const safeName = resumeFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         storagePath = `${user.id}/${Date.now()}-${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from("resumes")
-          .upload(storagePath, resumeFile, {
-            upsert: false,
-            contentType: resumeFile.type || undefined,
-          });
-        if (upErr) throw new Error(`Resume upload failed: ${upErr.message}`);
+        const buf = await resumeFile.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        await upload({
+          data: { bucket: "resumes", path: storagePath, base64, contentType: resumeFile.type || undefined },
+        });
       }
 
       await submit({

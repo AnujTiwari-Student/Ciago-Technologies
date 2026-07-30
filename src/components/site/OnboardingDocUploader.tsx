@@ -6,7 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/lib/upload.functions";
 import {
   deleteUploadedDoc,
   docLabel,
@@ -47,6 +47,7 @@ export function OnboardingDocUploader({ onboardingId, userId, docKey, document }
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  const uploadFn = useServerFn(uploadFile);
   const recordFn = useServerFn(recordUploadedDoc);
   const deleteFn = useServerFn(deleteUploadedDoc);
 
@@ -74,12 +75,12 @@ export function OnboardingDocUploader({ onboardingId, userId, docKey, document }
       setUploading(true);
       const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
       const safeExt = (ext || "bin").toLowerCase().slice(0, 6);
-      // RLS: first path segment must equal auth.uid()
       const path = `${userId}/${onboardingId}/${docKey}-${Date.now()}.${safeExt}`;
-      const { error: upErr } = await supabase.storage
-        .from("onboarding-docs")
-        .upload(path, file, { upsert: false, contentType: file.type });
-      if (upErr) throw upErr;
+      const buf = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await uploadFn({
+        data: { bucket: "onboarding-docs", path, base64, contentType: file.type },
+      });
       await recordFn({
         data: {
           onboarding_id: onboardingId,

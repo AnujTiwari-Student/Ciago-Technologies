@@ -1,18 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
-// ============================================================
-// Access guard: employee OR admin
-// ============================================================
-async function assertEmployee(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["employee", "admin"]);
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("Forbidden");
+async function assertEmployee(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({
+      where: { userId, role: { in: ["employee", "admin"] } },
+    }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 // ============================================================
@@ -33,14 +30,14 @@ export type EmployeeTask = {
 export const listMyTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<EmployeeTask[]> => {
-    await assertEmployee(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("employee_tasks")
-      .select("*")
-      .eq("assignee_id", context.userId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as EmployeeTask[];
+    await assertEmployee(context.db, context.userId);
+    const rows = await context.db.withRLS((tx) =>
+      tx.employeeTask.findMany({
+        where: { assigneeId: context.userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+    return rows as unknown as EmployeeTask[];
   });
 
 const taskUpsertSchema = z.object({
@@ -54,22 +51,30 @@ const taskUpsertSchema = z.object({
 
 export const upsertMyTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => taskUpsertSchema.parse(d))
+  .validator((d: unknown) => taskUpsertSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const payload: any = {
-      ...data,
-      assignee_id: context.userId,
-      description: data.description ?? null,
-      due_date: data.due_date || null,
-    };
-    const { data: row, error } = await context.supabase
-      .from("employee_tasks")
-      .upsert(payload)
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return row as EmployeeTask;
+    await assertEmployee(context.db, context.userId);
+    const row = await context.db.withRLS((tx) =>
+      tx.employeeTask.upsert({
+        where: { id: data.id ?? "00000000-0000-0000-0000-000000000000" },
+        create: {
+          assigneeId: context.userId,
+          title: data.title,
+          description: data.description ?? null,
+          status: data.status,
+          priority: data.priority,
+          dueDate: data.due_date || null,
+        },
+        update: {
+          title: data.title,
+          description: data.description ?? null,
+          status: data.status,
+          priority: data.priority,
+          dueDate: data.due_date || null,
+        },
+      }),
+    );
+    return row as unknown as EmployeeTask;
   });
 
 const taskStatusSchema = z.object({
@@ -79,30 +84,29 @@ const taskStatusSchema = z.object({
 
 export const updateMyTaskStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => taskStatusSchema.parse(d))
+  .validator((d: unknown) => taskStatusSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const { error } = await context.supabase
-      .from("employee_tasks")
-      .update({ status: data.status })
-      .eq("id", data.id)
-      .eq("assignee_id", context.userId);
-    if (error) throw new Error(error.message);
+    await assertEmployee(context.db, context.userId);
+    await context.db.withRLS((tx) =>
+      tx.employeeTask.updateMany({
+        where: { id: data.id, assigneeId: context.userId },
+        data: { status: data.status },
+      }),
+    );
     return { ok: true };
   });
 
 const taskDeleteSchema = z.object({ id: z.string().uuid() });
 export const deleteMyTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => taskDeleteSchema.parse(d))
+  .validator((d: unknown) => taskDeleteSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const { error } = await context.supabase
-      .from("employee_tasks")
-      .delete()
-      .eq("id", data.id)
-      .eq("assignee_id", context.userId);
-    if (error) throw new Error(error.message);
+    await assertEmployee(context.db, context.userId);
+    await context.db.withRLS((tx) =>
+      tx.employeeTask.deleteMany({
+        where: { id: data.id, assigneeId: context.userId },
+      }),
+    );
     return { ok: true };
   });
 
@@ -123,15 +127,15 @@ export type Timesheet = {
 export const listMyTimesheets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Timesheet[]> => {
-    await assertEmployee(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("timesheets")
-      .select("*")
-      .eq("employee_id", context.userId)
-      .order("date", { ascending: false })
-      .limit(60);
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Timesheet[];
+    await assertEmployee(context.db, context.userId);
+    const rows = await context.db.withRLS((tx) =>
+      tx.timesheet.findMany({
+        where: { employeeId: context.userId },
+        orderBy: { date: "desc" },
+        take: 60,
+      }),
+    );
+    return rows as unknown as Timesheet[];
   });
 
 const timesheetSchema = z.object({
@@ -143,35 +147,33 @@ const timesheetSchema = z.object({
 
 export const logTimesheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => timesheetSchema.parse(d))
+  .validator((d: unknown) => timesheetSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const { data: row, error } = await context.supabase
-      .from("timesheets")
-      .insert({
-        employee_id: context.userId,
-        date: data.date,
-        hours_logged: data.hours_logged,
-        project_reference: data.project_reference,
-        notes: data.notes ?? null,
-      })
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return row as Timesheet;
+    await assertEmployee(context.db, context.userId);
+    const row = await context.db.withRLS((tx) =>
+      tx.timesheet.create({
+        data: {
+          employeeId: context.userId,
+          date: data.date,
+          hoursLogged: data.hours_logged,
+          projectReference: data.project_reference,
+          notes: data.notes ?? null,
+        },
+      }),
+    );
+    return row as unknown as Timesheet;
   });
 
 export const deleteTimesheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const { error } = await context.supabase
-      .from("timesheets")
-      .delete()
-      .eq("id", data.id)
-      .eq("employee_id", context.userId);
-    if (error) throw new Error(error.message);
+    await assertEmployee(context.db, context.userId);
+    await context.db.withRLS((tx) =>
+      tx.timesheet.deleteMany({
+        where: { id: data.id, employeeId: context.userId },
+      }),
+    );
     return { ok: true };
   });
 
@@ -195,18 +197,19 @@ export type Referral = {
 export const listMyReferrals = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Referral[]> => {
-    await assertEmployee(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("referrals")
-      .select("*, job_postings(title, job_code)")
-      .eq("employee_id", context.userId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []).map((r: any) => ({
+    await assertEmployee(context.db, context.userId);
+    const rows = await context.db.withRLS((tx) =>
+      tx.referral.findMany({
+        where: { employeeId: context.userId },
+        include: { jobPosting: { select: { title: true, jobCode: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+    return (rows as any[]).map((r) => ({
       ...r,
-      job_title: r.job_postings?.title ?? null,
-      job_code: r.job_postings?.job_code ?? null,
-    })) as Referral[];
+      job_title: r.jobPosting?.title ?? null,
+      job_code: r.jobPosting?.jobCode ?? null,
+    })) as unknown as Referral[];
   });
 
 const referralSchema = z.object({
@@ -218,20 +221,19 @@ const referralSchema = z.object({
 
 export const createReferral = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => referralSchema.parse(d))
+  .validator((d: unknown) => referralSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertEmployee(context.supabase, context.userId);
-    const { data: row, error } = await context.supabase
-      .from("referrals")
-      .insert({
-        employee_id: context.userId,
-        candidate_name: data.candidate_name,
-        candidate_email: data.candidate_email,
-        job_posting_id: data.job_posting_id ?? null,
-        notes: data.notes ?? null,
-      })
-      .select("*")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return row as Referral;
+    await assertEmployee(context.db, context.userId);
+    const row = await context.db.withRLS((tx) =>
+      tx.referral.create({
+        data: {
+          employeeId: context.userId,
+          candidateName: data.candidate_name,
+          candidateEmail: data.candidate_email,
+          jobPostingId: data.job_posting_id ?? null,
+          notes: data.notes ?? null,
+        },
+      }),
+    );
+    return row as unknown as Referral;
   });

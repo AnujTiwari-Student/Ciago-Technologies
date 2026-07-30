@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 import { enforceRateLimit, getClientIp, getClientHost } from "@/lib/rateLimit.server";
 import { verifyTurnstile } from "@/lib/turnstile.server";
 
@@ -13,7 +14,6 @@ const inputSchema = z.object({
   resumeStoragePath: z.string().trim().max(500).optional().or(z.literal("")),
   resumeLink: z.string().trim().url().max(500).optional().or(z.literal("")),
   turnstileToken: z.string().max(4096).optional().or(z.literal("")),
-  // Honeypot — bots fill hidden fields; legitimate users leave it blank.
   hp: z.string().max(200).optional().or(z.literal("")),
 });
 
@@ -22,19 +22,15 @@ const FROM_EMAIL = "Ciago Careers <onboarding@resend.dev>";
 
 export const submitApplication = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => inputSchema.parse(data))
+  .validator((data: unknown) => inputSchema.parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-
-    // Bot / spam mitigation.
     if (data.hp && data.hp.trim().length > 0) {
-      // Silently drop honeypot hits.
       return { ok: true, applicationId: "spam", emailSent: false };
     }
     const ip = getClientIp();
     await enforceRateLimit({
       bucket: "apply",
-      key: `${userId}:${ip}`,
+      key: `${context.userId}:${ip}`,
       max: 10,
       windowSeconds: 60 * 60,
     });
@@ -44,31 +40,41 @@ export const submitApplication = createServerFn({ method: "POST" })
       throw new Error("Provide a resume file or a resume link.");
     }
 
-    // Atomic apply via SECURITY DEFINER RPC with advisory-lock + 90-day cooldown re-check.
-    // This prevents concurrent duplicate submissions for the same user+role.
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("apply_for_role", {
-      _role_id: data.roleId,
-      _role_title: data.roleTitle,
-      _full_name: data.fullName,
-      _email: data.email,
-      _portfolio_url: data.portfolioUrl || "",
-      _resume_storage_path: data.resumeStoragePath || "",
-      _resume_link: data.resumeLink || "",
+    const adminDb = getAdminDb();
+
+    // 90-day cooldown check + insert (replaces apply_for_role RPC)
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const recent = await adminDb.jobApplication.findFirst({
+      where: {
+        userId: context.userId,
+        roleId: data.roleId,
+        createdAt: { gte: ninetyDaysAgo },
+      },
     });
-    if (rpcErr) throw new Error(rpcErr.message);
-    const insertedId = Array.isArray(rpcData)
-      ? rpcData[0]?.application_id
-      : (rpcData as any)?.application_id;
-    if (!insertedId) throw new Error("Failed to record application");
-    const inserted = { id: insertedId as string };
+    if (recent) {
+      throw new Error("You have already applied for this role within the last 90 days.");
+    }
+
+    const inserted = await adminDb.jobApplication.create({
+      data: {
+        userId: context.userId,
+        roleId: data.roleId,
+        roleTitle: data.roleTitle,
+        fullName: data.fullName,
+        email: data.email,
+        portfolioUrl: data.portfolioUrl || null,
+        resumeStoragePath: data.resumeStoragePath || null,
+        resumeLink: data.resumeLink || null,
+        status: "applied",
+      },
+    });
 
     let resumeAccessUrl: string | null = data.resumeLink || null;
     if (data.resumeStoragePath) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: signed } = await supabaseAdmin.storage
-        .from("resumes")
-        .createSignedUrl(data.resumeStoragePath, 60 * 60 * 24 * 7);
-      if (signed?.signedUrl) resumeAccessUrl = signed.signedUrl;
+      const { getStorage } = await import("@/lib/storage");
+      const storage = getStorage();
+      const result = await storage.createSignedUrl("resumes", data.resumeStoragePath, 60 * 60 * 24 * 7);
+      if (result.signedUrl) resumeAccessUrl = result.signedUrl;
     }
 
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -81,7 +87,7 @@ export const submitApplication = createServerFn({ method: "POST" })
           roleTitle: data.roleTitle,
           portfolioUrl: data.portfolioUrl || null,
           resumeUrl: resumeAccessUrl,
-          applicationId: inserted!.id,
+          applicationId: inserted.id,
         });
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -106,7 +112,7 @@ export const submitApplication = createServerFn({ method: "POST" })
       console.warn("[applications] RESEND_API_KEY not set — skipping notification email.");
     }
 
-    return { ok: true, applicationId: inserted!.id, emailSent };
+    return { ok: true, applicationId: inserted.id, emailSent };
   });
 
 function renderEmail(a: {

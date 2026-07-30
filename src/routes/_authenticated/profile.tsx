@@ -30,7 +30,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAuth, displayName } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
-import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/lib/upload.functions";
 import { getMyProfile, upsertMyProfile, type ProfileRow } from "@/lib/profile.functions";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -290,6 +290,7 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
   const { user } = useAuth();
   const qc = useQueryClient();
   const saveProfile = useServerFn(upsertMyProfile);
+  const uploadFn = useServerFn(uploadFile);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -316,10 +317,9 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
     try {
       const ext = file.name.split(".").pop() || "png";
       const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: true, contentType: file.type });
-      if (upErr) throw upErr;
+      const buf = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await uploadFn({ data: { bucket: "avatars", path, base64, contentType: file.type, upsert: true } });
       await saveProfile({ data: { avatar_path: path } as any });
       toast.success("Avatar updated");
       qc.invalidateQueries({ queryKey: ["my-profile"] });
@@ -381,34 +381,10 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
 // ============ ACCOUNT ============
 function AccountSection() {
   const { user, signOut } = useAuth();
-  const [pw, setPw] = useState("");
   const [saving, setSaving] = useState(false);
-  const provider =
-    (user?.app_metadata as any)?.provider || (user?.identities?.[0]?.provider ?? "email");
-  const isPasswordProvider = provider === "email";
 
-  const sendReset = async () => {
-    if (!user?.email) return;
-    setSaving(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: `${window.location.origin}/auth`,
-    });
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Password reset email sent");
-  };
-
-  const updatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pw.length < 8) return toast.error("Password must be at least 8 characters");
-    setSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: pw });
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Password updated");
-      setPw("");
-    }
+  const manageAccount = () => {
+    window.open("https://accounts.clerk.dev/user", "_blank");
   };
 
   return (
@@ -427,23 +403,8 @@ function AccountSection() {
               <dd className="mt-1 font-medium">{user?.email}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Sign-in method</dt>
-              <dd className="mt-1 font-medium capitalize">{provider}</dd>
-            </div>
-            <div>
               <dt className="text-muted-foreground">User ID</dt>
               <dd className="mt-1 truncate font-mono text-xs">{user?.id}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Member since</dt>
-              <dd className="mt-1 font-medium">
-                {user?.created_at
-                  ? new Date(user.created_at).toLocaleDateString(undefined, {
-                      month: "long",
-                      year: "numeric",
-                    })
-                  : "—"}
-              </dd>
             </div>
           </dl>
         </CardContent>
@@ -453,53 +414,22 @@ function AccountSection() {
         <CardContent className="p-6 sm:p-8">
           <div className="flex items-center gap-2 text-brand">
             <KeyRound className="h-4 w-4" />
-            <p className="text-xs font-semibold uppercase tracking-widest">Password</p>
+            <p className="text-xs font-semibold uppercase tracking-widest">Security</p>
           </div>
-          <h2 className="mt-2 text-lg font-bold">
-            {isPasswordProvider ? "Change password" : "Set a password"}
-          </h2>
+          <h2 className="mt-2 text-lg font-bold">Password &amp; security</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isPasswordProvider
-              ? "Update the password used to sign in with email."
-              : `You currently sign in with ${provider}. Add a password to enable email sign-in as a fallback.`}
+            Manage your password, two-factor authentication, and connected accounts through Clerk.
           </p>
           <Separator className="my-6" />
-          <form
-            onSubmit={updatePassword}
-            className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
+          <Button
+            type="button"
+            onClick={manageAccount}
+            disabled={saving}
+            className="bg-brand text-brand-foreground hover:bg-brand-glow"
           >
-            <Field label="New password" hint="At least 8 characters.">
-              <Input
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                minLength={8}
-                autoComplete="new-password"
-                placeholder="••••••••"
-              />
-            </Field>
-            <Button
-              type="submit"
-              disabled={saving || pw.length < 8}
-              className="bg-brand text-brand-foreground hover:bg-brand-glow"
-            >
-              {saving ? "Saving…" : "Update password"}
-            </Button>
-          </form>
-          {isPasswordProvider && (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Prefer a reset link?{" "}
-              <button
-                type="button"
-                onClick={sendReset}
-                className="font-medium text-brand hover:underline"
-                disabled={saving}
-              >
-                Send it to my email
-              </button>
-              .
-            </div>
-          )}
+            <KeyRound className="mr-2 h-4 w-4" />
+            Manage account security
+          </Button>
         </CardContent>
       </Card>
 

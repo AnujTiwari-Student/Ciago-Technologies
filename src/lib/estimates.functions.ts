@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { enforceRateLimit, getClientIp, getClientHost } from "@/lib/rateLimit.server";
 import { verifyTurnstile } from "@/lib/turnstile.server";
+import { getAdminDb } from "@/lib/db/admin";
 
 const inputSchema = z.object({
   fullName: z.string().trim().min(1).max(120),
@@ -17,7 +18,7 @@ const inputSchema = z.object({
 });
 
 export const submitEstimate = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => inputSchema.parse(data))
+  .validator((data: unknown) => inputSchema.parse(data))
   .handler(async ({ data }) => {
     if (data.hp && data.hp.trim().length > 0) return { ok: true };
     const ip = getClientIp();
@@ -29,17 +30,18 @@ export const submitEstimate = createServerFn({ method: "POST" })
     });
     await verifyTurnstile(data.turnstileToken || undefined, ip, getClientHost());
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("project_estimates").insert({
-      full_name: data.fullName,
-      email: data.email,
-      company: data.company,
-      project_type: data.projectType,
-      scale: data.scale,
-      timeline: data.timeline,
-      budget_low: data.budgetLow,
-      budget_high: data.budgetHigh,
+    const adminDb = getAdminDb();
+    await adminDb.projectEstimate.create({
+      data: {
+        fullName: data.fullName,
+        email: data.email,
+        company: data.company,
+        projectType: data.projectType,
+        scale: data.scale,
+        timeline: data.timeline,
+        budgetLow: data.budgetLow,
+        budgetHigh: data.budgetHigh,
+      },
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });

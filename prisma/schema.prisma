@@ -512,5 +512,6 @@ model UserRole {
 
   department   Department? @relation(fields: [departmentId], references: [id])
 
+  @@unique([userId, role])
   @@map("user_roles")
 }

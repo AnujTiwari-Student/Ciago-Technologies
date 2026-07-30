@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type AuditLog = {
   id: string;
@@ -23,27 +24,22 @@ const filterSchema = z
 
 export const listAuditLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => filterSchema.parse(data ?? {}))
+  .validator((data: unknown) => filterSchema.parse(data ?? {}))
   .handler(async ({ data, context }) => {
-    // admin-only via RLS policy; verify explicitly for a clean 403 message
-    const { data: role } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
+    const count = await context.db.withRLS((tx) =>
+      tx.userRole.count({ where: { userId: context.userId, role: { in: ["admin", "hr"] } } }),
+    );
+    if (count === 0) throw new Error("Forbidden");
 
-    let q = context.supabase
-      .from("audit_logs")
-      .select("id, timestamp, actor_id, actor_email, action, target_resource, details")
-      .order("timestamp", { ascending: false })
-      .limit(data?.limit ?? 200);
-    if (data?.action) q = q.eq("action", data.action);
-    if (data?.from) q = q.gte("timestamp", data.from);
-    if (data?.to) q = q.lte("timestamp", data.to);
-
-    const { data: rows, error } = await q;
-    if (error) throw new Error(error.message);
-    return (rows ?? []) as AuditLog[];
+    const adminDb = getAdminDb();
+    const rows = await adminDb.auditLog.findMany({
+      where: {
+        ...(data?.action && { action: data.action }),
+        ...(data?.from && { timestamp: { gte: new Date(data.from) } }),
+        ...(data?.to && { timestamp: { lte: new Date(data.to) } }),
+      },
+      orderBy: { timestamp: "desc" },
+      take: data?.limit ?? 200,
+    });
+    return rows as unknown as AuditLog[];
   });

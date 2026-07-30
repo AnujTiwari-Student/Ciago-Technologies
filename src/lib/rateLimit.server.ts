@@ -1,6 +1,5 @@
-// Server-only sliding-window rate limiter backed by public.rate_limits.
-// Use inside createServerFn handlers.
 import { getRequestHeader, getRequestIP } from "@tanstack/react-start/server";
+import { getAdminDb } from "@/lib/db/admin";
 
 export function getClientIp(): string {
   try {
@@ -22,47 +21,41 @@ export function getClientHost(): string | null {
   }
 }
 
-/**
- * Enforce a sliding window: at most `max` events per `windowSeconds` for the
- * given (bucket, key) pair. Throws a user-facing Error when exceeded.
- */
 export async function enforceRateLimit(opts: {
   bucket: string;
   key: string;
   max: number;
   windowSeconds: number;
 }): Promise<void> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const since = new Date(Date.now() - opts.windowSeconds * 1000).toISOString();
+  const adminDb = getAdminDb();
+  const since = new Date(Date.now() - opts.windowSeconds * 1000);
 
-  const { count, error } = await supabaseAdmin
-    .from("rate_limits")
-    .select("id", { head: true, count: "exact" })
-    .eq("bucket", opts.bucket)
-    .eq("key", opts.key)
-    .gte("occurred_at", since);
+  try {
+    const count = await adminDb.rateLimit.count({
+      where: {
+        bucket: opts.bucket,
+        key: opts.key,
+        occurredAt: { gte: since },
+      },
+    });
 
-  if (error) {
-    // Fail open on limiter infra errors so a DB blip doesn't take forms down.
-    console.error("[rate-limit] count failed", error.message);
-    return;
-  }
-
-  if ((count ?? 0) >= opts.max) {
-    throw new Error("Too many requests — please try again in a few minutes.");
-  }
-
-  const { error: insErr } = await supabaseAdmin
-    .from("rate_limits")
-    .insert({ bucket: opts.bucket, key: opts.key });
-  if (insErr) console.error("[rate-limit] record failed", insErr.message);
-
-  // Best-effort prune of expired rows (~1% of calls).
-  if (Math.random() < 0.01) {
-    try {
-      await supabaseAdmin.rpc("prune_rate_limits" as any);
-    } catch {
-      /* ignore */
+    if (count >= opts.max) {
+      throw new Error("Too many requests — please try again in a few minutes.");
     }
+
+    await adminDb.rateLimit.create({
+      data: { bucket: opts.bucket, key: opts.key },
+    });
+
+    // Best-effort prune of expired rows (~1% of calls)
+    if (Math.random() < 0.01) {
+      const cutoff = new Date(Date.now() - 3600 * 1000);
+      await adminDb.rateLimit.deleteMany({
+        where: { occurredAt: { lt: cutoff } },
+      }).catch(() => {});
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("Too many requests")) throw e;
+    console.error("[rate-limit] error", e);
   }
 }

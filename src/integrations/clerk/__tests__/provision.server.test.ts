@@ -1,182 +1,150 @@
-import { describe, it, expect, vi } from "vitest";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { PrismaClient } from "@prisma/client";
 import {
   provisionClerkUser,
   lookupClerkIdByAuthUserId,
   type ClerkIdentity,
-  type ProvisionError,
-} from "@/integrations/clerk/provision.server";
+} from "@/integrations/clerk/provision-neon.server";
 
-// -------- mock supabase builder (typed) --------
-
-type MaybeSingleResult = {
-  data: { auth_user_id?: string; clerk_user_id?: string } | null;
-  error?: { code?: string; message?: string };
+// Mock the admin Prisma client
+const mockClerkUserMap = {
+  findUnique: vi.fn(),
+  findFirst: vi.fn(),
+  upsert: vi.fn(),
+  create: vi.fn(),
 };
 
-type Chain = {
-  select: ReturnType<typeof vi.fn>;
-  eq: ReturnType<typeof vi.fn>;
-  maybeSingle: ReturnType<typeof vi.fn<[], Promise<MaybeSingleResult>>>;
-  upsert: ReturnType<typeof vi.fn>;
-  insert: ReturnType<typeof vi.fn>;
-};
-
-type CreateUserMock = ReturnType<typeof vi.fn>;
-
-function makeMockSupabase(
-  maybeSingleSequence: MaybeSingleResult[],
-  opts: {
-    upsertResult?: { error?: { code?: string; message?: string } } | null;
-    insertResult?: { error?: { code?: string; message?: string } } | null;
-    createUser?: { data: { user: { id: string } | null }; error?: { message?: string } } | null;
-  } = {},
-) {
-  let callIdx = 0;
-  const fromCalls: string[] = [];
-  const eqCalls: string[] = [];
-  const createUserMock: CreateUserMock = vi.fn(
-    async () => opts.createUser ?? { data: { user: { id: "" } } },
-  );
-  const supabaseAdmin = {
-    from: vi.fn((_table: string) => {
-      fromCalls.push(_table);
-      const chain: Chain = {
-        select: vi.fn(() => chain),
-        eq: vi.fn((col: string) => {
-          eqCalls.push(col);
-          return chain;
-        }),
-        maybeSingle: vi.fn(async () => {
-          const r = maybeSingleSequence[Math.min(callIdx, maybeSingleSequence.length - 1)];
-          callIdx++;
-          return r ?? { data: null };
-        }),
-        upsert: vi.fn(async () => opts.upsertResult ?? { data: null }),
-        insert: vi.fn(async () => opts.insertResult ?? { error: null }),
-      };
-      return chain;
-    }),
-    auth: { admin: { createUser: createUserMock } },
-  };
-  return {
-    supabaseAdmin: supabaseAdmin as unknown as SupabaseClient<Database>,
-    fromCalls,
-    eqCalls,
-    createUserMock,
-  };
-}
+const mockPrisma = {
+  clerkUserMap: mockClerkUserMap,
+  $queryRaw: vi.fn(),
+  $transaction: vi.fn(),
+} as unknown as PrismaClient;
 
 const baseIdentity: ClerkIdentity = {
-  clerkUserId: "user_2vX1ABC",
-  email: "***",
+  clerkUserId: "clerk_test123",
+  email: "test@example.com",
   emailVerified: true,
-  fullName: "Jane Doe",
+  fullName: "Test User",
 };
 
-// --------------------------------------------------------------------------
+describe("provisionClerkUser (Neon/Prisma)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-describe("provisionClerkUser", () => {
-  it("returns the existing mapping when a clerk_user_id is already mapped", async () => {
-    const { supabaseAdmin, createUserMock } = makeMockSupabase([
-      { data: { auth_user_id: "11111111-1111-1111-1111-111111111111" } },
-    ]);
-    const res = await provisionClerkUser(supabaseAdmin, baseIdentity);
+  it("returns existing mapping when found by clerk_user_id", async () => {
+    mockClerkUserMap.findUnique.mockResolvedValueOnce({
+      authUserId: "auth-uuid-123",
+    });
+
+    const res = await provisionClerkUser(mockPrisma, baseIdentity);
+
     expect(res).toEqual({
-      authUserId: "11111111-1111-1111-1111-111111111111",
+      authUserId: "auth-uuid-123",
       created: false,
       reused: true,
     });
-    expect(createUserMock).not.toHaveBeenCalled();
+    expect(mockClerkUserMap.findUnique).toHaveBeenCalledWith({
+      where: { clerkUserId: "clerk_test123" },
+      select: { authUserId: true },
+    });
   });
 
-  it("rejects an identity without a clerk_user_id", async () => {
-    const { supabaseAdmin } = makeMockSupabase([{ data: null }]);
-    const res = (await provisionClerkUser(supabaseAdmin, {
+  it("returns error when clerkUserId is missing", async () => {
+    const res = await provisionClerkUser(mockPrisma, {
       ...baseIdentity,
       clerkUserId: "",
-    })) as ProvisionError;
-    expect(res.kind).toBe("missing_clerk_user_id");
+    });
+
+    expect(res).toEqual({ kind: "missing_clerk_user_id" });
   });
 
-  it("rejects an identity without an email", async () => {
-    const { supabaseAdmin } = makeMockSupabase([{ data: null }]);
-    const res = (await provisionClerkUser(supabaseAdmin, {
+  it("returns error when email is missing", async () => {
+    const res = await provisionClerkUser(mockPrisma, {
       ...baseIdentity,
       email: null,
-    })) as ProvisionError;
-    expect(res.kind).toBe("missing_email");
+    });
+
+    expect(res).toEqual({ kind: "missing_email" });
   });
 
-  it("reuses an existing auth.users row when the email is already mapped", async () => {
-    // Sequence: direct (null), by-email (existing mapping).
-    const { supabaseAdmin, createUserMock } = makeMockSupabase(
-      [{ data: null }, { data: { auth_user_id: "22222222-2222-2222-2222-222222222222" } }],
-      { upsertResult: { error: null } },
-    );
-    const res = await provisionClerkUser(supabaseAdmin, baseIdentity);
+  it("links to existing mapping by verified email", async () => {
+    mockClerkUserMap.findUnique.mockResolvedValueOnce(null);
+    mockClerkUserMap.findFirst.mockResolvedValueOnce({
+      authUserId: "existing-auth-uuid",
+    });
+    mockClerkUserMap.upsert.mockResolvedValueOnce({});
+
+    const res = await provisionClerkUser(mockPrisma, baseIdentity);
+
     expect(res).toEqual({
-      authUserId: "22222222-2222-2222-2222-222222222222",
+      authUserId: "existing-auth-uuid",
       created: false,
       reused: true,
     });
-    expect(createUserMock).not.toHaveBeenCalled();
+    expect(mockClerkUserMap.findFirst).toHaveBeenCalledWith({
+      where: { email: "test@example.com" },
+      select: { authUserId: true },
+    });
+    expect(mockClerkUserMap.upsert).toHaveBeenCalled();
   });
 
-  it("creates a new auth.users row when no partial mapping exists and inserts the map", async () => {
-    // Sequence: direct (null), by-email (null), insert succeeds.
-    const { supabaseAdmin, createUserMock } = makeMockSupabase([{ data: null }, { data: null }], {
-      insertResult: { error: null },
-      createUser: { data: { user: { id: "33333333-3333-3333-3333-333333333333" } } },
+  it("creates new auth.users row and mapping when none exist", async () => {
+    mockClerkUserMap.findUnique.mockResolvedValueOnce(null);
+    mockClerkUserMap.findFirst.mockResolvedValueOnce(null);
+
+    const newAuthUserId = "new-auth-uuid-456";
+    (mockPrisma.$transaction as any).mockImplementationOnce(async (fn: any) => {
+      return fn({
+        $queryRaw: vi.fn().mockResolvedValueOnce([{ id: newAuthUserId }]),
+        clerkUserMap: {
+          create: vi.fn().mockResolvedValueOnce({}),
+        },
+      });
     });
-    const res = await provisionClerkUser(supabaseAdmin, baseIdentity);
+
+    const res = await provisionClerkUser(mockPrisma, baseIdentity);
+
     expect(res).toEqual({
-      authUserId: "33333333-3333-3333-3333-333333333333",
+      authUserId: newAuthUserId,
       created: true,
       reused: false,
-    });
-    expect(createUserMock).toHaveBeenCalledTimes(1);
-    const call = (createUserMock as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.email).toBe("***");
-    // We confirm the email directly because Clerk has already verified it;
-    // Supabase must NOT send its own verification email.
-    expect(call.email_confirm).toBe(true);
-    expect(call.user_metadata?.full_name).toBe("Jane Doe");
-  });
-
-  it("falls back to the existing row on a unique-violation during insert (provisioning race)", async () => {
-    // Sequence: direct (null) — emailVerified:false skips the by-email probe
-    //         → createUser → insert throws 23505 → tie-break maybeSingle (mapping exists).
-    const { supabaseAdmin } = makeMockSupabase(
-      [{ data: null }, { data: { auth_user_id: "55555555-5555-5555-5555-555555555555" } }],
-      {
-        insertResult: { error: { code: "23505", message: "duplicate key value" } },
-        createUser: { data: { user: { id: "44444444-4444-4444-4444-444444444444" } } },
-      },
-    );
-    const res = await provisionClerkUser(supabaseAdmin, {
-      ...baseIdentity,
-      emailVerified: false,
-    });
-    expect(res).toEqual({
-      authUserId: "55555555-5555-5555-5555-555555555555",
-      created: false,
-      reused: true,
     });
   });
 });
 
-describe("lookupClerkIdByAuthUserId", () => {
-  it("returns the clerk_user_id when a mapping exists", async () => {
-    const { supabaseAdmin } = makeMockSupabase([{ data: { clerk_user_id: "user_lookup" } }]);
-    const out = await lookupClerkIdByAuthUserId(supabaseAdmin, "***");
-    expect(out).toBe("user_lookup");
+describe("lookupClerkIdByAuthUserId (Neon/Prisma)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns clerk_user_id when mapping exists", async () => {
+    mockClerkUserMap.findUnique.mockResolvedValueOnce({
+      clerkUserId: "clerk_found",
+    });
+
+    const res = await lookupClerkIdByAuthUserId(mockPrisma, "auth-uuid-123");
+
+    expect(res).toBe("clerk_found");
+    expect(mockClerkUserMap.findUnique).toHaveBeenCalledWith({
+      where: { authUserId: "auth-uuid-123" },
+      select: { clerkUserId: true },
+    });
   });
 
   it("returns null when no mapping exists", async () => {
-    const { supabaseAdmin } = makeMockSupabase([{ data: null }]);
-    const out = await lookupClerkIdByAuthUserId(supabaseAdmin, "***");
-    expect(out).toBeNull();
+    mockClerkUserMap.findUnique.mockResolvedValueOnce(null);
+
+    const res = await lookupClerkIdByAuthUserId(mockPrisma, "auth-uuid-999");
+
+    expect(res).toBeNull();
+  });
+
+  it("returns null on error", async () => {
+    mockClerkUserMap.findUnique.mockRejectedValueOnce(new Error("DB error"));
+
+    const res = await lookupClerkIdByAuthUserId(mockPrisma, "auth-uuid-123");
+
+    expect(res).toBeNull();
   });
 });

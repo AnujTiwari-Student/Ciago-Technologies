@@ -31,41 +31,46 @@ export type LookupBundle = {
 export const listLookups = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<LookupBundle> => {
-    const sb = context.supabase;
-    const [depts, emp, stat] = await Promise.all([
-      sb.from("departments").select("id, name, code").order("name", { ascending: true }),
-      sb
-        .from("employment_types")
-        .select("code, label, sort_order")
-        .order("sort_order", { ascending: true }),
-      sb
-        .from("status_options")
-        .select("kind, code, label, description, sort_order")
-        .order("sort_order", { ascending: true }),
-    ]);
-    if (depts.error) throw new Error(depts.error.message);
-    if (emp.error) throw new Error(emp.error.message);
-    if (stat.error) throw new Error(stat.error.message);
+    const [depts, emp, stat] = await context.db.withRLS((tx) =>
+      Promise.all([
+        tx.department.findMany({
+          select: { id: true, name: true, code: true },
+          orderBy: { name: "asc" },
+        }),
+        tx.employmentType.findMany({
+          select: { code: true, label: true, sortOrder: true },
+          orderBy: { sortOrder: "asc" },
+        }),
+        tx.statusOption.findMany({
+          select: { kind: true, code: true, label: true, description: true, sortOrder: true },
+          orderBy: { sortOrder: "asc" },
+        }),
+      ]),
+    );
 
     const statuses: Record<StatusKind, StatusOption[]> = {
       job_posting: [],
       application: [],
       user_account: [],
     };
-    for (const row of (stat.data ?? []) as any[]) {
+    for (const row of stat) {
       const kind = row.kind as StatusKind;
       if (!statuses[kind]) continue;
       statuses[kind].push({
         code: row.code,
         label: row.label,
         description: row.description,
-        sort_order: row.sort_order,
+        sort_order: row.sortOrder,
       });
     }
 
     return {
-      departments: (depts.data ?? []) as DepartmentOption[],
-      employment_types: (emp.data ?? []) as EmploymentTypeOption[],
+      departments: depts.map((d) => ({ id: d.id, name: d.name, code: d.code })),
+      employment_types: emp.map((e) => ({
+        code: e.code,
+        label: e.label,
+        sort_order: e.sortOrder,
+      })),
       statuses,
     };
   });

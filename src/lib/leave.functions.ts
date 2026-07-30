@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 // ============================================================
 // Types & helpers
@@ -27,9 +28,11 @@ export type PendingLeaveRow = LeaveRequest & {
 
 const LEAVE_TYPES = ["casual", "sick", "earned", "unpaid"] as const;
 
-async function getUserRoles(supabase: any, userId: string): Promise<Set<string>> {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  return new Set((data ?? []).map((r: any) => r.role as string));
+async function assertApprover(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["manager", "hr", "admin"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 // ============================================================
@@ -49,81 +52,73 @@ const submitSchema = z
 
 export const submitLeaveRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: z.infer<typeof submitSchema>) => submitSchema.parse(d))
+  .validator((d: z.infer<typeof submitSchema>) => submitSchema.parse(d))
   .handler(async ({ data, context }): Promise<LeaveRequest> => {
-    const { data: row, error } = await context.supabase
-      .from("leave_requests")
-      .insert({
-        user_id: context.userId,
-        leave_type: data.leave_type,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        reason: data.reason ?? null,
-        status: "pending",
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-    return row as LeaveRequest;
+    const row = await context.db.withRLS((tx) =>
+      tx.leaveRequest.create({
+        data: {
+          userId: context.userId,
+          leaveType: data.leave_type,
+          startDate: data.start_date,
+          endDate: data.end_date,
+          reason: data.reason ?? null,
+          status: "pending",
+        },
+      }),
+    );
+    return row as unknown as LeaveRequest;
   });
 
 export const listMyLeaveRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<LeaveRequest[]> => {
-    const { data, error } = await context.supabase
-      .from("leave_requests")
-      .select("*")
-      .eq("user_id", context.userId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as LeaveRequest[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.leaveRequest.findMany({
+        where: { userId: context.userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+    return rows as unknown as LeaveRequest[];
   });
 
 export const cancelMyLeaveRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .validator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("leave_requests")
-      .update({ status: "cancelled" })
-      .eq("id", data.id)
-      .eq("user_id", context.userId)
-      .eq("status", "pending");
-    if (error) throw new Error(error.message);
+    await context.db.withRLS((tx) =>
+      tx.leaveRequest.updateMany({
+        where: { id: data.id, userId: context.userId, status: "pending" },
+        data: { status: "cancelled" },
+      }),
+    );
     return { ok: true };
   });
 
 // ============================================================
 // Approver actions (manager / hr / admin)
 // ============================================================
-async function assertApprover(supabase: any, userId: string) {
-  const roles = await getUserRoles(supabase, userId);
-  const ok = roles.has("manager") || roles.has("hr") || roles.has("admin");
-  if (!ok) throw new Error("Forbidden");
-  return roles;
-}
-
 export const listPendingLeaveRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<PendingLeaveRow[]> => {
-    await assertApprover(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("leave_requests")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as LeaveRequest[];
+    await assertApprover(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const rows = await adminDb.leaveRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
     if (rows.length === 0) return [];
-    const ids = Array.from(new Set(rows.map((r) => r.user_id)));
-    const { data: profiles } = await context.supabase
-      .from("profiles")
-      .select("user_id, full_name")
-      .in("user_id", ids);
-    const byId = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
+
+    const ids = Array.from(new Set(rows.map((r) => r.userId)));
+    const profiles = await adminDb.profile.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true, fullName: true },
+    });
+    const byId = new Map(profiles.map((p) => [p.userId, p.fullName]));
+
     return rows.map((r) => ({
-      ...r,
-      applicant_name: (byId.get(r.user_id) as any)?.full_name ?? null,
+      ...(r as unknown as LeaveRequest),
+      applicant_name: byId.get(r.userId) ?? null,
       applicant_email: null,
     }));
   });
@@ -136,44 +131,44 @@ const decisionSchema = z.object({
 
 export const decideLeaveRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: z.infer<typeof decisionSchema>) => decisionSchema.parse(d))
+  .validator((d: z.infer<typeof decisionSchema>) => decisionSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertApprover(context.supabase, context.userId);
+    await assertApprover(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const { data: updated, error } = await context.supabase
-      .from("leave_requests")
-      .update({
+    const updated = await adminDb.leaveRequest.update({
+      where: { id: data.id },
+      data: {
         status: data.decision,
-        decision_note: data.decision_note ?? null,
-        decided_by: context.userId,
-        decided_at: new Date().toISOString(),
-      })
-      .eq("id", data.id)
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-
-    // Audit log (best effort)
-    await context.supabase.from("audit_logs").insert({
-      actor_id: context.userId,
-      action: `leave.${data.decision}`,
-      target_resource: data.id,
-      details: {
-        applicant_id: (updated as any)?.user_id,
-        start_date: (updated as any)?.start_date,
-        end_date: (updated as any)?.end_date,
-        note: data.decision_note ?? null,
+        decisionNote: data.decision_note ?? null,
+        decidedBy: context.userId,
+        decidedAt: new Date(),
       },
     });
 
-    // In-app notification (best effort)
-    await context.supabase.from("in_app_notifications").insert({
-      user_id: (updated as any).user_id,
-      title: data.decision === "approved" ? "Leave approved" : "Leave rejected",
-      body: `${(updated as any).start_date} → ${(updated as any).end_date}${
-        data.decision_note ? ` — ${data.decision_note}` : ""
-      }`,
-      link: "/employee?tab=leave",
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        action: `leave.${data.decision}`,
+        targetResource: data.id,
+        details: {
+          applicant_id: updated.userId,
+          start_date: updated.startDate,
+          end_date: updated.endDate,
+          note: data.decision_note ?? null,
+        },
+      },
+    });
+
+    await adminDb.inAppNotification.create({
+      data: {
+        userId: updated.userId,
+        title: data.decision === "approved" ? "Leave approved" : "Leave rejected",
+        body: `${updated.startDate} → ${updated.endDate}${
+          data.decision_note ? ` — ${data.decision_note}` : ""
+        }`,
+        link: "/employee?tab=leave",
+      },
     });
 
     return { ok: true };

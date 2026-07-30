@@ -102,7 +102,10 @@ export const requireNeonAuth = createMiddleware({ type: "function" }).server(
       });
 
       if (!("authUserId" in prov)) {
-        const message = "kind" in prov ? (prov.message ?? prov.kind) : "provision failed";
+        const message =
+          "kind" in prov
+            ? ("message" in prov ? prov.message : prov.kind)
+            : "provision failed";
         console.error("[neon-auth] provisioning failed", message);
         throw new Error(`Unauthorized: ${message}`);
       }

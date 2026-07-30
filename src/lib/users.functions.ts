@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export const DEPT_TYPES = [
   "engineering",
@@ -56,56 +57,64 @@ export type DirectoryRow = {
   created_at: string;
 };
 
-async function getActorRoles(supabase: any, userId: string) {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const roles = new Set<AppRole>((data ?? []).map((r: any) => r.role));
-  return {
-    isAdmin: roles.has("admin"),
-    isHr: roles.has("hr"),
-  };
+async function getActorRoles(db: any, userId: string) {
+  const roles = await db.withRLS((tx: any) =>
+    tx.userRole.findMany({ where: { userId }, select: { role: true } }),
+  );
+  const set = new Set(roles.map((r: any) => r.role));
+  return { isAdmin: set.has("admin"), isHr: set.has("hr") };
 }
 
 export const listDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<DirectoryRow[]> => {
-    const { data, error } = await context.supabase.rpc("list_directory");
-    if (error) throw new Error(error.message);
-    return (data ?? []) as DirectoryRow[];
+    const rows = await context.db.withRLS((tx) =>
+      tx.$queryRaw`SELECT * FROM public.list_directory()`,
+    );
+    return (rows as unknown as DirectoryRow[]) ?? [];
   });
 
 export const getUserDetail = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .validator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const actor = await getActorRoles(supabase, userId);
+    const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
 
-    const { data: targetIsAdmin } = await supabase.rpc("is_admin_user", { _uid: data.user_id });
-    if (actor.isHr && !actor.isAdmin && targetIsAdmin) {
+    const adminDb = getAdminDb();
+
+    const targetAdminRole = await adminDb.userRole.findFirst({
+      where: { userId: data.user_id, role: "admin" },
+    });
+    if (actor.isHr && !actor.isAdmin && targetAdminRole) {
       throw new Error("HR users cannot modify System Admin accounts");
     }
 
-    const [{ data: emp }, { data: profile }, { data: roles }, { data: docs }] = await Promise.all([
-      supabase.from("employees").select("*").eq("user_id", data.user_id).maybeSingle(),
-      supabase
-        .from("profiles")
-        .select("user_id, full_name, public_email")
-        .eq("user_id", data.user_id)
-        .maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", data.user_id),
-      supabase.from("identity_documents").select("*").eq("user_id", data.user_id).order("doc_type"),
+    const [emp, profile, roles, docs] = await Promise.all([
+      adminDb.employee.findUnique({ where: { userId: data.user_id } }),
+      adminDb.profile.findUnique({
+        where: { userId: data.user_id },
+        select: { userId: true, fullName: true, publicEmail: true },
+      }),
+      adminDb.userRole.findMany({
+        where: { userId: data.user_id },
+        select: { role: true },
+      }),
+      adminDb.identityDocument.findMany({
+        where: { userId: data.user_id },
+        orderBy: { docType: "asc" },
+      }),
     ]);
 
-    // sign docs
+    // Storage: signed URLs for identity docs (R2)
+    const { getStorage } = await import("@/lib/storage");
+    const storage = getStorage();
     const signedDocs = await Promise.all(
-      (docs ?? []).map(async (d: any) => {
+      docs.map(async (d) => {
         let signed_url: string | null = null;
-        if (d.storage_path) {
-          const { data: s } = await supabase.storage
-            .from("identity-docs")
-            .createSignedUrl(d.storage_path, 60 * 60);
-          signed_url = s?.signedUrl ?? null;
+        if (d.storagePath) {
+          const result = await storage.createSignedUrl("identity-docs", d.storagePath, 60 * 60);
+          signed_url = result.signedUrl;
         }
         return { ...d, signed_url };
       }),
@@ -113,9 +122,11 @@ export const getUserDetail = createServerFn({ method: "GET" })
 
     return {
       employee: emp,
-      profile,
-      roles: (roles ?? []).map((r: any) => r.role as AppRole),
-      is_admin_target: !!targetIsAdmin,
+      profile: profile
+        ? { user_id: profile.userId, full_name: profile.fullName, public_email: profile.publicEmail }
+        : null,
+      roles: roles.map((r) => r.role as AppRole),
+      is_admin_target: !!targetAdminRole,
       documents: signedDocs,
     };
   });
@@ -132,11 +143,7 @@ const employeeSchema = z.object({
   designation: z.string().trim().max(160).optional().nullable(),
   reporting_manager_id: z.string().uuid().optional().nullable(),
   reporting_hr_id: z.string().uuid().optional().nullable(),
-  doj: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .nullable(),
+  doj: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   employment_type: z.enum(EMPLOYMENT_TYPES).optional().nullable(),
   base_salary: z.number().nonnegative().max(999999999).optional().nullable(),
   salary_currency: z.string().trim().min(1).max(6).default("INR").optional(),
@@ -151,63 +158,68 @@ const employeeSchema = z.object({
 
 export const upsertEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => employeeSchema.parse(d))
+  .validator((d: unknown) => employeeSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const actor = await getActorRoles(supabase, userId);
+    const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
 
-    const { data: targetIsAdmin } = await supabase.rpc("is_admin_user", { _uid: data.user_id });
-    if (actor.isHr && !actor.isAdmin && targetIsAdmin) {
+    const adminDb = getAdminDb();
+    const targetAdminRole = await adminDb.userRole.findFirst({
+      where: { userId: data.user_id, role: "admin" },
+    });
+    if (actor.isHr && !actor.isAdmin && targetAdminRole) {
       throw new Error("HR users cannot modify System Admin accounts");
     }
 
-    // profile write (full_name)
     if (data.full_name !== undefined) {
-      await supabase
-        .from("profiles")
-        .upsert(
-          { user_id: data.user_id, full_name: data.full_name || null },
-          { onConflict: "user_id" },
-        );
+      await adminDb.profile.upsert({
+        where: { userId: data.user_id },
+        create: { userId: data.user_id, fullName: data.full_name || null },
+        update: { fullName: data.full_name || null },
+      });
     }
 
-    const emp: Record<string, any> = { user_id: data.user_id };
-    const keys = [
-      "work_email",
-      "personal_email",
-      "contact_number",
-      "address",
-      "department",
-      "team_name",
-      "designation",
-      "reporting_manager_id",
-      "reporting_hr_id",
-      "doj",
-      "employment_type",
-      "base_salary",
-      "salary_currency",
-      "work_model",
-      "work_location",
-      "probation_months",
-      "probation_status",
-      "background_check_status",
-      "doc_verification_status",
-      "notes",
-    ] as const;
-    for (const k of keys) {
-      const v = (data as any)[k];
-      if (v !== undefined) emp[k] = v === "" ? null : v;
+    const empData: Record<string, any> = {};
+    const fieldMap: Record<string, string> = {
+      work_email: "workEmail",
+      personal_email: "personalEmail",
+      contact_number: "contactNumber",
+      address: "address",
+      department: "department",
+      team_name: "teamName",
+      designation: "designation",
+      reporting_manager_id: "reportingManagerId",
+      reporting_hr_id: "reportingHrId",
+      doj: "doj",
+      employment_type: "employmentType",
+      base_salary: "baseSalary",
+      salary_currency: "salaryCurrency",
+      work_model: "workModel",
+      work_location: "workLocation",
+      probation_months: "probationMonths",
+      probation_status: "probationStatus",
+      background_check_status: "backgroundCheckStatus",
+      doc_verification_status: "docVerificationStatus",
+      notes: "notes",
+    };
+    for (const [snake, camel] of Object.entries(fieldMap)) {
+      const v = (data as any)[snake];
+      if (v !== undefined) empData[camel] = v === "" ? null : v;
     }
 
-    const { error } = await supabase.from("employees").upsert(emp, { onConflict: "user_id" });
-    if (error) throw new Error(error.message);
+    await adminDb.employee.upsert({
+      where: { userId: data.user_id },
+      create: { userId: data.user_id, ...empData },
+      update: empData,
+    });
 
-    await supabase.from("audit_logs").insert({
-      actor_id: userId,
-      action: "user.employee_upsert",
-      target_resource: data.user_id,
-      details: { fields: Object.keys(emp).filter((k) => k !== "user_id") },
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        action: "user.employee_upsert",
+        targetResource: data.user_id,
+        details: { fields: Object.keys(empData) },
+      },
     });
 
     return { ok: true };
@@ -221,24 +233,39 @@ const roleSchema = z.object({
 
 export const setUserRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => roleSchema.parse(d))
+  .validator((d: unknown) => roleSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const actor = await getActorRoles(supabase, userId);
+    const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
 
-    const { data: targetIsAdmin } = await supabase.rpc("is_admin_user", { _uid: data.user_id });
+    const adminDb = getAdminDb();
+    const targetAdminRole = await adminDb.userRole.findFirst({
+      where: { userId: data.user_id, role: "admin" },
+    });
     if (actor.isHr && !actor.isAdmin) {
-      if (targetIsAdmin) throw new Error("HR users cannot modify System Admin accounts");
+      if (targetAdminRole) throw new Error("HR users cannot modify System Admin accounts");
       if (data.role === "admin") throw new Error("Only Admins can grant the Admin role");
     }
 
-    const { error } = await supabase.rpc("admin_set_user_role", {
-      _target_user_id: data.user_id,
-      _new_role: data.role,
-      _department_id: data.department_id ?? undefined,
+    await adminDb.userRole.deleteMany({
+      where: { userId: data.user_id },
     });
-    if (error) throw new Error(error.message);
+    await adminDb.userRole.create({
+      data: {
+        userId: data.user_id,
+        role: data.role as any,
+        departmentId: data.department_id ?? null,
+      },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        action: "role.set",
+        targetResource: data.user_id,
+        details: { role: data.role, department_id: data.department_id ?? null },
+      },
+    });
     return { ok: true };
   });
 
@@ -251,27 +278,39 @@ const idDocSchema = z.object({
 
 export const upsertIdentityDoc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => idDocSchema.parse(d))
+  .validator((d: unknown) => idDocSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    if (data.user_id !== userId) {
-      const actor = await getActorRoles(supabase, userId);
+    if (data.user_id !== context.userId) {
+      const actor = await getActorRoles(context.db, context.userId);
       if (!actor.isAdmin) throw new Error("Only the owner or admin can upload identity documents");
     }
-    const payload = {
-      user_id: data.user_id,
-      doc_type: data.doc_type,
-      doc_number: data.doc_number || null,
-      storage_path: data.storage_path || null,
-      status: "pending" as const,
-      feedback: null,
-      verified_by: null,
-      verified_at: null,
-    };
-    const { error } = await supabase
-      .from("identity_documents")
-      .upsert(payload, { onConflict: "user_id,doc_type" });
-    if (error) throw new Error(error.message);
+    const adminDb = getAdminDb();
+    const existing = await adminDb.identityDocument.findFirst({
+      where: { userId: data.user_id, docType: data.doc_type },
+    });
+    if (existing) {
+      await adminDb.identityDocument.update({
+        where: { id: existing.id },
+        data: {
+          docNumber: data.doc_number || null,
+          storagePath: data.storage_path || null,
+          status: "pending",
+          feedback: null,
+          verifiedBy: null,
+          verifiedAt: null,
+        },
+      });
+    } else {
+      await adminDb.identityDocument.create({
+        data: {
+          userId: data.user_id,
+          docType: data.doc_type,
+          docNumber: data.doc_number || null,
+          storagePath: data.storage_path || null,
+          status: "pending",
+        },
+      });
+    }
     return { ok: true };
   });
 
@@ -283,41 +322,43 @@ const verifyDocSchema = z.object({
 
 export const verifyIdentityDoc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => verifyDocSchema.parse(d))
+  .validator((d: unknown) => verifyDocSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const actor = await getActorRoles(supabase, userId);
+    const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
 
-    const { data: doc, error: fetchErr } = await supabase
-      .from("identity_documents")
-      .select("id, user_id")
-      .eq("id", data.doc_id)
-      .maybeSingle();
-    if (fetchErr || !doc) throw new Error("Document not found");
-    if (doc.user_id === userId) throw new Error("Cannot verify your own documents");
+    const adminDb = getAdminDb();
+    const doc = await adminDb.identityDocument.findUnique({
+      where: { id: data.doc_id },
+      select: { id: true, userId: true },
+    });
+    if (!doc) throw new Error("Document not found");
+    if (doc.userId === context.userId) throw new Error("Cannot verify your own documents");
 
-    const { data: targetIsAdmin } = await supabase.rpc("is_admin_user", { _uid: doc.user_id });
-    if (actor.isHr && !actor.isAdmin && targetIsAdmin) {
+    const targetAdminRole = await adminDb.userRole.findFirst({
+      where: { userId: doc.userId, role: "admin" },
+    });
+    if (actor.isHr && !actor.isAdmin && targetAdminRole) {
       throw new Error("HR users cannot modify System Admin accounts");
     }
 
-    const { error } = await supabase
-      .from("identity_documents")
-      .update({
+    await adminDb.identityDocument.update({
+      where: { id: data.doc_id },
+      data: {
         status: data.status,
         feedback: data.feedback || null,
-        verified_by: userId,
-        verified_at: new Date().toISOString(),
-      })
-      .eq("id", data.doc_id);
-    if (error) throw new Error(error.message);
+        verifiedBy: context.userId,
+        verifiedAt: new Date(),
+      },
+    });
 
-    await supabase.from("audit_logs").insert({
-      actor_id: userId,
-      action: `idoc.${data.status}`,
-      target_resource: doc.user_id,
-      details: { doc_id: data.doc_id },
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        action: `idoc.${data.status}`,
+        targetResource: doc.userId,
+        details: { doc_id: data.doc_id },
+      },
     });
     return { ok: true };
   });
@@ -325,14 +366,15 @@ export const verifyIdentityDoc = createServerFn({ method: "POST" })
 export const listAssignables = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const actor = await getActorRoles(supabase, userId);
+    const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
-    const { data, error } = await supabase.rpc("list_directory");
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as DirectoryRow[];
+
+    const rows = await context.db.withRLS((tx) =>
+      tx.$queryRaw`SELECT * FROM public.list_directory()`,
+    ) as DirectoryRow[];
+
     return {
-      managers: rows.filter((r) => r.role === "manager" || r.role === "admin"),
-      hrs: rows.filter((r) => r.role === "hr" || r.role === "admin"),
+      managers: (rows ?? []).filter((r) => r.role === "manager" || r.role === "admin"),
+      hrs: (rows ?? []).filter((r) => r.role === "hr" || r.role === "admin"),
     };
   });

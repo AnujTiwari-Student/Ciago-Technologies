@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 const ALLOWED_STATUSES = [
   "applied",
@@ -35,80 +36,87 @@ export type AdminUser = {
   full_name: string | null;
 };
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden");
+async function assertAdmin(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: "admin" } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
-async function assertHrOrAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "hr"])
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden");
+async function assertHrOrAdmin(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["admin", "hr"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return { isAdmin: !!data };
+    const role = await context.db.withRLS((tx) =>
+      tx.userRole.findFirst({ where: { userId: context.userId, role: "admin" } }),
+    );
+    return { isAdmin: !!role };
   });
 
 export const listAllApplications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("job_applications")
-      .select(
-        "id, user_id, role_id, role_title, full_name, email, status, portfolio_url, resume_link, resume_storage_path, created_at",
-      )
-      .eq("is_soft_deleted", false)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const rows = (data ?? []) as AdminApplication[];
-    // Attach track_type from job_postings so Admin/HR can see HR-track / Manager-track badges.
+    const apps = await adminDb.jobApplication.findMany({
+      where: { isSoftDeleted: false },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        userId: true,
+        roleId: true,
+        roleTitle: true,
+        fullName: true,
+        email: true,
+        status: true,
+        portfolioUrl: true,
+        resumeLink: true,
+        resumeStoragePath: true,
+        createdAt: true,
+      },
+    });
+
+    const rows: AdminApplication[] = apps.map((a) => ({
+      id: a.id,
+      user_id: a.userId,
+      role_id: a.roleId,
+      role_title: a.roleTitle,
+      full_name: a.fullName,
+      email: a.email,
+      status: a.status,
+      portfolio_url: a.portfolioUrl,
+      resume_link: a.resumeLink,
+      resume_storage_path: a.resumeStoragePath,
+      created_at: a.createdAt.toISOString(),
+      track_type: null,
+    }));
+
     const roleIds = Array.from(new Set(rows.map((r) => r.role_id).filter(Boolean)));
     if (roleIds.length > 0) {
-      const { data: postings } = await context.supabase
-        .from("job_postings")
-        .select("id, track_type")
-        .in("id", roleIds);
-      const trackByRole = new Map(
-        ((postings ?? []) as any[]).map((p) => [p.id, p.track_type ?? null]),
-      );
-      for (const r of rows) r.track_type = trackByRole.get(r.role_id) ?? null;
-    } else {
-      for (const r of rows) r.track_type = null;
+      const postings = await adminDb.jobPosting.findMany({
+        where: { id: { in: roleIds } },
+        select: { id: true, trackType: true },
+      });
+      const trackByRole = new Map(postings.map((p) => [p.id, p.trackType ?? null]));
+      for (const r of rows) r.track_type = (trackByRole.get(r.role_id) as any) ?? null;
     }
 
+    // Storage: signed URLs for resumes (stays on Supabase Storage until R2 migration)
     const withPaths = rows.filter((r) => r.resume_storage_path);
     if (withPaths.length > 0) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { getStorage } = await import("@/lib/storage");
+      const storage = getStorage();
       await Promise.all(
         withPaths.map(async (r) => {
-          const { data: signed } = await supabaseAdmin.storage
-            .from("resumes")
-            .createSignedUrl(r.resume_storage_path!, 60 * 60 * 24 * 7);
-          if (signed?.signedUrl) r.resume_link = signed.signedUrl;
+          const result = await storage.createSignedUrl("resumes", r.resume_storage_path!, 60 * 60 * 24 * 7);
+          if (result.signedUrl) r.resume_link = result.signedUrl;
         }),
       );
     }
@@ -122,54 +130,52 @@ const updateSchema = z.object({
 
 export const updateApplicationStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => updateSchema.parse(data))
+  .validator((data: unknown) => updateSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertHrOrAdmin(context.supabase, context.userId);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    // Fetch prior state so we can log + notify only on real change
-    const { data: prior } = await context.supabase
-      .from("job_applications")
-      .select("id, user_id, email, full_name, role_title, status")
-      .eq("id", data.id)
-      .maybeSingle();
+    const prior = await adminDb.jobApplication.findUnique({
+      where: { id: data.id },
+      select: { id: true, userId: true, email: true, fullName: true, roleTitle: true, status: true },
+    });
 
-    const { error } = await context.supabase
-      .from("job_applications")
-      .update({ status: data.status })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    await adminDb.jobApplication.update({
+      where: { id: data.id },
+      data: { status: data.status },
+    });
 
     if (prior && prior.status !== data.status) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { getStatusEmailContent, sendResendEmail } = await import("@/lib/notifications.server");
-      const content = getStatusEmailContent(data.status, prior.role_title, prior.full_name);
+      const content = getStatusEmailContent(data.status, prior.roleTitle, prior.fullName);
 
-      // 1) audit log
-      await supabaseAdmin.from("audit_logs").insert({
-        actor_id: context.userId,
-        actor_email: (context.claims as any)?.email ?? null,
-        action: "APPLICATION_STATUS_UPDATED",
-        target_resource: `job_applications/${data.id}`,
-        details: {
-          from: prior.status,
-          to: data.status,
-          candidate_email: prior.email,
-          role_title: prior.role_title,
-        } as any,
+      await adminDb.auditLog.create({
+        data: {
+          actorId: context.userId,
+          actorEmail: (context.claims as any)?.email ?? null,
+          action: "APPLICATION_STATUS_UPDATED",
+          targetResource: `job_applications/${data.id}`,
+          details: {
+            from: prior.status,
+            to: data.status,
+            candidate_email: prior.email,
+            role_title: prior.roleTitle,
+          },
+        },
       });
 
-      // 2) in-app notification (only if candidate has an auth user_id)
-      if (prior.user_id) {
-        await supabaseAdmin.from("in_app_notifications").insert({
-          user_id: prior.user_id,
-          application_id: prior.id,
-          title: content.inAppTitle,
-          body: content.inAppBody,
-          link: "/my-applications",
+      if (prior.userId) {
+        await adminDb.inAppNotification.create({
+          data: {
+            userId: prior.userId,
+            applicationId: prior.id,
+            title: content.inAppTitle,
+            body: content.inAppBody,
+            link: "/my-applications",
+          },
         });
       }
 
-      // 3) email (best-effort — never fail the status update)
       try {
         await sendResendEmail({
           to: prior.email,
@@ -188,61 +194,67 @@ const deleteSchema = z.object({ id: z.string().uuid() });
 
 export const deleteRejectedApplication = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => deleteSchema.parse(data))
+  .validator((data: unknown) => deleteSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    // Fetch resume path first so we can purge storage immediately
-    const { data: row, error: fetchErr } = await context.supabase
-      .from("job_applications")
-      .select("id, status, resume_storage_path, is_soft_deleted")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (fetchErr) throw new Error(fetchErr.message);
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const row = await adminDb.jobApplication.findUnique({
+      where: { id: data.id },
+      select: { id: true, status: true, resumeStoragePath: true, isSoftDeleted: true },
+    });
     if (!row) throw new Error("Application not found");
     if (row.status !== "rejected") throw new Error("Only rejected applications can be deleted");
 
-    // Purge resume file from storage immediately for privacy + space
-    if (row.resume_storage_path) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await supabaseAdmin.storage.from("resumes").remove([row.resume_storage_path]);
+    if (row.resumeStoragePath) {
+      const { getStorage } = await import("@/lib/storage");
+      const storage = getStorage();
+      await storage.remove("resumes", [row.resumeStoragePath]);
     }
 
-    // Soft-delete: candidate keeps visibility for 5 days, then pg_cron hard-deletes.
-    const { error: updErr } = await context.supabase
-      .from("job_applications")
-      .update({
-        is_soft_deleted: true,
-        deleted_at: new Date().toISOString(),
+    await adminDb.jobApplication.update({
+      where: { id: data.id },
+      data: {
+        isSoftDeleted: true,
+        deletedAt: new Date(),
         status: "rejected",
-        resume_storage_path: null,
-        resume_link: null,
-      })
-      .eq("id", data.id);
-    if (updErr) throw new Error(updErr.message);
+        resumeStoragePath: null,
+        resumeLink: null,
+      },
+    });
     return { ok: true };
   });
 
 export const listAllUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: usersData, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 200 });
-    if (error) throw new Error(error.message);
+    await assertAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id, role");
+    const mappings = await adminDb.clerkUserMap.findMany({
+      select: { authUserId: true, email: true, createdAt: true },
+    });
+
+    const roles = await adminDb.userRole.findMany({
+      select: { userId: true, role: true },
+    });
     const adminSet = new Set(
-      (roles ?? []).filter((r: any) => r.role === "admin").map((r: any) => r.user_id),
+      roles.filter((r) => r.role === "admin").map((r) => r.userId),
     );
 
-    return usersData.users.map(
+    const profiles = await adminDb.profile.findMany({
+      select: { userId: true, fullName: true },
+    });
+    const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
+
+    return mappings.map(
       (u): AdminUser => ({
-        id: u.id,
+        id: u.authUserId,
         email: u.email ?? null,
-        created_at: u.created_at,
-        last_sign_in_at: u.last_sign_in_at ?? null,
-        is_admin: adminSet.has(u.id),
-        full_name: (u.user_metadata as any)?.full_name || (u.user_metadata as any)?.name || null,
+        created_at: u.createdAt.toISOString(),
+        last_sign_in_at: null,
+        is_admin: adminSet.has(u.authUserId),
+        full_name: nameMap.get(u.authUserId) ?? null,
       }),
     );
   });
@@ -254,32 +266,37 @@ const roleSchema = z.object({
 
 export const setUserAdminRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => roleSchema.parse(data))
+  .validator((data: unknown) => roleSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertAdmin(context.db, context.userId);
     if (data.userId === context.userId && !data.makeAdmin) {
       throw new Error("You cannot revoke your own admin role.");
     }
+    const adminDb = getAdminDb();
+
     if (data.makeAdmin) {
-      const { error } = await context.supabase
-        .from("user_roles")
-        .insert({ user_id: data.userId, role: "admin" as any });
-      if (error && !/duplicate/i.test(error.message)) throw new Error(error.message);
+      const existing = await adminDb.userRole.findFirst({
+        where: { userId: data.userId, role: "admin" },
+      });
+      if (!existing) {
+        await adminDb.userRole.create({
+          data: { userId: data.userId, role: "admin" },
+        });
+      }
     } else {
-      const { error } = await context.supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", data.userId)
-        .eq("role", "admin");
-      if (error) throw new Error(error.message);
+      await adminDb.userRole.deleteMany({
+        where: { userId: data.userId, role: "admin" },
+      });
     }
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: context.userId,
-      actor_email: (context.claims as any)?.email ?? null,
-      action: data.makeAdmin ? "ROLE_GRANTED" : "ROLE_REVOKED",
-      target_resource: `user_roles/${data.userId}`,
-      details: { role: "admin", target_user_id: data.userId } as any,
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: data.makeAdmin ? "ROLE_GRANTED" : "ROLE_REVOKED",
+        targetResource: `user_roles/${data.userId}`,
+        details: { role: "admin", target_user_id: data.userId },
+      },
     });
     return { ok: true };
   });
@@ -312,42 +329,51 @@ export type RoleApplicantsGroup = {
 export const listApplicantsByRole = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<RoleApplicantsGroup[]> => {
-    await assertHrOrAdmin(context.supabase, context.userId);
-    const { data: apps, error } = await context.supabase
-      .from("job_applications")
-      .select(
-        "id, user_id, role_id, role_title, full_name, email, status, created_at, is_soft_deleted",
-      )
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
 
-    const rows = (apps ?? []) as any[];
-    const roleIds = Array.from(new Set(rows.map((r) => r.role_id))).filter(Boolean);
+    const apps = await adminDb.jobApplication.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        userId: true,
+        roleId: true,
+        roleTitle: true,
+        fullName: true,
+        email: true,
+        status: true,
+        createdAt: true,
+        isSoftDeleted: true,
+      },
+    });
+
+    const roleIds = Array.from(new Set(apps.map((r) => r.roleId))).filter(Boolean);
     const codeByRole = new Map<string, { code: string | null; status: string; title: string }>();
     if (roleIds.length > 0) {
-      const { data: postings } = await context.supabase
-        .from("job_postings")
-        .select("id, job_code, status, title")
-        .in("id", roleIds);
-      for (const p of (postings ?? []) as any[]) {
-        codeByRole.set(p.id, { code: p.job_code ?? null, status: p.status, title: p.title });
+      const postings = await adminDb.jobPosting.findMany({
+        where: { id: { in: roleIds } },
+        select: { id: true, jobCode: true, status: true, title: true },
+      });
+      for (const p of postings) {
+        codeByRole.set(p.id, { code: p.jobCode ?? null, status: p.status, title: p.title });
       }
     }
 
     const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
     const groups = new Map<string, RoleApplicantsGroup>();
-    for (const r of rows) {
-      const nextEligible = new Date(new Date(r.created_at).getTime() + NINETY_DAYS);
+    for (const r of apps) {
+      const createdMs = r.createdAt.getTime();
+      const nextEligible = new Date(createdMs + NINETY_DAYS);
       const cooldownDaysLeft = Math.max(
         0,
         Math.ceil((nextEligible.getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
       );
-      const meta = codeByRole.get(r.role_id);
-      let g = groups.get(r.role_id);
+      const meta = codeByRole.get(r.roleId);
+      let g = groups.get(r.roleId);
       if (!g) {
         g = {
-          role_id: r.role_id,
-          role_title: meta?.title || r.role_title,
+          role_id: r.roleId,
+          role_title: meta?.title || r.roleTitle,
           job_code: meta?.code ?? null,
           status: meta?.status ?? "unknown",
           total: 0,
@@ -355,19 +381,19 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
           rejected: 0,
           applicants: [],
         };
-        groups.set(r.role_id, g);
+        groups.set(r.roleId, g);
       }
       g.total += 1;
       if (["applied", "screening", "interviewing", "offered"].includes(r.status)) g.active += 1;
-      if (r.status === "rejected" || r.is_soft_deleted) g.rejected += 1;
+      if (r.status === "rejected" || r.isSoftDeleted) g.rejected += 1;
       g.applicants.push({
         application_id: r.id,
-        user_id: r.user_id,
-        full_name: r.full_name,
+        user_id: r.userId,
+        full_name: r.fullName,
         email: r.email,
-        status: r.is_soft_deleted ? "rejected" : r.status,
-        created_at: r.created_at,
-        is_soft_deleted: r.is_soft_deleted,
+        status: r.isSoftDeleted ? "rejected" : r.status,
+        created_at: r.createdAt.toISOString(),
+        is_soft_deleted: r.isSoftDeleted,
         next_eligible_at: nextEligible.toISOString(),
         cooldown_days_left: cooldownDaysLeft,
       });

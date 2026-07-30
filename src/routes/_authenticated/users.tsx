@@ -15,7 +15,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/lib/upload.functions";
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -449,6 +449,7 @@ function EditUserDrawer({
   const setRoleFn = useServerFn(setUserRole);
   const upsertDocFn = useServerFn(upsertIdentityDoc);
   const verifyDocFn = useServerFn(verifyIdentityDoc);
+  const uploadFn = useServerFn(uploadFile);
 
   const detail = useQuery({
     queryKey: ["user-detail", userId],
@@ -817,10 +818,9 @@ function EditUserDrawer({
                 actorCanVerify={(actorIsAdmin || actorIsHr) && !hrLocked}
                 onUpload={async (docType, file) => {
                   const path = `${userId}/${docType}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-                  const { error: upErr } = await supabase.storage
-                    .from("identity-docs")
-                    .upload(path, file, { upsert: true });
-                  if (upErr) throw new Error(upErr.message);
+                  const buf = await file.arrayBuffer();
+                  const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                  await uploadFn({ data: { bucket: "identity-docs", path, base64, contentType: file.type, upsert: true } });
                   await upsertDocFn({
                     data: { user_id: userId, doc_type: docType, storage_path: path },
                   });

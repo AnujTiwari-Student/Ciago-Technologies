@@ -22,6 +22,7 @@ export type DecisionInput = {
 export type DecisionDeps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any;
+  storage?: any;
   actorId: string;
   actorEmail?: string | null;
   roles: Set<string>;
@@ -150,7 +151,7 @@ export async function applyBulkDocumentDecisions(
  */
 export async function buildOnboardingDocSignedUrl(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  deps: { supabase: any; roles: Set<string> },
+  deps: { supabase: any; storage?: any; roles: Set<string> },
   args: { storage_path: string; ttl_seconds?: number },
 ): Promise<string> {
   assertHrOrAdmin(deps.roles);
@@ -158,6 +159,14 @@ export async function buildOnboardingDocSignedUrl(
   if (ttl <= 0 || ttl > 60 * 60) {
     throw new Error("TTL must be between 1 second and 1 hour");
   }
+  if ("storage" in deps && deps.storage) {
+    const storage = deps.storage as any;
+    const result = await storage.createSignedUrl("onboarding-docs", args.storage_path, ttl);
+    if (result.error) throw new Error(result.error);
+    if (!result.signedUrl) throw new Error("No signed URL returned");
+    return result.signedUrl;
+  }
+  // Fallback for tests with mock Supabase client
   const { data, error } = await deps.supabase.storage
     .from("onboarding-docs")
     .createSignedUrl(args.storage_path, ttl);

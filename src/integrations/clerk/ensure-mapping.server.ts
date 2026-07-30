@@ -20,13 +20,14 @@
 // the mapping on every page mount with zero user-facing effect.
 
 import { createServerFn } from "@tanstack/react-start";
-import type { ClerkIdentity } from "@/integrations/clerk/provision.server";
+import type { ClerkIdentity } from "@/integrations/clerk/provision-neon.server";
 import {
   provisionClerkUser,
   type ProvisionResult,
   type ProvisionError,
-} from "@/integrations/clerk/provision.server";
+} from "@/integrations/clerk/provision-neon.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type EnsureMappingResult =
   | { ok: true; authUserId: string; created: boolean; reused: boolean }
@@ -63,10 +64,7 @@ export const ensureClerkMapping = createServerFn({ method: "POST" })
       return { ok: false, reason: "no authenticated identity available" };
     }
 
-    // Dynamically import client.server so the cold path never imports the
-    // admin client. (The requireSupabaseAuth middleware branch may have already
-    // done so; the import is cached.)
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = getAdminDb();
     const identity: ClerkIdentity = {
       clerkUserId,
       email,
@@ -74,7 +72,7 @@ export const ensureClerkMapping = createServerFn({ method: "POST" })
       fullName: null,
     };
     const result: ProvisionResult | ProvisionError = await provisionClerkUser(
-      supabaseAdmin,
+      adminDb,
       identity,
     );
     if ("authUserId" in result) {

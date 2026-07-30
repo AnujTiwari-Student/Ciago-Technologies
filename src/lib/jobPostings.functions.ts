@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type JobPosting = {
   id: string;
@@ -23,87 +22,40 @@ export type JobPosting = {
   updated_at: string;
 };
 
-const COLS =
-  "id, job_code, title, department, location, is_remote, employment_type, summary, description, requirements, tags, salary_min_inr, salary_max_inr, status, created_at, updated_at";
-
-function serverPublicClient() {
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY!;
-  const url = process.env.SUPABASE_URL!;
-  return createClient<Database>(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false, storage: undefined },
-    global: {
-      fetch: (input, init) => {
-        const h = new Headers(init?.headers);
-        if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`)
-          h.delete("Authorization");
-        h.set("apikey", key);
-        return fetch(input, { ...init, headers: h });
-      },
-    },
-  });
-}
-
-// Public — published postings only, safe for anon browser use via server fn
 export const listActiveJobPostings = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = serverPublicClient();
-  const { data, error } = await sb
-    .from("job_postings")
-    .select(COLS)
-    .eq("status", "published")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as JobPosting[];
+  const adminDb = getAdminDb();
+  const rows = await adminDb.jobPosting.findMany({
+    where: { status: "published" },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows as unknown as JobPosting[];
 });
 
 export const listEmploymentTypes = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = serverPublicClient();
-  const { data, error } = await sb
-    .from("employment_types")
-    .select("code, label, sort_order")
-    .order("sort_order", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as { code: string; label: string; sort_order: number }[];
+  const adminDb = getAdminDb();
+  const data = await adminDb.employmentType.findMany({
+    select: { code: true, label: true, sortOrder: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  return data.map((e) => ({ code: e.code, label: e.label, sort_order: e.sortOrder }));
 });
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "hr"])
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden");
-}
-
-async function insertAudit(
-  actorId: string,
-  actorEmail: string | null,
-  action: string,
-  target: string,
-  details: Record<string, unknown>,
-) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  await supabaseAdmin.from("audit_logs").insert({
-    actor_id: actorId,
-    actor_email: actorEmail,
-    action,
-    target_resource: target,
-    details: details as any,
-  });
+async function assertAdminOrHr(db: any, userId: string) {
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: { in: ["admin", "hr"] } } }),
+  );
+  if (count === 0) throw new Error("Forbidden");
 }
 
 export const listAllJobPostings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data, error } = await context.supabase
-      .from("job_postings")
-      .select(COLS)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as JobPosting[];
+    await assertAdminOrHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+    const rows = await adminDb.jobPosting.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return rows as unknown as JobPosting[];
   });
 
 const upsertSchema = z.object({
@@ -124,46 +76,80 @@ const upsertSchema = z.object({
 
 export const upsertJobPosting = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => upsertSchema.parse(d))
+  .validator((d: unknown) => upsertSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const payload = { ...data, created_by: context.userId };
-    const { data: row, error } = await context.supabase
-      .from("job_postings")
-      .upsert(payload as any)
-      .select("id, title, status")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    await insertAudit(
-      context.userId,
-      context.claims?.email ?? null,
-      data.id ? "JOB_POSTING_UPDATED" : "JOB_POSTING_CREATED",
-      `job_postings/${row?.id ?? data.id ?? ""}`,
-      { title: data.title, status: data.status },
-    );
-    return row;
+    await assertAdminOrHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const result = await adminDb.jobPosting.upsert({
+      where: { id: data.id || "00000000-0000-0000-0000-000000000000" },
+      create: {
+        title: data.title,
+        department: data.department,
+        location: data.location,
+        isRemote: data.is_remote,
+        employmentType: data.employment_type,
+        summary: data.summary,
+        description: data.description,
+        requirements: data.requirements,
+        tags: data.tags,
+        salaryMinInr: data.salary_min_inr,
+        salaryMaxInr: data.salary_max_inr,
+        status: data.status as any,
+        createdBy: context.userId,
+      },
+      update: {
+        title: data.title,
+        department: data.department,
+        location: data.location,
+        isRemote: data.is_remote,
+        employmentType: data.employment_type,
+        summary: data.summary,
+        description: data.description,
+        requirements: data.requirements,
+        tags: data.tags,
+        salaryMinInr: data.salary_min_inr,
+        salaryMaxInr: data.salary_max_inr,
+        status: data.status as any,
+      },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims?.email as string | null) ?? null,
+        action: data.id ? "JOB_POSTING_UPDATED" : "JOB_POSTING_CREATED",
+        targetResource: `job_postings/${result.id}`,
+        details: { title: data.title, status: data.status },
+      },
+    });
+
+    return { id: result.id, title: result.title, status: result.status };
   });
 
 const deleteSchema = z.object({ id: z.string().uuid() });
 
 export const deleteJobPosting = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => deleteSchema.parse(d))
+  .validator((d: unknown) => deleteSchema.parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data: row } = await context.supabase
-      .from("job_postings")
-      .select("title")
-      .eq("id", data.id)
-      .maybeSingle();
-    const { error } = await context.supabase.from("job_postings").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
-    await insertAudit(
-      context.userId,
-      context.claims?.email ?? null,
-      "JOB_POSTING_DELETED",
-      `job_postings/${data.id}`,
-      { title: row?.title },
-    );
+    await assertAdminOrHr(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const row = await adminDb.jobPosting.findUnique({
+      where: { id: data.id },
+      select: { title: true },
+    });
+    await adminDb.jobPosting.delete({ where: { id: data.id } });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims?.email as string | null) ?? null,
+        action: "JOB_POSTING_DELETED",
+        targetResource: `job_postings/${data.id}`,
+        details: { title: row?.title },
+      },
+    });
     return { ok: true };
   });
