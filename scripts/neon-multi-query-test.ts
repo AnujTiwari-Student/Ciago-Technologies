@@ -16,12 +16,13 @@ async function main() {
     const results = await db.query(multiSql);
     console.log("Multi-statement results:", results);
     console.log("Number of result sets:", results.length);
-  } catch (e: any) {
-    console.log("ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("ERROR:", error.message);
   }
 
   // Cleanup
   await db.query("DROP SCHEMA IF EXISTS test_multi_query CASCADE");
 }
 
-main().catch(e => console.error("FATAL:", e.message));
+main().catch((e) => console.error("FATAL:", e.message));

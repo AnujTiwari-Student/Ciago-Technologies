@@ -16,8 +16,9 @@ async function main() {
     const r = await db.unsafe(sql);
     console.log("Type:", r?.constructor?.name);
     console.log("Result:", JSON.stringify(r, null, 2));
-  } catch (e: any) {
-    console.log("ERROR:", e.message?.slice(0, 500));
+  } catch (e) {
+    const error = e as Error & { message?: string };
+    console.log("ERROR:", error.message?.slice(0, 500));
   }
 
   // Cleanup

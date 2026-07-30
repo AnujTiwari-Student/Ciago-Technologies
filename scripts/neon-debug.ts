@@ -15,24 +15,27 @@ async function main() {
   try {
     const r2 = await sql.unsafe("SELECT 2 AS test");
     console.log("Unsafe (no semicolon):", r2);
-  } catch (e: any) {
-    console.log("Unsafe (no semicolon) ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("Unsafe (no semicolon) ERROR:", error.message);
   }
 
   // Test 3: unsafe with semicolon
   try {
     const r3 = await sql.unsafe("SELECT 3 AS test;");
     console.log("Unsafe (with semicolon):", r3);
-  } catch (e: any) {
-    console.log("Unsafe (with semicolon) ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("Unsafe (with semicolon) ERROR:", error.message);
   }
 
   // Test 4: unsafe CREATE SCHEMA
   try {
     const r4 = await sql.unsafe("CREATE SCHEMA IF NOT EXISTS test_debug");
     console.log("Unsafe CREATE SCHEMA:", r4);
-  } catch (e: any) {
-    console.log("Unsafe CREATE SCHEMA ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("Unsafe CREATE SCHEMA ERROR:", error.message);
   }
 
   // Test 5: check if test_debug schema exists

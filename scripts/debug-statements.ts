@@ -22,15 +22,28 @@ AS $$ SELECT NULLIF(current_setting('app.current_user_id', true), '')::uuid $$;
 `;
 
 function stripSupabaseContent(sql: string): string {
-  return sql.split("\n").filter((line) => {
-    const t = line.trim();
-    if (t.includes("ON storage.objects")) return false;
-    if (/CREATE\s+EXTENSION.*pg_cron/i.test(t)) return false;
-    if (t.includes("cron.unschedule(") || t.includes("cron.schedule(")) return false;
-    if (/\bGRANT\b/.test(t) && /\bTO\b/.test(t) && /\b(authenticated|anon|service_role)\b/.test(t)) return false;
-    if (/\bREVOKE\b/.test(t) && /\bFROM\b/.test(t) && /\b(authenticated|anon|service_role)\b/.test(t)) return false;
-    return true;
-  }).join("\n");
+  return sql
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (t.includes("ON storage.objects")) return false;
+      if (/CREATE\s+EXTENSION.*pg_cron/i.test(t)) return false;
+      if (t.includes("cron.unschedule(") || t.includes("cron.schedule(")) return false;
+      if (
+        /\bGRANT\b/.test(t) &&
+        /\bTO\b/.test(t) &&
+        /\b(authenticated|anon|service_role)\b/.test(t)
+      )
+        return false;
+      if (
+        /\bREVOKE\b/.test(t) &&
+        /\bFROM\b/.test(t) &&
+        /\b(authenticated|anon|service_role)\b/.test(t)
+      )
+        return false;
+      return true;
+    })
+    .join("\n");
 }
 
 function splitStatements(sql: string): string[] {
@@ -81,8 +94,10 @@ function splitStatements(sql: string): string[] {
   return statements;
 }
 
-const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith(".sql")).sort();
-let totalRemoved = 0;
+const files = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith(".sql"))
+  .sort();
+const totalRemoved = 0;
 const blocks: string[] = [];
 
 for (const file of files) {

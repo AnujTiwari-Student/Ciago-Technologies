@@ -16,4 +16,4 @@ async function main() {
   await db`DROP SCHEMA IF EXISTS test_multi_tagged CASCADE`;
 }
 
-main().catch(e => console.error("ERROR:", e.message));
+main().catch((e) => console.error("ERROR:", e.message));

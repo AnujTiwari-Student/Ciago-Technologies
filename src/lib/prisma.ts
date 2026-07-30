@@ -1,12 +1,9 @@
 ﻿// Prisma client singleton for Ciago Technologies.
 //
-// Prisma 7 requires the connection URL to be passed directly to PrismaClient
-// (not via schema.prisma datasource block). The URL comes from DATABASE_URL
-// environment variable, with DIRECT_URL used for migrations.
+// Prisma 7 with serverless requires a driver adapter. We use @prisma/adapter-pg
+// with the standard pg Pool, which works with Neon's PostgreSQL-compatible pooler.
 //
-// For Cloudflare Workers (edge runtime), the Neon serverless driver is used
-// via @prisma/adapter-neon. This requires:
-//   bun add @prisma/adapter-neon @neondatabase/serverless
+// The DATABASE_URL comes from .env and points to Neon's pooler connection string.
 //
 // Usage:
 //   import { prisma } from "@/lib/prisma";
@@ -19,16 +16,30 @@
 //   });
 
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 declare global {
   // Prevent multiple PrismaClient instances in development (HMR-safe).
   var __prisma: PrismaClient | undefined;
+  var __pgPool: Pool | undefined;
 }
 
 function createPrismaClient(): PrismaClient {
-  const datasourceUrl = process.env["DATABASE_URL"];
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+
+  // Reuse pool in development to avoid connection leaks during HMR
+  const pool = globalThis.__pgPool ?? new Pool({ connectionString: databaseUrl });
+  if (process.env["NODE_ENV"] !== "production") {
+    globalThis.__pgPool = pool;
+  }
+
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({
-    datasourceUrl,
+    adapter,
     log: process.env["NODE_ENV"] === "development" ? ["query", "error", "warn"] : ["error"],
   });
 }

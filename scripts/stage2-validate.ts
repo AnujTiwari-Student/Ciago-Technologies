@@ -157,7 +157,11 @@ async function main() {
     FROM pg_tables
     WHERE schemaname = 'public' AND rowsecurity = true
   `;
-  check(`All public tables have RLS enabled`, rlsEnabled[0].count === 26, `got ${rlsEnabled[0].count}/26`);
+  check(
+    `All public tables have RLS enabled`,
+    rlsEnabled[0].count === 26,
+    `got ${rlsEnabled[0].count}/26`,
+  );
 
   // Test 9: Owner/service connection bypasses RLS (as expected)
   const allRoles = await sql`SELECT COUNT(*)::int AS count FROM public.user_roles`;
@@ -168,9 +172,7 @@ async function main() {
   );
 
   console.log("\n--- RLS Policy Verification Complete ---");
-  console.log(
-    "NOTE: Full RLS enforcement requires a non-superuser connection.",
-  );
+  console.log("NOTE: Full RLS enforcement requires a non-superuser connection.");
   console.log(
     "The auth.uid() mechanism is verified. Actual enforcement will be tested in Stage 5.",
   );

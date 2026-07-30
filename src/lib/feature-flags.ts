@@ -5,12 +5,20 @@
 // `USE_CLERK_AUTH` directs the auth wiring: when false, the app continues
 // to use the legacy Supabase-auth path; when true, the code routes through
 // Clerk. Default is false so the migration is non-destructive.
+//
+// `USE_NEON_DB` directs the database client: when false, auth middleware
+// uses Supabase client + GoTrue JWT; when true, uses Neon/Prisma + RLS
+// via app.current_user_id. Requires USE_CLERK_AUTH=true.
 
 export type FeatureFlags = {
   // When true, auth providers, server-fs middleware, and route guards use
   // Clerk wiring (src/integrations/clerk/*). When false, the original
   // Supabase path is used unchanged.
   USE_CLERK_AUTH: boolean;
+
+  // When true, auth middleware uses Neon/Prisma instead of Supabase client.
+  // Only effective when USE_CLERK_AUTH is also true.
+  USE_NEON_DB: boolean;
 };
 
 function readFlag(name: keyof FeatureFlags, fallback: boolean): boolean {
@@ -31,6 +39,7 @@ function readFlag(name: keyof FeatureFlags, fallback: boolean): boolean {
 
 export const FLAGS: FeatureFlags = {
   USE_CLERK_AUTH: readFlag("USE_CLERK_AUTH", false),
+  USE_NEON_DB: readFlag("USE_NEON_DB", false),
 };
 
 export const FEATURE_FLAGS = {

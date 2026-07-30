@@ -380,8 +380,8 @@ The root route (`src/routes/__root.tsx`) provides the shell + CSP headers only â
 |-------|-------------|--------|
 | 1 | Neon Project Setup + Schema Migration | **COMPLETE** |
 | 2 | auth.uid() RLS Compatibility Layer | **COMPLETE** |
-| 3 | Prisma ORM Setup + Schema Definition | NOT STARTED |
-| 4 | Clerk Authentication Simplified | NOT STARTED |
+| 3 | Prisma ORM Setup + Schema Definition | **COMPLETE** |
+| 4 | Clerk Authentication Simplified | **IN PROGRESS** |
 | 5 | Database Client Migration | NOT STARTED |
 | 6 | Storage Migration (R2) | NOT STARTED |
 | 7 | Dual-Write Period + Validation | NOT STARTED |

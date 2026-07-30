@@ -19,7 +19,10 @@ import { Pool } from "@neondatabase/serverless";
 const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
 const SCHEMA_OUTPUT = join(process.cwd(), "supabase", "migrations-neon.sql");
 const neonUrl = process.env.NEON_DATABASE_URL;
-if (!neonUrl) { console.error("FATAL: NEON_DATABASE_URL not set"); process.exit(1); }
+if (!neonUrl) {
+  console.error("FATAL: NEON_DATABASE_URL not set");
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // 1. Custom auth schema DDL
@@ -152,10 +155,12 @@ function shouldSkipStatement(stmt: string): { skip: boolean; reason: string } {
 
   // storage.objects policies
   if (/\bON\s+storage\.objects\b/i.test(t)) return { skip: true, reason: "storage.policy" };
-  if (/\bON\s+storage\b/i.test(t) && /\bPOLICY\b/i.test(t)) return { skip: true, reason: "storage.policy" };
+  if (/\bON\s+storage\b/i.test(t) && /\bPOLICY\b/i.test(t))
+    return { skip: true, reason: "storage.policy" };
 
   // storage.function references in policies
-  if (/\bstorage\.(foldername|extension|filename)\b/i.test(t)) return { skip: true, reason: "storage.fn" };
+  if (/\bstorage\.(foldername|extension|filename)\b/i.test(t))
+    return { skip: true, reason: "storage.fn" };
 
   // pg_cron
   if (/CREATE\s+EXTENSION.*pg_cron/i.test(t)) return { skip: true, reason: "pg_cron" };
@@ -202,10 +207,15 @@ async function main() {
     `);
     console.log("  auth.users + auth.uid() + anon/authenticated/service_role roles applied.\n");
 
-    const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith(".sql")).sort();
+    const files = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
     console.log(`Processing ${files.length} migration files…\n`);
 
-    let totalApplied = 0, totalFailed = 0, skippedFiles = 0, skippedStmts = 0;
+    let totalApplied = 0,
+      totalFailed = 0,
+      skippedFiles = 0,
+      skippedStmts = 0;
     const errors: string[] = [];
     const combinedBlocks: string[] = [AUTH_SCHEMA_SQL];
 
@@ -227,22 +237,26 @@ async function main() {
       }
 
       if (filtered.length === 0) {
-        console.log(`  [${fi + 1}/${files.length}] ${file} — SKIPPED (all ${removedInFile} stmts filtered)`);
+        console.log(
+          `  [${fi + 1}/${files.length}] ${file} — SKIPPED (all ${removedInFile} stmts filtered)`,
+        );
         skippedFiles++;
         continue;
       }
 
       // Execute each statement individually
-      let fileApplied = 0, fileFailed = 0;
+      let fileApplied = 0,
+        fileFailed = 0;
       const fileErrors: string[] = [];
 
       for (const stmt of filtered) {
         try {
           await pool.query(stmt + ";");
           fileApplied++;
-        } catch (err: any) {
+        } catch (err) {
+          const error = err as Error & { message?: string };
           fileFailed++;
-          const msg = err.message?.slice(0, 200) || "unknown error";
+          const msg = error.message?.slice(0, 200) || "unknown error";
           fileErrors.push(msg);
         }
       }
@@ -251,9 +265,13 @@ async function main() {
       totalFailed += fileFailed;
 
       if (fileFailed === 0) {
-        console.log(`  [${fi + 1}/${files.length}] ${file} — OK (${fileApplied} stmts, -${removedInFile} filtered)`);
+        console.log(
+          `  [${fi + 1}/${files.length}] ${file} — OK (${fileApplied} stmts, -${removedInFile} filtered)`,
+        );
       } else {
-        console.log(`  [${fi + 1}/${files.length}] ${file} — PARTIAL (${fileApplied} OK, ${fileFailed} failed, -${removedInFile} filtered)`);
+        console.log(
+          `  [${fi + 1}/${files.length}] ${file} — PARTIAL (${fileApplied} OK, ${fileFailed} failed, -${removedInFile} filtered)`,
+        );
         for (const e of fileErrors.slice(0, 3)) {
           errors.push(`${file}: ${e}`);
           console.log(`      ↳ ${e}`);
@@ -268,11 +286,13 @@ async function main() {
     writeFileSync(SCHEMA_OUTPUT, combined, "utf-8");
     console.log(`\n→ ${SCHEMA_OUTPUT} (${(combined.length / 1024).toFixed(1)} KB)`);
     console.log(`\n=== Stage 1 Migration Summary ===`);
-    console.log(`Files: ${files.length} | Stmts applied: ${totalApplied} | Stmts failed: ${totalFailed} | Files skipped: ${skippedFiles} | Stmts filtered: ${skippedStmts}`);
+    console.log(
+      `Files: ${files.length} | Stmts applied: ${totalApplied} | Stmts failed: ${totalFailed} | Files skipped: ${skippedFiles} | Stmts filtered: ${skippedStmts}`,
+    );
 
     if (errors.length > 0) {
       console.log(`\nFirst ${Math.min(20, errors.length)} failures:`);
-      errors.slice(0, 20).forEach(e => console.log(`  ${e}`));
+      errors.slice(0, 20).forEach((e) => console.log(`  ${e}`));
     }
 
     if (totalFailed === 0) {
@@ -283,4 +303,7 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error("FATAL:", err); process.exit(1); });
+main().catch((err) => {
+  console.error("FATAL:", err);
+  process.exit(1);
+});

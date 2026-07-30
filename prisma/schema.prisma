@@ -108,12 +108,15 @@ model AuditLog {
 }
 
 model ClerkUserMap {
-  clerkUserId String   @map("clerk_user_id")
-  authUserId  String   @db.Uuid @map("auth_user_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  clerkUserId          String   @id @map("clerk_user_id")
+  authUserId           String   @unique @db.Uuid @map("auth_user_id")
+  email                String?  @unique
+  primaryEmailVerified Boolean  @default(false) @map("primary_email_verified")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  @@id([clerkUserId])
+  @@index([authUserId], map: "clerk_user_map_auth_user_id_idx")
+  @@index([email], map: "clerk_user_map_email_idx")
   @@map("clerk_user_map")
 }
 

@@ -90,6 +90,12 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
   async ({ next }) => {
     if (FLAGS.USE_CLERK_AUTH) {
       await assertClerkAuthFeatureEnabledForServer();
+
+      // Stage 4: If USE_NEON_DB is enabled, use Neon/Prisma instead of Supabase+GoTrue
+      if (FLAGS.USE_NEON_DB) {
+        return neonAuthBranch(next);
+      }
+
       return clerkAuthBranch(next);
     }
     return legacySupabaseAuthBranch(next);
@@ -172,7 +178,117 @@ async function legacySupabaseAuthBranch(
 }
 
 // ---------------------------------------------------------------------------
-// Clerk branch — USE_CLERK_AUTH is true.
+// Neon branch — USE_CLERK_AUTH is true AND USE_NEON_DB is true (Stage 4).
+//
+// Flow:
+//   1. Read Bearer + verify with verifyToken.
+//   2. Look up auth_user_id from clerk_user_map (Neon/Prisma).
+//   3. Provision if needed (creates auth.users + clerk_user_map).
+//   4. Create user-scoped Prisma client with RLS context set.
+//   5. Inject { db, userId, claims } — db is UserPrismaClient, not SupabaseClient.
+//
+// This bypasses GoTrue JWT issuance entirely.
+// ---------------------------------------------------------------------------
+async function neonAuthBranch(
+  next: (args: { context: Record<string, unknown> }) => Promise<unknown> | unknown,
+): Promise<unknown> {
+  const CLERK_SECRET_KEY = requireEnv("CLERK_SECRET_KEY");
+  const DATABASE_URL = requireEnv("DATABASE_URL");
+
+  const request = getRequest();
+  if (!request?.headers) {
+    throw new Error("Unauthorized: No request headers available");
+  }
+
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new Error("Unauthorized: Only Bearer tokens are supported");
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  if (!token) {
+    throw new Error("Unauthorized: No token provided");
+  }
+
+  // Lazy imports
+  const { verifyToken, createClerkClient } = await import("@clerk/backend");
+  const { createUserDb, createAdminDb } = await import("@/lib/db/neon");
+  const { provisionClerkUser } = await import("@/integrations/clerk/provision-neon.server");
+
+  // 1. Verify Clerk JWT
+  let clerkClaims: Record<string, unknown>;
+  try {
+    clerkClaims = (await verifyToken(token, {
+      secretKey: CLERK_SECRET_KEY,
+    })) as Record<string, unknown>;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "verifyToken failed";
+    console.error("[neon-auth] token verification failed", message);
+    throw new Error(`Unauthorized: ${message}`);
+  }
+
+  const clerkUserId = clerkClaims.sub as string | undefined;
+  if (!clerkUserId) {
+    throw new Error("Unauthorized: Clerk token has no subject");
+  }
+
+  // 2. Look up auth_user_id from clerk_user_map (Neon)
+  const adminDb = createAdminDb(DATABASE_URL);
+  let mapping = await adminDb.clerkUserMap.findUnique({
+    where: { clerkUserId },
+    select: { authUserId: true },
+  });
+
+  // 3. Provision if needed
+  if (!mapping) {
+    const clerkClient = createClerkClient({ secretKey: CLERK_SECRET_KEY });
+    const user = await clerkClient.users.getUser(clerkUserId);
+    const primaryEmailObj = user.emailAddresses?.find(
+      (e) => e.id === user.primaryEmailAddressId,
+    );
+    const email = primaryEmailObj?.emailAddress;
+    const emailVerified = Boolean(primaryEmailObj?.verification?.status === "verified");
+
+    if (!email) {
+      throw new Error("Unauthorized: Clerk user has no primary email address");
+    }
+
+    const fullName =
+      [user.firstName, user.lastName].filter(Boolean).join(" ") || null;
+
+    const prov = await provisionClerkUser(adminDb, {
+      clerkUserId,
+      email,
+      emailVerified,
+      fullName,
+    });
+
+    if (!("authUserId" in prov)) {
+      const message =
+        "kind" in prov ? (prov.message ?? prov.kind) : "provision failed";
+      console.error("[neon-auth] provisioning failed", message);
+      throw new Error(`Unauthorized: ${message}`);
+    }
+
+    mapping = { authUserId: prov.authUserId };
+  }
+
+  // 4. Create user-scoped Prisma client with RLS context
+  const userDb = createUserDb(DATABASE_URL, mapping.authUserId);
+
+  // 5. Inject context — db is UserPrismaClient, not SupabaseClient
+  //    Server functions will need to use db.withRLS(...) for queries
+  return next({
+    context: {
+      db: userDb,
+      userId: mapping.authUserId,
+      claims: clerkClaims,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Clerk branch — USE_CLERK_AUTH is true, USE_NEON_DB is false.
 //
 // Flow:
 //   1. Read Bearer + verify with verifyToken.

@@ -16,8 +16,9 @@ async function main() {
   try {
     const r = await pool.query(multiSql);
     console.log("Pool multi-statement result:", JSON.stringify(r, null, 2));
-  } catch (e: any) {
-    console.log("Pool ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("Pool ERROR:", error.message);
   }
 
   // Cleanup

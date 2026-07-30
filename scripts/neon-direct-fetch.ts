@@ -34,8 +34,9 @@ async function main() {
     console.log("Status:", resp.status);
     const text = await resp.text();
     console.log("Response:", text.slice(0, 1000));
-  } catch (e: any) {
-    console.log("ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("ERROR:", error.message);
   }
 
   // Cleanup
@@ -53,8 +54,9 @@ async function main() {
     console.log("\nCleanup status:", resp2.status);
     const t2 = await resp2.text();
     console.log("Cleanup:", t2.slice(0, 500));
-  } catch (e: any) {
-    console.log("Cleanup ERROR:", e.message);
+  } catch (e) {
+    const error = e as Error;
+    console.log("Cleanup ERROR:", error.message);
   }
 }
 

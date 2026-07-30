@@ -38,7 +38,11 @@ async function main() {
   `;
   const tableNames = tables.map((t) => `${t.table_schema}.${t.table_name}`);
   const publicTables = tableNames.filter((n) => n.startsWith("public."));
-  check(`public schema table count == 26`, publicTables.length === 26, `got ${publicTables.length}`);
+  check(
+    `public schema table count == 26`,
+    publicTables.length === 26,
+    `got ${publicTables.length}`,
+  );
   check(`auth.users exists`, tableNames.includes("auth.users"));
   console.log(`\nTables:\n  ${tableNames.join("\n  ")}\n`);
 
@@ -114,7 +118,9 @@ async function main() {
   );
 
   // Summary
-  console.log(failures === 0 ? "\n=== ALL CHECKS PASSED ===" : `\n=== ${failures} CHECK(S) FAILED ===`);
+  console.log(
+    failures === 0 ? "\n=== ALL CHECKS PASSED ===" : `\n=== ${failures} CHECK(S) FAILED ===`,
+  );
   process.exit(failures === 0 ? 0 : 1);
 }
 
