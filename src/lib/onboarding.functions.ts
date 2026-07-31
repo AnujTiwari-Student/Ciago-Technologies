@@ -68,16 +68,14 @@ export type OnboardingOffer = {
 };
 
 export const ONBOARDING_DOC_LABELS: Record<string, string> = {
-  aadhaar: "Aadhaar Card",
   pan: "PAN Card",
-  bank_details: "Bank Account Details",
-  photo: "Passport-size Photograph",
+  aadhaar: "Aadhaar Card",
   marksheet_10: "10th Marksheet",
   marksheet_12: "12th / Diploma Marksheet",
+  bank_details: "Bank Account Details",
+  photo: "Passport-size Photograph",
   degree_provisional: "Provisional Degree Certificate",
   degree_final: "Final Degree Certificate",
-  offer_letter_previous: "Previous Offer Letter",
-  relieving_letter: "Relieving Letter / Experience Letter",
   address_proof: "Address Proof",
   passport: "Passport",
   ...CONDITIONAL_DOC_LABELS,
@@ -169,7 +167,13 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
 
     const employmentType = posting?.employmentType ?? null;
     const trackType = (posting?.trackType ?? null) as OnboardingOffer["track_type"];
-    const postingRequired = posting?.requiredOnboardingDocs ?? ["aadhaar", "pan", "bank_details"];
+    const postingRequired = posting?.requiredOnboardingDocs ?? [
+      "pan",
+      "aadhaar",
+      "marksheet_10",
+      "marksheet_12",
+      "bank_details",
+    ];
     const docRequirements = computeDocRequirements(employmentType, postingRequired);
 
     return {

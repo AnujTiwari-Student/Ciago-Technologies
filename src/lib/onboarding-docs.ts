@@ -13,6 +13,7 @@ export type EmploymentType = "full_time" | "internship" | "contract" | string;
 export const CONDITIONAL_DOC_LABELS: Record<string, string> = {
   marksheet_all_sems: "All-semester Marksheets (single PDF)",
   ug_degree: "UG Degree Certificate",
+  past_employment_proof: "Past Employment Proof (Relieving Letter)",
 };
 
 export type DocRequirement = {

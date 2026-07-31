@@ -1,19 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { canAccess, shouldShowOnboardingBanner, type AppRole } from "../route-access";
 
-const roles: AppRole[] = ["user", "employee", "manager", "hr", "admin"];
+const roles: AppRole[] = ["user", "admin"];
 
 describe("canAccess", () => {
   it("admin can access every surface", () => {
-    for (const s of ["employee", "manager", "hr", "admin"] as const) {
-      expect(canAccess("admin", s)).toBe(true);
-    }
-  });
-
-  it("only hr and admin can reach the HR portal", () => {
-    for (const r of roles) {
-      expect(canAccess(r, "hr")).toBe(r === "hr" || r === "admin");
-    }
+    expect(canAccess("admin", "admin")).toBe(true);
+    expect(canAccess("admin", "public")).toBe(true);
+    expect(canAccess("admin", "careers")).toBe(true);
+    expect(canAccess("admin", "my-applications")).toBe(true);
+    expect(canAccess("admin", "onboarding")).toBe(true);
   });
 
   it("only admin can reach the Admin command center", () => {
@@ -22,23 +18,18 @@ describe("canAccess", () => {
     }
   });
 
-  it("standard users cannot reach staff surfaces", () => {
-    expect(canAccess("user", "employee")).toBe(false);
-    expect(canAccess("user", "manager")).toBe(false);
-    expect(canAccess(null, "employee")).toBe(false);
+  it("standard users cannot reach admin surface", () => {
+    expect(canAccess("user", "admin")).toBe(false);
+    expect(canAccess(null, "admin")).toBe(false);
   });
 
-  it("employees can reach employee portal but not manager/HR/admin", () => {
-    expect(canAccess("employee", "employee")).toBe(true);
-    expect(canAccess("employee", "manager")).toBe(false);
-    expect(canAccess("employee", "hr")).toBe(false);
-    expect(canAccess("employee", "admin")).toBe(false);
-  });
-
-  it("managers can reach manager portal but not HR/admin", () => {
-    expect(canAccess("manager", "manager")).toBe(true);
-    expect(canAccess("manager", "hr")).toBe(false);
-    expect(canAccess("manager", "admin")).toBe(false);
+  it("all users can reach public surfaces", () => {
+    for (const r of roles) {
+      expect(canAccess(r, "public")).toBe(true);
+      expect(canAccess(r, "careers")).toBe(true);
+      expect(canAccess(r, "my-applications")).toBe(true);
+      expect(canAccess(r, "onboarding")).toBe(true);
+    }
   });
 });
 
@@ -46,8 +37,6 @@ describe("shouldShowOnboardingBanner", () => {
   it("shows only for the base user role", () => {
     expect(shouldShowOnboardingBanner("user")).toBe(true);
     expect(shouldShowOnboardingBanner(null)).toBe(true);
-    for (const r of ["employee", "manager", "hr", "admin"] as const) {
-      expect(shouldShowOnboardingBanner(r)).toBe(false);
-    }
+    expect(shouldShowOnboardingBanner("admin")).toBe(false);
   });
 });

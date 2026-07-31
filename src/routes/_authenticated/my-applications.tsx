@@ -157,19 +157,10 @@ function MyApplicationsPage() {
                     : "Awaiting your Date of Joining"}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  HR is verifying your documents. Open the Employee Portal for a live countdown and
+                  Admin is verifying your documents. Check back for a live countdown and
                   onboarding status.
                 </p>
               </div>
-              <Button
-                asChild
-                variant="outline"
-                className="shrink-0 border-brand/40 text-brand hover:bg-brand/10"
-              >
-                <Link to="/employee">
-                  Open Employee Portal <ArrowUpRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
             </CardContent>
           </Card>
         )}

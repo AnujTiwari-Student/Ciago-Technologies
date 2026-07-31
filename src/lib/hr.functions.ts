@@ -346,15 +346,15 @@ function dojEmail(candidateName: string, roleTitle: string, doj: string) {
         We're excited to have you join Ciago Technologies. Your first day will be
         <strong>${label}</strong>. You'll receive your workstation, credentials, and Day-1 schedule on that morning.
       </p>
-      <a href="https://ciagotech.com/employee" style="display:inline-block;background:#0d9488;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;font-size:14px">Open Employee Portal</a>
-      <p style="margin:32px 0 0;font-size:13px;color:#64748b">— HR, Ciago Technologies</p>
+      <a href="https://ciagotech.com/my-applications" style="display:inline-block;background:#0d9488;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;font-size:14px">View My Applications</a>
+      <p style="margin:32px 0 0;font-size:13px;color:#64748b">— Admin, Ciago Technologies</p>
     </td></tr>
   </table></td></tr></table></body></html>`;
   return {
     subject: `Welcome to Ciago — Date of Joining: ${label}`,
     html,
     inAppTitle: `Date of Joining: ${label}`,
-    inAppBody: `Your first day at Ciago is ${label}. The Employee Portal will unlock on your DOJ.`,
+    inAppBody: `Your first day at Ciago is ${label}. You'll receive credentials and a Day-1 schedule on that morning.`,
   };
 }
 
@@ -692,7 +692,7 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
           applicationId: rec.applicationId,
           title: content.inAppTitle,
           body: content.inAppBody,
-          link: "/employee",
+          link: "/my-applications",
         },
       });
     }

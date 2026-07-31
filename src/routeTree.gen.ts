@@ -29,10 +29,8 @@ import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedMyApplicationsRouteImport } from './routes/_authenticated/my-applications'
-import { Route as AuthenticatedManagerRouteImport } from './routes/_authenticated/manager'
-import { Route as AuthenticatedHrRouteImport } from './routes/_authenticated/hr'
-import { Route as AuthenticatedEmployeeRouteImport } from './routes/_authenticated/employee'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as ApiWebhooksResendRouteImport } from './routes/api/webhooks/resend'
 
 const WhatWeThinkRoute = WhatWeThinkRouteImport.update({
   id: '/what-we-think',
@@ -134,25 +132,15 @@ const AuthenticatedMyApplicationsRoute =
     path: '/my-applications',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedManagerRoute = AuthenticatedManagerRouteImport.update({
-  id: '/manager',
-  path: '/manager',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedHrRoute = AuthenticatedHrRouteImport.update({
-  id: '/hr',
-  path: '/hr',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedEmployeeRoute = AuthenticatedEmployeeRouteImport.update({
-  id: '/employee',
-  path: '/employee',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiWebhooksResendRoute = ApiWebhooksResendRouteImport.update({
+  id: '/api/webhooks/resend',
+  path: '/api/webhooks/resend',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -171,14 +159,12 @@ export interface FileRoutesByFullPath {
   '/what-we-do': typeof WhatWeDoRoute
   '/what-we-think': typeof WhatWeThinkRoute
   '/admin': typeof AuthenticatedAdminRoute
-  '/employee': typeof AuthenticatedEmployeeRoute
-  '/hr': typeof AuthenticatedHrRoute
-  '/manager': typeof AuthenticatedManagerRoute
   '/my-applications': typeof AuthenticatedMyApplicationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/api/webhooks/resend': typeof ApiWebhooksResendRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -196,14 +182,12 @@ export interface FileRoutesByTo {
   '/what-we-do': typeof WhatWeDoRoute
   '/what-we-think': typeof WhatWeThinkRoute
   '/admin': typeof AuthenticatedAdminRoute
-  '/employee': typeof AuthenticatedEmployeeRoute
-  '/hr': typeof AuthenticatedHrRoute
-  '/manager': typeof AuthenticatedManagerRoute
   '/my-applications': typeof AuthenticatedMyApplicationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/api/webhooks/resend': typeof ApiWebhooksResendRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -223,14 +207,12 @@ export interface FileRoutesById {
   '/what-we-do': typeof WhatWeDoRoute
   '/what-we-think': typeof WhatWeThinkRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
-  '/_authenticated/employee': typeof AuthenticatedEmployeeRoute
-  '/_authenticated/hr': typeof AuthenticatedHrRoute
-  '/_authenticated/manager': typeof AuthenticatedManagerRoute
   '/_authenticated/my-applications': typeof AuthenticatedMyApplicationsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/api/webhooks/resend': typeof ApiWebhooksResendRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -250,14 +232,12 @@ export interface FileRouteTypes {
     | '/what-we-do'
     | '/what-we-think'
     | '/admin'
-    | '/employee'
-    | '/hr'
-    | '/manager'
     | '/my-applications'
     | '/onboarding'
     | '/profile'
     | '/users'
     | '/auth/sso-callback'
+    | '/api/webhooks/resend'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -275,14 +255,12 @@ export interface FileRouteTypes {
     | '/what-we-do'
     | '/what-we-think'
     | '/admin'
-    | '/employee'
-    | '/hr'
-    | '/manager'
     | '/my-applications'
     | '/onboarding'
     | '/profile'
     | '/users'
     | '/auth/sso-callback'
+    | '/api/webhooks/resend'
   id:
     | '__root__'
     | '/'
@@ -301,14 +279,12 @@ export interface FileRouteTypes {
     | '/what-we-do'
     | '/what-we-think'
     | '/_authenticated/admin'
-    | '/_authenticated/employee'
-    | '/_authenticated/hr'
-    | '/_authenticated/manager'
     | '/_authenticated/my-applications'
     | '/_authenticated/onboarding'
     | '/_authenticated/profile'
     | '/_authenticated/users'
     | '/auth/sso-callback'
+    | '/api/webhooks/resend'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -327,6 +303,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   WhatWeDoRoute: typeof WhatWeDoRoute
   WhatWeThinkRoute: typeof WhatWeThinkRoute
+  ApiWebhooksResendRoute: typeof ApiWebhooksResendRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -471,27 +448,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyApplicationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/manager': {
-      id: '/_authenticated/manager'
-      path: '/manager'
-      fullPath: '/manager'
-      preLoaderRoute: typeof AuthenticatedManagerRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/hr': {
-      id: '/_authenticated/hr'
-      path: '/hr'
-      fullPath: '/hr'
-      preLoaderRoute: typeof AuthenticatedHrRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/employee': {
-      id: '/_authenticated/employee'
-      path: '/employee'
-      fullPath: '/employee'
-      preLoaderRoute: typeof AuthenticatedEmployeeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/admin': {
       id: '/_authenticated/admin'
       path: '/admin'
@@ -499,14 +455,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/webhooks/resend': {
+      id: '/api/webhooks/resend'
+      path: '/api/webhooks/resend'
+      fullPath: '/api/webhooks/resend'
+      preLoaderRoute: typeof ApiWebhooksResendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
-  AuthenticatedEmployeeRoute: typeof AuthenticatedEmployeeRoute
-  AuthenticatedHrRoute: typeof AuthenticatedHrRoute
-  AuthenticatedManagerRoute: typeof AuthenticatedManagerRoute
   AuthenticatedMyApplicationsRoute: typeof AuthenticatedMyApplicationsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -515,9 +475,6 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
-  AuthenticatedEmployeeRoute: AuthenticatedEmployeeRoute,
-  AuthenticatedHrRoute: AuthenticatedHrRoute,
-  AuthenticatedManagerRoute: AuthenticatedManagerRoute,
   AuthenticatedMyApplicationsRoute: AuthenticatedMyApplicationsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
@@ -553,6 +510,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   WhatWeDoRoute: WhatWeDoRoute,
   WhatWeThinkRoute: WhatWeThinkRoute,
+  ApiWebhooksResendRoute: ApiWebhooksResendRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

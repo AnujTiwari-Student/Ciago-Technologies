@@ -56,6 +56,9 @@ export const requireNeonAuth = createMiddleware({ type: "function" }).server(
     try {
       clerkClaims = (await verifyToken(token, {
         secretKey: CLERK_SECRET_KEY,
+        // Allow 60 seconds of clock skew to prevent false expiration errors
+        // This matches the leeway on the client side
+        clockSkewInMs: 60000,
       })) as Record<string, unknown>;
     } catch (err) {
       const message = err instanceof Error ? err.message : "verifyToken failed";

@@ -24,14 +24,6 @@ export type MyEmployeeAccessPayload = {
   hasPreDojOnboarding: boolean;
 };
 
-export type MY_ROLES_KEY = "admin" | "hr" | "manager" | "employee" | string;
-const ROLE_PRIORITY: Record<string, number> = {
-  admin: 4,
-  hr: 3,
-  manager: 2,
-  employee: 1,
-};
-
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyRolesPayload> => {
@@ -44,20 +36,13 @@ export const getMyRoles = createServerFn({ method: "GET" })
 
     const roles = new Set(rows.map((r) => r.role));
     const isAdmin = roles.has("admin");
-    const isHr = roles.has("hr");
-    const isManager = roles.has("manager");
-    const isEmployee = roles.has("employee");
-    const departmentId =
-      rows
-        .filter((r) => r.departmentId)
-        .sort((a, b) => (ROLE_PRIORITY[b.role] ?? 0) - (ROLE_PRIORITY[a.role] ?? 0))[0]
-        ?.departmentId ?? null;
+    const departmentId = rows.find((r) => r.departmentId)?.departmentId ?? null;
     return {
       isAdmin,
-      isHr,
-      isManager,
-      isEmployee,
-      isStaff: isAdmin || isHr || isManager || isEmployee,
+      isHr: false,
+      isManager: false,
+      isEmployee: false,
+      isStaff: isAdmin,
       departmentId,
     };
   });
@@ -86,16 +71,13 @@ export const getMyEmployeeAccess = createServerFn({ method: "GET" })
 
     const roles = new Set(roleRows.map((r) => r.role));
     const isAdmin = roles.has("admin");
-    const isHr = roles.has("hr");
-    const isManager = roles.has("manager");
-    const isEmployee = roles.has("employee");
 
     return {
       userId: context.userId,
       isAdmin,
-      isHr,
-      isManager,
-      isEmployee,
+      isHr: false,
+      isManager: false,
+      isEmployee: false,
       hasPreDojOnboarding: onboardingRows.length > 0,
     };
   });

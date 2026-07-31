@@ -36,6 +36,7 @@ import { uploadFile } from "@/lib/upload.functions";
 import { submitApplication } from "@/lib/applications.functions";
 import { listActiveJobPostings, type JobPosting } from "@/lib/jobPostings.functions";
 import { listMyApplications } from "@/lib/applications.query";
+import { getMyAuthUserId } from "@/lib/roles.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Copy, Hash, MapPin, Search, Sparkles } from "lucide-react";
@@ -268,8 +269,9 @@ function Careers() {
     try {
       let storagePath = "";
       if (resumeFile) {
+        const authUserId = await getMyAuthUserId();
         const safeName = resumeFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        storagePath = `${user.id}/${Date.now()}-${safeName}`;
+        storagePath = `${authUserId}/${Date.now()}-${safeName}`;
         const buf = await resumeFile.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         await upload({

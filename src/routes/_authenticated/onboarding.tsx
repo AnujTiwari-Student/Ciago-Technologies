@@ -201,9 +201,9 @@ function OnboardingPage() {
   const submitM = useMutation({
     mutationFn: () => submitFn({ data: { onboarding_id: offer!.onboarding!.id } }),
     onSuccess: async () => {
-      toast.success("Onboarding submitted — HR will verify your documents shortly.");
+      toast.success("Onboarding submitted — Admin will verify your documents shortly.");
       await qc.invalidateQueries();
-      setTimeout(() => navigate({ to: "/employee" }), 800);
+      setTimeout(() => navigate({ to: "/my-applications" }), 800);
     },
     onError: (e: any) => toast.error(e?.message || "Submission failed"),
   });
@@ -267,7 +267,7 @@ function OnboardingPage() {
           Welcome — let's get you set up
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Review your offer, upload your documents, and unlock the Employee Portal.
+          Review your offer and submit your onboarding details to get started.
         </p>
         {(trackBadge || employmentBadge) && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -307,11 +307,11 @@ function OnboardingPage() {
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               <h2 className="mt-4 text-xl font-bold">Onboarding submitted</h2>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                Your documents are with the HR team for verification. You'll get an email once your
-                Date of Joining is confirmed and the Employee Portal is fully unlocked.
+                Your documents are with the Admin team for verification. You'll get an email once your
+                Date of Joining is confirmed.
               </p>
               <Button asChild className="mt-6 bg-brand text-brand-foreground hover:bg-brand-glow">
-                <Link to="/employee">Open Employee Portal</Link>
+                <Link to="/my-applications">View My Applications</Link>
               </Button>
             </CardContent>
           </Card>
@@ -553,7 +553,7 @@ function OnboardingPage() {
                     <div>
                       <h2 className="text-xl font-bold">Final review</h2>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Submitting will hand your file to HR for document verification and Date of
+                        Submitting will hand your file to Admin for document verification and Date of
                         Joining assignment.
                       </p>
                     </div>
@@ -586,7 +586,7 @@ function OnboardingPage() {
                         disabled={submitM.isPending || missingDocs.length > 0}
                         className="bg-brand text-brand-foreground hover:bg-brand-glow"
                       >
-                        {submitM.isPending ? "Submitting…" : "Submit for HR verification"}
+                        {submitM.isPending ? "Submitting…" : "Submit for Admin verification"}
                       </Button>
                     </div>
                   </div>

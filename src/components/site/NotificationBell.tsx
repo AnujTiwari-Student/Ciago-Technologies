@@ -90,12 +90,16 @@ export function NotificationBell() {
                 </div>
                 <p className="text-xs text-muted-foreground">{n.body}</p>
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                  {new Date(n.created_at).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {(() => {
+                    const d = new Date(n.created_at);
+                    if (isNaN(d.getTime())) return "Just now";
+                    return d.toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+                  })()}
                 </p>
               </button>
             </li>

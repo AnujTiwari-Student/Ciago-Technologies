@@ -30,11 +30,7 @@ datasource db {
 
 enum AppRole {
   admin
-  moderator
   user
-  employee
-  hr
-  manager
 
   @@map("app_role")
 }
@@ -68,8 +64,6 @@ enum JobPostingStatus {
 
 enum JobTrackType {
   standard
-  manager_track
-  hr_track
 
   @@map("job_track_type")
 }
@@ -134,30 +128,16 @@ model Department {
   @@map("departments")
 }
 
-model EmployeeTask {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  assigneeId       String   @db.Uuid @map("assignee_id")
-  assignedBy       String?  @db.Uuid @map("assigned_by")
-  title            String
-  description      String?
-  status           String   @default("pending")
-  priority         String   @default("medium")
-  dueDate          String?  @map("due_date")
-  projectReference String?  @map("project_reference")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  @@map("employee_tasks")
-}
 
 model Employee {
   userId                String    @db.Uuid @map("user_id")
+  orangehrmEmployeeId   Int?      @map("orangehrm_employee_id")
   accountStatus         String    @default("active") @map("account_status")
   probationStatus       String    @default("active") @map("probation_status")
   probationMonths       Int?      @map("probation_months")
   backgroundCheckStatus String    @default("pending") @map("background_check_status")
   docVerificationStatus String    @default("pending") @map("doc_verification_status")
-  department            DeptType? 
+  department            DeptType?
   designation           String?
   teamName              String?   @map("team_name")
   doj                   String?
@@ -372,20 +352,6 @@ model Profile {
   @@map("profiles")
 }
 
-model ProjectEstimate {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  fullName    String   @map("full_name")
-  email       String
-  company     String
-  projectType String   @map("project_type")
-  scale       String
-  timeline    String
-  budgetLow   Float    @map("budget_low")
-  budgetHigh  Float    @map("budget_high")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@map("project_estimates")
-}
 
 model RateLimit {
   id         Int      @id @default(autoincrement())
@@ -458,6 +424,54 @@ model SalarySlip {
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("salary_slips")
+}
+
+model Email {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  resendId      String?   @map("resend_id")
+  sender        String
+  recipient     String
+  subject       String
+  emailType     String    @map("email_type")
+  status        String    @default("pending")
+  sentAt        DateTime? @map("sent_at")
+  deliveredAt   DateTime? @map("delivered_at")
+  openedAt      DateTime? @map("opened_at")
+  clickedAt     DateTime? @map("clicked_at")
+  bouncedAt     DateTime? @map("bounced_at")
+  failedAt      DateTime? @map("failed_at")
+  errorMessage  String?   @map("error_message")
+  userId        String?   @db.Uuid @map("user_id")
+  applicationId String?   @db.Uuid @map("application_id")
+  metadata      Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([resendId])
+  @@index([userId])
+  @@index([applicationId])
+  @@index([status])
+  @@index([emailType])
+  @@map("emails")
+}
+
+model ServiceAccountMapping {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId        String    @db.Uuid @map("employee_id")
+  githubUsername    String?   @map("github_username")
+  teamsEmail        String?   @map("teams_email")
+  clickupUsername   String?   @map("clickup_username")
+  orangehrmUserId   Int?      @map("orangehrm_user_id")
+  status            String    @default("active")
+  provisionedAt     DateTime? @map("provisioned_at")
+  deprovisionedAt   DateTime? @map("deprovisioned_at")
+  notes             String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("service_account_mappings")
 }
 
 model SalaryStructure {

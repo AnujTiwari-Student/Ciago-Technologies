@@ -71,21 +71,34 @@ function ClerkTokenBridge() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   useEffect(() => {
     let cancelled = false;
-    if (!isLoaded || !isSignedIn) {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
       window.__clerkAuthToken = "";
+      window.__clerkReady = true;
       return;
     }
-    getToken()
-      .then((token) => {
-        if (cancelled) return;
-        window.__clerkAuthToken = token ?? "";
-      })
-      .catch(() => {
-        if (cancelled) return;
-        window.__clerkAuthToken = "";
-      });
+
+    function refresh() {
+      getToken({ skipCache: true })
+        .then((token) => {
+          if (cancelled) return;
+          window.__clerkAuthToken = token ?? "";
+          window.__clerkReady = true;
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error("[clerk-token-bridge] Failed to get token:", err);
+          window.__clerkAuthToken = "";
+          window.__clerkReady = true;
+        });
+    }
+
+    refresh();
+    const interval = setInterval(refresh, 50_000);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [isLoaded, isSignedIn, getToken]);
   return null;

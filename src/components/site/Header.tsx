@@ -40,50 +40,15 @@ export const publicNavItems: NavItem[] = [
   { label: "About Us", to: "/about-us" },
   { label: "Careers", to: "/careers" },
   { label: "Resources", to: "/resources" },
-  { label: "Estimate", to: "/estimate" },
 ];
 
 export const adminNavItems: NavItem[] = [
   { label: "Dashboard", to: "/admin" },
   { label: "Applications", to: "/admin", search: { tab: "applications" } },
-  { label: "Verification", to: "/hr", search: { tab: "verification" } },
   { label: "By Job", to: "/admin", search: { tab: "by-role" } },
   { label: "Job Postings", to: "/admin", search: { tab: "postings" } },
-  { label: "Tasks", to: "/admin", search: { tab: "tasks" } },
   { label: "Users", to: "/users" },
   { label: "Audit Logs", to: "/admin", search: { tab: "audit" } },
-  { label: "Profile", to: "/profile" },
-];
-
-// HR portal navigation (Phase 3 builds these routes; nav is scaffolded now for isolation).
-export const hrNavItems: NavItem[] = [
-  { label: "HR Dashboard", to: "/hr" },
-  { label: "ATS Pipeline", to: "/hr", search: { tab: "pipeline" } },
-  { label: "Verification", to: "/hr", search: { tab: "verification" } },
-  { label: "Postings", to: "/hr", search: { tab: "postings" } },
-  { label: "Directory", to: "/hr", search: { tab: "directory" } },
-  { label: "Users", to: "/users" },
-  { label: "Leave", to: "/hr", search: { tab: "leave" } },
-  { label: "Profile", to: "/profile" },
-];
-
-// Internal Employee Portal navigation (marketing links hidden).
-export const employeeNavItems: NavItem[] = [
-  { label: "Dashboard", to: "/employee" },
-  { label: "Careers", to: "/employee", search: { tab: "internal-careers" } },
-  { label: "My Tasks", to: "/employee", search: { tab: "tasks" } },
-  { label: "Referrals", to: "/employee", search: { tab: "referrals" } },
-  { label: "Leave", to: "/employee", search: { tab: "leave" } },
-  { label: "Profile", to: "/profile" },
-];
-
-// Manager Portal navigation.
-export const managerNavItems: NavItem[] = [
-  { label: "Dashboard", to: "/manager" },
-  { label: "Team", to: "/manager", search: { tab: "team" } },
-  { label: "Tasks", to: "/manager", search: { tab: "tasks" } },
-  { label: "Leave Approvals", to: "/manager", search: { tab: "approvals" } },
-  { label: "Careers", to: "/manager", search: { tab: "internal-careers" } },
   { label: "Profile", to: "/profile" },
 ];
 
@@ -175,24 +140,7 @@ function AuthMenu({
           {isAdmin && (
             <DropdownMenuItem onClick={() => navigate({ to: "/admin" })}>
               <ShieldCheck className="mr-2 h-4 w-4 text-brand" />
-              Command Center
-            </DropdownMenuItem>
-          )}
-          {isHr && !isAdmin && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/hr" })}>
-              <ShieldCheck className="mr-2 h-4 w-4 text-brand" />
-              HR Portal
-            </DropdownMenuItem>
-          )}
-          {isManager && !isAdmin && !isHr && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/manager" })}>
-              <ShieldCheck className="mr-2 h-4 w-4 text-brand" />
-              Manager Portal
-            </DropdownMenuItem>
-          )}
-          {isEmployee && !isAdmin && !isHr && !isManager && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/employee" })}>
-              Employee Portal
+              Admin Portal
             </DropdownMenuItem>
           )}
           {!isStaff && (
@@ -232,30 +180,11 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const { authButtonEnabled } = RootRoute.useRouteContext();
   const { user } = useAuth();
-  const { isAdmin, isHr, isManager, isEmployee } = useMyRoles();
+  const { isAdmin } = useMyRoles();
 
-  // Strict portal isolation: staff see ONLY their portal nav — marketing links are hidden.
-  // Priority: admin > hr > manager > employee. Elevated staff never see the employee view.
-  const items: NavItem[] = isAdmin
-    ? adminNavItems
-    : isHr
-      ? hrNavItems
-      : isManager
-        ? managerNavItems
-        : isEmployee
-          ? employeeNavItems
-          : publicNavItems;
-
-  const homeHref = isAdmin
-    ? "/admin"
-    : isHr
-      ? "/hr"
-      : isManager
-        ? "/manager"
-        : isEmployee
-          ? "/employee"
-          : "/";
-  const isStaff = isAdmin || isHr || isManager || isEmployee;
+  const items: NavItem[] = isAdmin ? adminNavItems : publicNavItems;
+  const homeHref = isAdmin ? "/admin" : "/";
+  const isStaff = isAdmin;
 
   return (
     <header className="glass-nav sticky top-0 z-50 w-full">
@@ -290,9 +219,9 @@ export function SiteHeader() {
           <ThemeToggle />
           <AuthMenu
             isAdmin={isAdmin}
-            isHr={isHr}
-            isManager={isManager}
-            isEmployee={isEmployee}
+            isHr={false}
+            isManager={false}
+            isEmployee={false}
             authButtonEnabled={authButtonEnabled}
           />
           {!isStaff && (

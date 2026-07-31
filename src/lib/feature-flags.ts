@@ -51,26 +51,25 @@ export const FEATURE_FLAGS = {
   // Controls whether the authenticated dashboard UI surfaces are accessible.
   // When false, authenticated users are redirected to a maintenance/splash page.
   dashboard: "dashboardEnabled",
-  // -- Employee portals ------------------------------------------------------
-  employeePortal: "employeePortalEnabled",
-  managerPortal: "managerPortalEnabled",
-  hrPortal: "hrPortalEnabled",
-  onboardingPortal: "onboardingPortalEnabled",
   // -- HR features -----------------------------------------------------------
   documentUploads: "documentUploadsEnabled",
   interviewScheduling: "interviewSchedulingEnabled",
   offerManagement: "offerManagementEnabled",
-  // -- Employee self-service -------------------------------------------------
-  leaveManagement: "leaveManagementEnabled",
-  attendance: "attendanceEnabled",
-  timesheets: "timesheetsEnabled",
-  payrollPortal: "payrollPortalEnabled",
-  referrals: "referralsEnabled",
-  internalMobility: "internalMobilityEnabled",
   // -- Analytics -------------------------------------------------------------
   advancedAnalytics: "advancedAnalyticsEnabled",
   // -- System ----------------------------------------------------------------
   maintenanceMode: "maintenanceMode",
+  // -- Architecture Migration ------------------------------------------------
+  newArchitecture: "new_architecture_enabled",
+  // -- OrangeHRM Integration -------------------------------------------------
+  essAutoProvisioning: "ess_auto_provisioning_enabled",
+  orangehrmSalarySync: "orangehrm_salary_sync_enabled",
+  // -- Email -----------------------------------------------------------------
+  resendEmailSending: "resend_email_sending_enabled",
+  // -- Provisioning & Offboarding --------------------------------------------
+  autoOffboardingTrigger: "auto_offboarding_trigger_enabled",
+  // -- Background Verification -----------------------------------------------
+  manualBackgroundVerificationOnly: "manual_background_verification_only",
 } as const;
 
 export type FeatureKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
@@ -83,26 +82,25 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
   authenticationButtonEnabled: false,
   // Dashboard — on by default; flip off to show maintenance screen
   dashboardEnabled: true,
-  // Portals
-  employeePortalEnabled: true,
-  managerPortalEnabled: true,
-  hrPortalEnabled: true,
-  onboardingPortalEnabled: true,
   // HR features
   documentUploadsEnabled: true,
   interviewSchedulingEnabled: true,
   offerManagementEnabled: true,
-  // Employee self-service
-  leaveManagementEnabled: true,
-  attendanceEnabled: true,
-  timesheetsEnabled: true,
-  payrollPortalEnabled: true,
-  referralsEnabled: true,
-  internalMobilityEnabled: true,
   // Analytics
   advancedAnalyticsEnabled: false,
   // System
   maintenanceMode: false,
+  // Architecture Migration
+  new_architecture_enabled: false,
+  // OrangeHRM Integration
+  ess_auto_provisioning_enabled: false,
+  orangehrm_salary_sync_enabled: false,
+  // Email
+  resend_email_sending_enabled: false,
+  // Provisioning & Offboarding
+  auto_offboarding_trigger_enabled: false,
+  // Background Verification
+  manual_background_verification_only: false,
 };
 
 export const FEATURE_KEYS = Object.values(FEATURE_FLAGS) as FeatureKey[];

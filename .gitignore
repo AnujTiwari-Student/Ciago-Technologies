@@ -16,6 +16,8 @@ docs
 !.env.example
 !.env.test
 
+.orangehrm-token.json
+
 # Dependencies and Build Outputs
 node_modules
 dist

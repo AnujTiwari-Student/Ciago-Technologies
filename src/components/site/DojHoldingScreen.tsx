@@ -23,8 +23,7 @@ function daysBetween(a: Date, b: Date) {
 }
 
 /**
- * Determines whether the signed-in employee should see the pre-DOJ holding screen
- * instead of the full Employee Portal.
+ * Determines whether the signed-in user should see the pre-DOJ holding screen.
  *
  * Returns true when a DOJ is set on the onboarding record AND today is before it.
  */
@@ -92,8 +91,8 @@ export function DojHoldingScreen({
               <p className="mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
                 {firstName ? `${firstName}, your` : "Your"} onboarding paperwork is on file.{" "}
                 {hasDoj
-                  ? "We're getting your workstation, accounts and orientation kit ready. The Employee Portal unlocks automatically on your first day."
-                  : "As soon as HR verifies your documents and confirms a Date of Joining, this screen will show a live countdown and the Employee Portal will unlock on that date."}
+                  ? "We're getting your workstation, accounts and orientation kit ready. Everything will be set up by your first day."
+                  : "As soon as Admin verifies your documents and confirms a Date of Joining, this screen will show a live countdown."}
               </p>
 
               {hasDoj && (

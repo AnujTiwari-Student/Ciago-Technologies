@@ -34,7 +34,6 @@ const cols: Col[] = [
     title: "Resources",
     links: [
       { label: "Whitepapers", to: "/resources" },
-      { label: "Project Estimator", to: "/estimate" },
       { label: "Blog", to: "/what-we-think" },
       { label: "Support", to: "/", hash: "contact" },
     ],

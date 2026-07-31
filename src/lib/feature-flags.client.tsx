@@ -71,33 +71,29 @@ export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Cap
   return {
     clerkAuthentication:
       flags.clerkAuthentication ?? getCapabilityDefault(FEATURE_FLAGS.clerkAuthentication),
+    authenticationButtonEnabled:
+      flags.authenticationButtonEnabled ?? getCapabilityDefault(FEATURE_FLAGS.authenticationButton),
     dashboardEnabled: flags.dashboardEnabled ?? getCapabilityDefault(FEATURE_FLAGS.dashboard),
-    employeePortalEnabled:
-      flags.employeePortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.employeePortal),
-    managerPortalEnabled:
-      flags.managerPortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.managerPortal),
-    hrPortalEnabled: flags.hrPortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.hrPortal),
-    onboardingPortalEnabled:
-      flags.onboardingPortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.onboardingPortal),
     documentUploadsEnabled:
       flags.documentUploadsEnabled ?? getCapabilityDefault(FEATURE_FLAGS.documentUploads),
     interviewSchedulingEnabled:
       flags.interviewSchedulingEnabled ?? getCapabilityDefault(FEATURE_FLAGS.interviewScheduling),
     offerManagementEnabled:
       flags.offerManagementEnabled ?? getCapabilityDefault(FEATURE_FLAGS.offerManagement),
-    leaveManagementEnabled:
-      flags.leaveManagementEnabled ?? getCapabilityDefault(FEATURE_FLAGS.leaveManagement),
-    attendanceEnabled: flags.attendanceEnabled ?? getCapabilityDefault(FEATURE_FLAGS.attendance),
-    timesheetsEnabled: flags.timesheetsEnabled ?? getCapabilityDefault(FEATURE_FLAGS.timesheets),
-    payrollPortalEnabled:
-      flags.payrollPortalEnabled ?? getCapabilityDefault(FEATURE_FLAGS.payrollPortal),
-    referralsEnabled: flags.referralsEnabled ?? getCapabilityDefault(FEATURE_FLAGS.referrals),
-    internalMobilityEnabled:
-      flags.internalMobilityEnabled ?? getCapabilityDefault(FEATURE_FLAGS.internalMobility),
     advancedAnalyticsEnabled:
       flags.advancedAnalyticsEnabled ?? getCapabilityDefault(FEATURE_FLAGS.advancedAnalytics),
     maintenanceMode: flags.maintenanceMode ?? getCapabilityDefault(FEATURE_FLAGS.maintenanceMode),
-    authenticationButtonEnabled:
-      flags.authenticationButtonEnabled ?? getCapabilityDefault(FEATURE_FLAGS.authenticationButton),
+    new_architecture_enabled:
+      flags.new_architecture_enabled ?? getCapabilityDefault(FEATURE_FLAGS.newArchitecture),
+    ess_auto_provisioning_enabled:
+      flags.ess_auto_provisioning_enabled ?? getCapabilityDefault(FEATURE_FLAGS.essAutoProvisioning),
+    orangehrm_salary_sync_enabled:
+      flags.orangehrm_salary_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.orangehrmSalarySync),
+    resend_email_sending_enabled:
+      flags.resend_email_sending_enabled ?? getCapabilityDefault(FEATURE_FLAGS.resendEmailSending),
+    auto_offboarding_trigger_enabled:
+      flags.auto_offboarding_trigger_enabled ?? getCapabilityDefault(FEATURE_FLAGS.autoOffboardingTrigger),
+    manual_background_verification_only:
+      flags.manual_background_verification_only ?? getCapabilityDefault(FEATURE_FLAGS.manualBackgroundVerificationOnly),
   };
 }

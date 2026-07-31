@@ -104,7 +104,37 @@ const DEPT_LABEL: Record<string, string> = {
 const humanize = (s: string | null | undefined) =>
   s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
-function DocStatusBadge({ status }: { status: string }) {
+function DocStatusBadge({
+  approvedCount,
+  totalCount,
+}: {
+  approvedCount: number;
+  totalCount: number;
+}) {
+  if (totalCount === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const allVerified = approvedCount === totalCount;
+  const noneVerified = approvedCount === 0;
+
+  return (
+    <Badge
+      className={
+        allVerified
+          ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+          : noneVerified
+            ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+            : "bg-blue-500/15 text-blue-500 border-blue-500/30"
+      }
+    >
+      {allVerified && <ShieldCheck className="h-3 w-3 mr-1" />}
+      {noneVerified && <ShieldAlert className="h-3 w-3 mr-1" />}
+      {approvedCount}/{totalCount}
+    </Badge>
+  );
+}
+
+function SingleDocStatusBadge({ status }: { status: string }) {
   if (status === "verified")
     return (
       <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">
@@ -139,12 +169,9 @@ function RoleBadge({ role, isAdmin }: { role: AppRole; isAdmin: boolean }) {
   const displayed: AppRole = isAdmin ? "admin" : role;
   const map: Record<AppRole, string> = {
     admin: "bg-primary/15 text-primary border-primary/30",
-    hr: "bg-fuchsia-500/15 text-fuchsia-500 border-fuchsia-500/30",
-    manager: "bg-amber-500/15 text-amber-500 border-amber-500/30",
-    employee: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
     user: "bg-slate-500/15 text-slate-500 border-slate-500/30",
   };
-  return <Badge className={map[displayed]}>{humanize(displayed)}</Badge>;
+  return <Badge className={map[displayed] || map.user}>{humanize(displayed)}</Badge>;
 }
 
 function UsersPage() {
@@ -205,8 +232,7 @@ function UsersPage() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">User Management</h1>
               <p className="text-sm text-muted-foreground">
-                Unified directory for Admin & HR —{" "}
-                {actorIsAdmin ? "full access" : "HR access (Admin accounts are read-only)"}.
+                Unified directory for Admin — full access.
               </p>
             </div>
           </header>
@@ -250,10 +276,7 @@ function UsersPage() {
                       <SelectContent>
                         <SelectItem value="all">All roles</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="hr">HR</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="user">Candidate/User</SelectItem>
+                        <SelectItem value="user">User</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={deptFilter} onValueChange={setDeptFilter}>
@@ -285,6 +308,7 @@ function UsersPage() {
                           <tr className="text-left">
                             <Th>Name</Th>
                             <Th>Role</Th>
+                            <Th>Job</Th>
                             <Th>Department</Th>
                             <Th>Designation</Th>
                             <Th>DOJ</Th>
@@ -296,7 +320,7 @@ function UsersPage() {
                         <tbody>
                           {rows.length === 0 && (
                             <tr>
-                              <td colSpan={8} className="text-center py-10 text-muted-foreground">
+                              <td colSpan={9} className="text-center py-10 text-muted-foreground">
                                 No users match.
                               </td>
                             </tr>
@@ -316,6 +340,16 @@ function UsersPage() {
                                   <RoleBadge role={r.role} isAdmin={r.is_admin} />
                                 </Td>
                                 <Td>
+                                  {r.job_title ? (
+                                    <div>
+                                      <div className="text-xs font-mono text-muted-foreground">{r.job_id?.slice(0, 8)}</div>
+                                      <div className="text-sm">{r.job_title}</div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </Td>
+                                <Td>
                                   {r.department ? (
                                     DEPT_LABEL[r.department]
                                   ) : (
@@ -329,7 +363,10 @@ function UsersPage() {
                                 </Td>
                                 <Td>{r.doj || <span className="text-muted-foreground">—</span>}</Td>
                                 <Td>
-                                  <DocStatusBadge status={r.doc_verification_status} />
+                                  <DocStatusBadge
+                                    approvedCount={r.docs_approved_count}
+                                    totalCount={r.docs_total_count}
+                                  />
                                 </Td>
                                 <Td>
                                   <WorkModelBadge v={r.work_model} />
@@ -550,11 +587,10 @@ function EditUserDrawer({
           </div>
         ) : (
           <Tabs defaultValue="identity" className="mt-6">
-            <TabsList className="grid grid-cols-4">
+            <TabsList className="grid grid-cols-3">
               <TabsTrigger value="identity">Identity</TabsTrigger>
               <TabsTrigger value="org">Organisation</TabsTrigger>
               <TabsTrigger value="employ">Employment</TabsTrigger>
-              <TabsTrigger value="docs">Documents</TabsTrigger>
             </TabsList>
 
             <TabsContent value="identity" className="space-y-4 pt-4">
@@ -810,31 +846,6 @@ function EditUserDrawer({
               </Field>
             </TabsContent>
 
-            <TabsContent value="docs" className="space-y-4 pt-4">
-              <IdentityDocs
-                userId={userId}
-                docs={detail.data?.documents ?? []}
-                hrLocked={hrLocked}
-                actorCanVerify={(actorIsAdmin || actorIsHr) && !hrLocked}
-                onUpload={async (docType, file) => {
-                  const path = `${userId}/${docType}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-                  const buf = await file.arrayBuffer();
-                  const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-                  await uploadFn({ data: { bucket: "identity-docs", path, base64, contentType: file.type, upsert: true } });
-                  await upsertDocFn({
-                    data: { user_id: userId, doc_type: docType, storage_path: path },
-                  });
-                  qc.invalidateQueries({ queryKey: ["user-detail", userId] });
-                }}
-                onVerify={async (docId, status, feedback) => {
-                  await verifyDocFn({
-                    data: { doc_id: docId, status, feedback: feedback ?? null },
-                  });
-                  qc.invalidateQueries({ queryKey: ["user-detail", userId] });
-                  qc.invalidateQueries({ queryKey: ["directory"] });
-                }}
-              />
-            </TabsContent>
           </Tabs>
         )}
 
@@ -970,7 +981,7 @@ function DocRow({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {existing && <DocStatusBadge status={existing.status} />}
+            {existing && <SingleDocStatusBadge status={existing.status} />}
             {existing?.signed_url && (
               <Button size="sm" variant="ghost" asChild>
                 <a href={existing.signed_url} target="_blank" rel="noreferrer">

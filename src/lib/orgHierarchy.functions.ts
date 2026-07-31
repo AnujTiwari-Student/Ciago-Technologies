@@ -18,12 +18,12 @@ export type StaffUser = {
   email: string | null;
   full_name: string | null;
   created_at: string;
-  role: "user" | "employee" | "manager" | "hr" | "admin";
+  role: "user" | "admin";
   department_id: string | null;
   department_name: string | null;
 };
 
-const STAFF_ROLES = ["employee", "manager", "hr", "admin"] as const;
+const STAFF_ROLES = ["admin"] as const;
 
 async function assertAdmin(db: any, userId: string) {
   const count = await db.withRLS((tx: any) =>
@@ -74,11 +74,9 @@ export const listStaffUsers = createServerFn({ method: "GET" })
     const emailMap = new Map(mappings.map((m) => [m.authUserId, { email: m.email, createdAt: m.createdAt }]));
     const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
 
-    const priority: Record<string, number> = { admin: 4, hr: 3, manager: 2, employee: 1 };
     const bestByUser = new Map<string, { role: string; department_id: string | null }>();
     for (const r of roles) {
-      const cur = bestByUser.get(r.userId);
-      if (!cur || (priority[r.role] ?? 0) > (priority[cur.role] ?? 0)) {
+      if (!bestByUser.has(r.userId)) {
         bestByUser.set(r.userId, { role: r.role, department_id: r.departmentId ?? null });
       }
     }
@@ -106,7 +104,7 @@ export const listStaffUsers = createServerFn({ method: "GET" })
 // ============================================================
 const setRoleSchema = z.object({
   userId: z.string().uuid(),
-  role: z.enum(["user", "employee", "manager", "hr", "admin"]),
+  role: z.enum(["user", "admin"]),
   departmentId: z.string().uuid().nullable().optional(),
 });
 

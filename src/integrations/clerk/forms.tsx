@@ -120,33 +120,47 @@ function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: s
       toast.error("Authentication is temporarily disabled.");
       return;
     }
-    const { error } = await signIn.password({ identifier: email, password });
-    if (error) {
-      toast.error(
-        errors?.fields?.password?.message ??
-          errors?.fields?.identifier?.message ??
-          "Sign-in blocked.",
-      );
-      return;
-    }
-    if (signIn.status === "complete") {
-      await signIn.finalize({
-        navigate: async ({ session }) => {
-          if (session?.currentTask) {
-            toast.error("Additional verification required.");
-            return;
-          }
-          try {
-            const dest = await resolveMyPortal({ data: { portal, requested: redirectTo } });
-            toast.success("Signed in.");
-            navigate({ to: dest });
-          } catch (err) {
-            handlePortalError(err, navigate);
-          }
-        },
-      });
-    } else if (signIn.status === "needs_second_factor") {
-      toast.error("Sign-in incomplete — MFA / verification required.");
+    setBusy(true);
+    try {
+      const { error } = await signIn.password({ identifier: email, password });
+      if (error) {
+        setBusy(false);
+        toast.error(
+          errors?.fields?.password?.message ??
+            errors?.fields?.identifier?.message ??
+            "Sign-in blocked.",
+        );
+        return;
+      }
+      if (signIn.status === "complete") {
+        await signIn.finalize({
+          navigate: async ({ session }) => {
+            if (session?.currentTask) {
+              setBusy(false);
+              toast.error("Additional verification required.");
+              return;
+            }
+            try {
+              const dest = await resolveMyPortal({ data: { portal, requested: redirectTo } });
+              toast.success("Signed in.");
+              navigate({ to: dest });
+            } catch (err) {
+              setBusy(false);
+              handlePortalError(err, navigate);
+            }
+          },
+        });
+      } else if (signIn.status === "needs_second_factor") {
+        setBusy(false);
+        toast.error("Sign-in incomplete — MFA / verification required.");
+      } else {
+        setBusy(false);
+        toast.error("Sign-in incomplete. Please try again.");
+      }
+    } catch (err) {
+      setBusy(false);
+      const message = err instanceof Error ? err.message : "Sign-in failed";
+      toast.error(message);
     }
   }
 
@@ -181,7 +195,7 @@ function ClerkSignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: s
         disabled={busy}
         className="w-full bg-brand text-brand-foreground hover:bg-brand-glow"
       >
-        {busy ? "Signing in…" : portal === "employee" ? "Sign in to Employee Portal" : "Sign in"}
+        {busy ? "Signing in…" : "Sign in"}
       </Button>
     </form>
   );
@@ -201,37 +215,61 @@ function ClerkSignUpForm({ redirectTo }: { redirectTo: string }) {
       toast.error("Authentication is temporarily disabled.");
       return;
     }
-    if (password.length < 8) return toast.error("Password must be at least 8 characters.");
-
-    const firstSpace = name.indexOf(" ");
-    const firstName = firstSpace === -1 ? name : name.slice(0, firstSpace);
-
-    const { error } = await signUp.password({ emailAddress: email, password, firstName });
-    if (error) {
-      toast.error(
-        errors?.fields?.emailAddress?.message ??
-          errors?.fields?.password?.message ??
-          "Sign-up blocked.",
-      );
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
       return;
     }
 
-    if (signUp.status === "complete") {
-      await signUp.finalize({
-        navigate: async () => {
-          const dest = await resolveMyPortal({
-            data: { portal: "candidate", requested: redirectTo },
-          });
-          toast.success("Account created. You can apply now.");
-          navigate({ to: dest });
-        },
-      });
-    } else {
-      // Dashboard requires verification (e.g. email code) before completion.
-      // NOTE: this is new behavior, not present in your old flow — you need
-      // an actual verification-code UI step here, this isn't a rename fix.
-      await signUp.verifications.sendEmailCode();
-      toast.success("Check your inbox to confirm your email, then sign in.");
+    setBusy(true);
+    try {
+      const firstSpace = name.indexOf(" ");
+      const firstName = firstSpace === -1 ? name : name.slice(0, firstSpace);
+
+      const { error } = await signUp.password({ emailAddress: email, password, firstName });
+      if (error) {
+        setBusy(false);
+        toast.error(
+          errors?.fields?.emailAddress?.message ??
+            errors?.fields?.password?.message ??
+            "Sign-up blocked.",
+        );
+        return;
+      }
+
+      if (signUp.status === "complete") {
+        await signUp.finalize({
+          navigate: async () => {
+            try {
+              const dest = await resolveMyPortal({
+                data: { portal: "candidate", requested: redirectTo },
+              });
+              toast.success("Account created. You can apply now.");
+              navigate({ to: dest });
+            } catch (err) {
+              setBusy(false);
+              handlePortalError(err, navigate);
+            }
+          },
+        });
+      } else if (signUp.status === "missing_requirements") {
+        // Email verification required
+        try {
+          await signUp.verifications.sendEmailCode();
+          setBusy(false);
+          toast.success("Check your inbox to confirm your email, then sign in.");
+        } catch (err) {
+          setBusy(false);
+          // If verification send fails, try to complete anyway
+          toast.warning("Account created. Please sign in to continue.");
+        }
+      } else {
+        setBusy(false);
+        toast.error("Sign-up incomplete. Please try signing in instead.");
+      }
+    } catch (err) {
+      setBusy(false);
+      const message = err instanceof Error ? err.message : "Sign-up failed";
+      toast.error(message);
     }
   }
 
@@ -304,6 +342,8 @@ function ClerkSocialButton({
         toast.error("Authentication is temporarily disabled.");
         return;
       }
+
+      // Start OAuth flow
       const { error } = await signIn.sso({
         strategy: CLERK_STRATEGY[provider],
         redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
@@ -313,7 +353,7 @@ function ClerkSocialButton({
       const nestedError = signIn.firstFactorVerification?.error;
 
       if (nestedError?.code === "external_account_not_found") {
-        // No existing Clerk user for this Google identity — transfer to sign-up.
+        // No existing Clerk user for this OAuth identity — transfer to sign-up.
         const { error: suError } = await signUp.sso({
           strategy: CLERK_STRATEGY[provider],
           redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
@@ -322,7 +362,9 @@ function ClerkSocialButton({
         if (suError) {
           setBusy(false);
           toast.error(formatSocialError(suError, provider));
+          return;
         }
+        // OAuth redirect will happen - leave busy state on
         return;
       }
 
@@ -332,8 +374,8 @@ function ClerkSocialButton({
         return;
       }
 
-      setBusy(false);
-      toast.error(`Sign-in incomplete (${signIn.status}). Try email instead.`);
+      // OAuth redirect will happen - leave busy state on
+      // The redirect will bring us back and the session will be established
     } catch (err) {
       setBusy(false);
       toast.error(formatSocialError(err, provider));

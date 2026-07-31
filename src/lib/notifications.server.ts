@@ -80,30 +80,22 @@ export function getStatusEmailContent(
   };
 }
 
-export async function sendResendEmail(args: { to: string; subject: string; html: string }) {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.warn("[resend] RESEND_API_KEY not set — skipping email");
-    return { skipped: true };
-  }
-  const from = process.env.RESEND_FROM_EMAIL || "Ciago Technologies <onboarding@resend.dev>";
+export async function sendResendEmail(args: {
+  to: string;
+  subject: string;
+  html: string;
+  userId?: string;
+  applicationId?: string;
+}) {
+  const { sendWorkflowEmail } = await import("@/lib/email.functions");
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      from,
-      to: [args.to],
-      subject: args.subject,
-      html: args.html,
-    }),
+  return sendWorkflowEmail({
+    to: args.to,
+    subject: args.subject,
+    html: args.html,
+    emailType: "application_status",
+    userId: args.userId,
+    applicationId: args.applicationId,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend ${res.status}: ${body}`);
-  }
   return { skipped: false };
 }

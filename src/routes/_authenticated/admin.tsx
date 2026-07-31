@@ -10,7 +10,6 @@ import {
   Activity,
   Briefcase,
   ChevronDown,
-  ClipboardList,
   Copy,
   ExternalLink,
   FileText,
@@ -89,20 +88,13 @@ import {
 } from "@/lib/jobPostings.functions";
 import { useLookups } from "@/hooks/use-lookups";
 import { requireRoles, requireDashboardEnabled } from "./-guard";
-import {
-  assignTaskToEmployee,
-  listAllAssignedTasks,
-  listEmployeesForAssignment,
-  type AdminTask,
-  type EmployeeOption,
-} from "@/lib/adminTasks.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
   validateSearch: zodValidator(
     z.object({
       tab: fallback(
-        z.enum(["applications", "postings", "users", "audit", "by-role", "tasks"]).optional(),
+        z.enum(["applications", "postings", "users", "audit", "by-role"]).optional(),
         undefined,
       ),
     }),
@@ -160,7 +152,7 @@ const AUDIT_STYLE: Record<string, string> = {
 const inr = new Intl.NumberFormat("en-IN");
 
 const TAB_META: Record<
-  "applications" | "postings" | "users" | "audit" | "by-role" | "tasks",
+  "applications" | "postings" | "users" | "audit" | "by-role",
   { title: string; desc: string; icon: any }
 > = {
   applications: {
@@ -183,11 +175,6 @@ const TAB_META: Record<
     title: "Applicants by Job",
     desc: "Every job posting with its applicants, statuses and re-apply windows.",
     icon: Briefcase,
-  },
-  tasks: {
-    title: "Employee Tasks",
-    desc: "Delegate work to employees with deadlines, priorities and project references.",
-    icon: ClipboardList,
   },
 };
 
@@ -332,10 +319,6 @@ function AdminPage() {
           ) : tab === "by-role" ? (
             <PanelFrame meta={TAB_META["by-role"]}>
               <ApplicantsByRolePanel />
-            </PanelFrame>
-          ) : tab === "tasks" ? (
-            <PanelFrame meta={TAB_META.tasks}>
-              <EmployeeTasksPanel />
             </PanelFrame>
           ) : (
             <DashboardLanding
@@ -1210,17 +1193,11 @@ function AuditLogsPanel() {
 
 const ROLE_LABEL: Record<StaffUser["role"], string> = {
   user: "User",
-  employee: "Employee",
-  manager: "Manager",
-  hr: "HR",
   admin: "Admin",
 };
 
 const ROLE_STYLE: Record<StaffUser["role"], string> = {
   user: "border-border text-muted-foreground",
-  employee: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-300",
-  manager: "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-300",
-  hr: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300",
   admin: "border-brand/40 bg-brand/10 text-brand",
 };
 
@@ -1231,7 +1208,7 @@ function UsersPanel({ currentUserId }: { currentUserId: string }) {
   const setRole = useServerFn(setStaffUserRole);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<StaffUser | null>(null);
-  const [pendingRole, setPendingRole] = useState<StaffUser["role"]>("employee");
+  const [pendingRole, setPendingRole] = useState<StaffUser["role"]>("user");
   const [pendingDept, setPendingDept] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -1271,11 +1248,11 @@ function UsersPanel({ currentUserId }: { currentUserId: string }) {
 
   function openEditor(u: StaffUser) {
     setEditing(u);
-    setPendingRole(u.role === "user" ? "employee" : u.role);
+    setPendingRole(u.role);
     setPendingDept(u.department_id ?? null);
   }
 
-  const needsDept = pendingRole === "manager" || pendingRole === "hr" || pendingRole === "employee";
+  const needsDept = pendingRole === "admin";
 
   return (
     <div>
@@ -1394,10 +1371,7 @@ function UsersPanel({ currentUserId }: { currentUserId: string }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">User (candidate)</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="hr">HR</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -1408,7 +1382,7 @@ function UsersPanel({ currentUserId }: { currentUserId: string }) {
             </div>
             {needsDept && (
               <div className="space-y-2">
-                <Label>Department {pendingRole === "employee" ? "(optional)" : ""}</Label>
+                <Label>Department</Label>
                 <Select
                   value={pendingDept ?? "__none"}
                   onValueChange={(v) => setPendingDept(v === "__none" ? null : v)}
@@ -1771,203 +1745,3 @@ function ApplicantsByRolePanel() {
   );
 }
 
-// ============================================================
-// Employee Tasks Panel — admin delegation of work to employees
-// ============================================================
-const TASK_STATUS_STYLE: Record<string, string> = {
-  to_do: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
-  in_progress: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
-  blocked: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
-  done: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-};
-
-function EmployeeTasksPanel() {
-  const qc = useQueryClient();
-  const fetchEmployees = useServerFn(listEmployeesForAssignment);
-  const fetchTasks = useServerFn(listAllAssignedTasks);
-  const assignFn = useServerFn(assignTaskToEmployee);
-
-  const employees = useQuery({ queryKey: ["admin-employees"], queryFn: () => fetchEmployees() });
-  const tasks = useQuery({ queryKey: ["admin-all-tasks"], queryFn: () => fetchTasks() });
-
-  const [assigneeId, setAssigneeId] = useState<string>("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [projectRef, setProjectRef] = useState("");
-
-  const assignM = useMutation({
-    mutationFn: () =>
-      assignFn({
-        data: {
-          assignee_id: assigneeId,
-          title,
-          description: description || null,
-          priority,
-          due_date: dueDate || null,
-          project_reference: projectRef || null,
-        },
-      }),
-    onSuccess: () => {
-      toast.success("Task assigned");
-      setTitle("");
-      setDescription("");
-      setDueDate("");
-      setProjectRef("");
-      qc.invalidateQueries({ queryKey: ["admin-all-tasks"] });
-    },
-    onError: (e: any) => toast.error(e?.message || "Assign failed"),
-  });
-
-  const canSubmit = assigneeId && title.trim().length >= 2 && !assignM.isPending;
-
-  return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
-      {/* Assign form */}
-      <Card className="border-border">
-        <CardContent className="p-6">
-          <h3 className="text-lg font-bold">Assign a task</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Delegate work to any employee. They'll see it instantly in their portal.
-          </p>
-          <div className="mt-5 grid gap-4">
-            <div className="space-y-2">
-              <Label>Employee</Label>
-              <Select value={assigneeId} onValueChange={setAssigneeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={employees.isLoading ? "Loading…" : "Select employee"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(employees.data ?? []).map((e: EmployeeOption) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.full_name || e.email} {e.email ? `· ${e.email}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-title">Title</Label>
-              <Input
-                id="task-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ship the Q1 analytics dashboard"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-desc">Description</Label>
-              <Textarea
-                id="task-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="What needs to be delivered, and how will we know it's done?"
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Priority</Label>
-                <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="task-due">Deadline</Label>
-                <Input
-                  id="task-due"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-proj">Project reference (optional)</Label>
-              <Input
-                id="task-proj"
-                value={projectRef}
-                onChange={(e) => setProjectRef(e.target.value)}
-                placeholder="CGT-PLAT-042"
-              />
-            </div>
-            <Button
-              onClick={() => assignM.mutate()}
-              disabled={!canSubmit}
-              className="bg-brand text-brand-foreground hover:bg-brand-glow"
-            >
-              {assignM.isPending ? "Assigning…" : "Assign task"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Task list */}
-      <div>
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Recent assignments</h3>
-          <p className="text-xs text-muted-foreground">{tasks.data?.length ?? 0} total</p>
-        </div>
-        <div className="mt-4 grid gap-3">
-          {tasks.isLoading ? (
-            [0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
-            ))
-          ) : (tasks.data ?? []).length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No tasks assigned yet.
-              </CardContent>
-            </Card>
-          ) : (
-            (tasks.data ?? []).map((t: AdminTask) => (
-              <Card key={t.id} className="border-border">
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-bold">{t.title}</h4>
-                      <Badge
-                        variant="outline"
-                        className={`border ${TASK_STATUS_STYLE[t.status] ?? ""}`}
-                      >
-                        {t.status.replace("_", " ")}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="border-brand/30 text-brand text-[10px] uppercase tracking-widest"
-                      >
-                        {t.priority}
-                      </Badge>
-                    </div>
-                    {t.description && (
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {t.description}
-                      </p>
-                    )}
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      Assigned to{" "}
-                      <span className="font-semibold text-foreground">
-                        {t.assignee_name || t.assignee_email}
-                      </span>
-                      {t.due_date ? <> · Due {new Date(t.due_date).toLocaleDateString()}</> : null}
-                      {t.project_reference ? <> · {t.project_reference}</> : null}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}

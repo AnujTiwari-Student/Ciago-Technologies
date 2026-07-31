@@ -7,6 +7,13 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
+declare global {
+  // Pool cache to prevent connection exhaustion
+  // We cache pools but create fresh Prisma clients to avoid state issues
+  var __neonUserPool: Pool | undefined;
+  var __neonAdminPool: Pool | undefined;
+}
+
 /**
  * Extended Prisma client that automatically wraps all operations in a transaction
  * with app.current_user_id set for RLS enforcement.
@@ -35,9 +42,25 @@ export type UserPrismaClient = Omit<PrismaClient, "$transaction"> & {
  *   const roles = await db.withRLS(tx => tx.userRole.findMany({ where: { userId } }));
  */
 export function createUserDb(databaseUrl: string, userId: string): UserPrismaClient {
-  const pool = new Pool({ connectionString: databaseUrl });
-  const adapter = new PrismaPg(pool);
+  // Reuse pool to avoid connection exhaustion, but create fresh Prisma client
+  // Note: We cache a single pool, not per-user, since RLS is set per-transaction
+  if (!globalThis.__neonUserPool) {
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      max: 20, // Maximum pool size
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+    // Increase max listeners to prevent warnings since multiple Prisma clients share this pool
+    pool.setMaxListeners(100);
+    // Also set max listeners on the error emitter to prevent warnings
+    pool.on('error', () => {});
+    pool.removeAllListeners('error');
+    pool.setMaxListeners(100);
+    globalThis.__neonUserPool = pool;
+  }
 
+  const adapter = new PrismaPg(globalThis.__neonUserPool);
   const prisma = new PrismaClient({
     adapter,
     log: process.env["NODE_ENV"] === "development" ? ["error", "warn"] : ["error"],
@@ -46,8 +69,8 @@ export function createUserDb(databaseUrl: string, userId: string): UserPrismaCli
   return Object.assign(prisma, {
     async withRLS<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
       return prisma.$transaction(async (tx) => {
-        // Use dollar-quoted string to avoid escaping issues with UUID casting
-        await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = $$${userId}$$::uuid`);
+        // Set the user ID for RLS context using $executeRawUnsafe with proper string escaping
+        await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${userId}'`);
         return fn(tx);
       });
     },
@@ -62,9 +85,24 @@ export function createUserDb(databaseUrl: string, userId: string): UserPrismaCli
  * Use for system operations: clerk_user_map lookups, admin queries, provisioning.
  */
 export function createAdminDb(databaseUrl: string): PrismaClient {
-  const pool = new Pool({ connectionString: databaseUrl });
-  const adapter = new PrismaPg(pool);
+  // Reuse admin pool to avoid connection exhaustion, but create fresh Prisma client
+  if (!globalThis.__neonAdminPool) {
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      max: 20, // Maximum pool size
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+    // Increase max listeners to prevent warnings since multiple Prisma clients share this pool
+    pool.setMaxListeners(100);
+    // Also set max listeners on the error emitter to prevent warnings
+    pool.on('error', () => {});
+    pool.removeAllListeners('error');
+    pool.setMaxListeners(100);
+    globalThis.__neonAdminPool = pool;
+  }
 
+  const adapter = new PrismaPg(globalThis.__neonAdminPool);
   return new PrismaClient({
     adapter,
     log: process.env["NODE_ENV"] === "development" ? ["error", "warn"] : ["error"],

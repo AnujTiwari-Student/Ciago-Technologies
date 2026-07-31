@@ -32,7 +32,7 @@ export const BG_CHECK_STATUSES = ["not_started", "in_progress", "cleared", "flag
 export const DOC_VERIFY_STATUSES = ["pending", "verified", "rejected"] as const;
 export const ID_DOC_TYPES = ["pan", "aadhaar", "passport"] as const;
 
-export type AppRole = "admin" | "hr" | "manager" | "employee" | "user";
+export type AppRole = "admin" | "user";
 
 export type DirectoryRow = {
   user_id: string;
@@ -54,6 +54,10 @@ export type DirectoryRow = {
   doc_verification_status: string;
   reporting_manager_id: string | null;
   reporting_hr_id: string | null;
+  job_id: string | null;
+  job_title: string | null;
+  docs_approved_count: number;
+  docs_total_count: number;
   created_at: string;
 };
 
@@ -62,7 +66,7 @@ async function getActorRoles(db: any, userId: string) {
     tx.userRole.findMany({ where: { userId }, select: { role: true } }),
   );
   const set = new Set(roles.map((r: any) => r.role));
-  return { isAdmin: set.has("admin"), isHr: set.has("hr") };
+  return { isAdmin: set.has("admin"), isHr: false };
 }
 
 export const listDirectory = createServerFn({ method: "GET" })
@@ -79,7 +83,7 @@ export const getUserDetail = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const actor = await getActorRoles(context.db, context.userId);
-    if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
+    if (!actor.isAdmin) throw new Error("Forbidden");
 
     const adminDb = getAdminDb();
 
@@ -161,7 +165,7 @@ export const upsertEmployee = createServerFn({ method: "POST" })
   .validator((d: unknown) => employeeSchema.parse(d))
   .handler(async ({ data, context }) => {
     const actor = await getActorRoles(context.db, context.userId);
-    if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
+    if (!actor.isAdmin) throw new Error("Forbidden");
 
     const adminDb = getAdminDb();
     const targetAdminRole = await adminDb.userRole.findFirst({
@@ -227,7 +231,7 @@ export const upsertEmployee = createServerFn({ method: "POST" })
 
 const roleSchema = z.object({
   user_id: z.string().uuid(),
-  role: z.enum(["admin", "hr", "manager", "employee"]),
+  role: z.enum(["admin", "user"]),
   department_id: z.string().uuid().optional().nullable(),
 });
 
@@ -236,7 +240,7 @@ export const setUserRole = createServerFn({ method: "POST" })
   .validator((d: unknown) => roleSchema.parse(d))
   .handler(async ({ data, context }) => {
     const actor = await getActorRoles(context.db, context.userId);
-    if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
+    if (!actor.isAdmin) throw new Error("Forbidden");
 
     const adminDb = getAdminDb();
     const targetAdminRole = await adminDb.userRole.findFirst({
@@ -325,7 +329,7 @@ export const verifyIdentityDoc = createServerFn({ method: "POST" })
   .validator((d: unknown) => verifyDocSchema.parse(d))
   .handler(async ({ data, context }) => {
     const actor = await getActorRoles(context.db, context.userId);
-    if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
+    if (!actor.isAdmin) throw new Error("Forbidden");
 
     const adminDb = getAdminDb();
     const doc = await adminDb.identityDocument.findUnique({
@@ -367,14 +371,14 @@ export const listAssignables = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const actor = await getActorRoles(context.db, context.userId);
-    if (!actor.isAdmin && !actor.isHr) throw new Error("Forbidden");
+    if (!actor.isAdmin) throw new Error("Forbidden");
 
     const rows = await context.db.withRLS((tx) =>
       tx.$queryRaw`SELECT * FROM public.list_directory()`,
     ) as DirectoryRow[];
 
     return {
-      managers: (rows ?? []).filter((r) => r.role === "manager" || r.role === "admin"),
-      hrs: (rows ?? []).filter((r) => r.role === "hr" || r.role === "admin"),
+      managers: (rows ?? []).filter((r) => r.role === "admin"),
+      hrs: (rows ?? []).filter((r) => r.role === "admin"),
     };
   });

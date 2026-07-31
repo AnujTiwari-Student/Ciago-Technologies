@@ -18,9 +18,6 @@ function roleSetFromPayload(payload: MyRolesPayload): Set<string> {
   return new Set(
     [
       payload.isAdmin && "admin",
-      payload.isHr && "hr",
-      payload.isManager && "manager",
-      payload.isEmployee && "employee",
     ].filter(Boolean) as string[],
   );
 }

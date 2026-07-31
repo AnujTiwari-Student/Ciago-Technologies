@@ -117,38 +117,72 @@ export async function provisionClerkUser(
     }
 
     // (3) No mapping yet - create auth.users row and mapping atomically
-    const authUserId = await adminDb.$transaction(async (tx) => {
-      // Create auth.users row with raw SQL (Prisma doesn't have auth schema)
-      const result = await tx.$queryRaw<Array<{ id: string }>>`
-        INSERT INTO auth.users (email, email_confirmed_at, raw_user_meta_data)
-        VALUES (
-          ${email},
-          CASE WHEN ${identity.emailVerified} THEN NOW() ELSE NULL END,
-          ${identity.fullName ? JSON.stringify({ full_name: identity.fullName }) : "{}"}::jsonb
-        )
-        RETURNING id::text
-      `;
+    try {
+      const authUserId = await adminDb.$transaction(async (tx) => {
+        // Check for existing user by email first to avoid duplicate
+        const existingByEmail = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id::text FROM auth.users WHERE email = ${email} LIMIT 1
+        `;
 
-      if (!result[0]?.id) {
-        throw new Error("Failed to create auth.users row");
-      }
+        let newAuthUserId: string;
 
-      const newAuthUserId = result[0].id;
+        if (existingByEmail.length > 0) {
+          // User already exists, reuse it
+          newAuthUserId = existingByEmail[0].id;
+        } else {
+          // Create auth.users row with raw SQL (Prisma doesn't have auth schema)
+          const result = await tx.$queryRaw<Array<{ id: string }>>`
+            INSERT INTO auth.users (email, email_confirmed_at, raw_user_meta_data)
+            VALUES (
+              ${email},
+              CASE WHEN ${identity.emailVerified} THEN NOW() ELSE NULL END,
+              ${identity.fullName ? JSON.stringify({ full_name: identity.fullName }) : "{}"}::jsonb
+            )
+            ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+            RETURNING id::text
+          `;
 
-      // Create clerk_user_map entry
-      await tx.clerkUserMap.create({
-        data: {
-          clerkUserId: identity.clerkUserId,
-          authUserId: newAuthUserId,
-          email,
-          primaryEmailVerified: Boolean(identity.emailVerified),
-        },
+          if (!result[0]?.id) {
+            throw new Error("Failed to create auth.users row");
+          }
+
+          newAuthUserId = result[0].id;
+        }
+
+        // Create or update clerk_user_map entry
+        await tx.clerkUserMap.upsert({
+          where: { clerkUserId: identity.clerkUserId },
+          create: {
+            clerkUserId: identity.clerkUserId,
+            authUserId: newAuthUserId,
+            email,
+            primaryEmailVerified: Boolean(identity.emailVerified),
+          },
+          update: {
+            authUserId: newAuthUserId,
+            email,
+            primaryEmailVerified: Boolean(identity.emailVerified),
+          },
+        });
+
+        return newAuthUserId;
       });
 
-      return newAuthUserId;
-    });
+      return ok(authUserId, true, false);
+    } catch (innerErr) {
+      if (isUniqueViolation(innerErr)) {
+        // Concurrent provision won - re-read the mapping
+        const tieBreak = await adminDb.clerkUserMap.findUnique({
+          where: { clerkUserId: identity.clerkUserId },
+          select: { authUserId: true },
+        });
 
-    return ok(authUserId, true, false);
+        if (tieBreak) {
+          return ok(tieBreak.authUserId, false, true);
+        }
+      }
+      throw innerErr; // Re-throw to outer catch
+    }
   } catch (err) {
     if (isUniqueViolation(err)) {
       // Concurrent provision won - re-read the mapping

@@ -43,9 +43,7 @@ export const resolveMyPortal = createServerFn({ method: "POST" })
         throw new Error(FORBIDDEN_CORPORATE_ERROR);
       }
       if (roleSet.has("admin")) return "/admin";
-      if (roleSet.has("hr")) return "/hr";
-      if (roleSet.has("manager")) return "/manager";
-      return "/employee";
+      return "/my-applications";
     }
     if (isStaff) {
       throw new Error(STAFF_ON_CANDIDATE_ERROR);

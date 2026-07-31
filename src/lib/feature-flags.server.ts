@@ -123,3 +123,38 @@ export async function isAuthenticationButtonEnabled(target?: FlagTargetContext):
     DEFAULT_CAPABILITIES.authenticationButtonEnabled,
   );
 }
+
+/**
+ * Controls whether OrangeHRM employee creation + ESS account provisioning
+ * happens automatically on hire.
+ */
+export async function isOrangeHRMProvisioningEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "ess_auto_provisioning_enabled",
+    target,
+    DEFAULT_CAPABILITIES.ess_auto_provisioning_enabled,
+  );
+}
+
+/**
+ * Controls whether salary is fetched from OrangeHRM API and shown in Employment tab.
+ */
+export async function isOrangeHRMSalarySyncEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "orangehrm_salary_sync_enabled",
+    target,
+    DEFAULT_CAPABILITIES.orangehrm_salary_sync_enabled,
+  );
+}
+
+/**
+ * Controls whether emails are actually sent via Resend API.
+ * When false, emails are logged but not sent.
+ */
+export async function isResendEmailEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "resend_email_sending_enabled",
+    target,
+    DEFAULT_CAPABILITIES.resend_email_sending_enabled,
+  );
+}

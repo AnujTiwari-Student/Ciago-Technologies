@@ -36,7 +36,7 @@ export const Route = createFileRoute("/auth")({
       {
         name: "description",
         content:
-          "Sign in as a candidate to track applications, or as staff to access the Ciago Technologies employee portal.",
+          "Sign in to track applications or access the Ciago Technologies admin dashboard.",
       },
       { property: "og:title", content: "Sign In — Ciago Technologies" },
       {
@@ -97,9 +97,7 @@ async function resolvePostLoginDestination(portal: Portal, requested: string): P
       throw new Error("__FORBIDDEN_CORPORATE__");
     }
     if (roleSet.has("admin")) return "/admin";
-    if (roleSet.has("hr")) return "/hr";
-    if (roleSet.has("manager")) return "/manager";
-    return "/employee";
+    return "/my-applications";
   }
   if (isStaff) {
     await supabase.auth.signOut();
@@ -205,7 +203,7 @@ function AuthPage() {
                 Restricted to Ciago Technologies staff. Use your corporate email.
               </div>
               <EmployeeSignIn
-                redirectTo={redirectTo === "/" ? "/employee" : redirectTo}
+                redirectTo={redirectTo === "/" ? "/my-applications" : redirectTo}
                 clerkAuthEnabled={clerkAuthEnabled}
                 clerkAuthLoading={clerkAuthLoading}
               />
@@ -410,7 +408,7 @@ function LegacySignInForm({ portal, redirectTo }: { portal: Portal; redirectTo: 
         disabled={busy}
         className="w-full bg-brand text-brand-foreground hover:bg-brand-glow"
       >
-        {busy ? "Signing in…" : portal === "employee" ? "Sign in to Employee Portal" : "Sign in"}
+        {busy ? "Signing in…" : "Sign in"}
       </Button>
     </form>
   );

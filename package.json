@@ -18,7 +18,9 @@
     "prisma:studio": "prisma studio",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "orangehrm:auth": "tsx scripts/orangehrm-auth.ts",
+    "orangehrm:test": "tsx scripts/test-orangehrm-connection.ts"
   },
   "prisma": {
     "seed": "bun run prisma/seed.ts"

@@ -137,13 +137,154 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
 
     const prior = await adminDb.jobApplication.findUnique({
       where: { id: data.id },
-      select: { id: true, userId: true, email: true, fullName: true, roleTitle: true, status: true },
+      select: { id: true, userId: true, email: true, fullName: true, roleTitle: true, status: true, roleId: true },
     });
+
+    if (data.status === "hired" && prior) {
+      const onboarding = await adminDb.onboardingRecord.findUnique({
+        where: { applicationId: prior.id },
+        select: { id: true },
+      });
+
+      if (onboarding) {
+        const posting = await adminDb.jobPosting.findUnique({
+          where: { id: prior.roleId },
+          select: { requiredOnboardingDocs: true, employmentType: true },
+        });
+
+        const { mandatoryDocKeys } = await import("@/lib/onboarding-docs");
+        const requiredDocKeys = mandatoryDocKeys(
+          posting?.employmentType ?? null,
+          posting?.requiredOnboardingDocs ?? [],
+        );
+
+        const documents = await adminDb.onboardingDocument.findMany({
+          where: { onboardingId: onboarding.id, supersededAt: null },
+          select: { docKey: true, status: true },
+        });
+
+        const docStatusMap = new Map(documents.map((d) => [d.docKey, d.status]));
+        const unverifiedDocs = requiredDocKeys.filter((key) => {
+          const status = docStatusMap.get(key);
+          return !status || status !== "approved";
+        });
+
+        if (unverifiedDocs.length > 0) {
+          await adminDb.auditLog.create({
+            data: {
+              actorId: context.userId,
+              actorEmail: (context.claims as any)?.email ?? null,
+              action: "HIRE_ATTEMPT_BLOCKED",
+              targetResource: `job_applications/${data.id}`,
+              details: {
+                reason: "document_verification_incomplete",
+                unverified_docs: unverifiedDocs,
+                candidate_email: prior.email,
+                role_title: prior.roleTitle,
+              },
+            },
+          });
+
+          const { docLabel } = await import("@/lib/onboarding.functions");
+          const docNames = unverifiedDocs.map((key) => docLabel(key)).join(", ");
+          throw new Error(
+            `Cannot mark as hired — ${unverifiedDocs.length} document(s) still pending verification: ${docNames}`,
+          );
+        }
+      }
+    }
 
     await adminDb.jobApplication.update({
       where: { id: data.id },
       data: { status: data.status },
     });
+
+    if (data.status === "hired" && prior && prior.status !== "hired") {
+      await adminDb.profile.upsert({
+        where: { userId: prior.userId },
+        create: { userId: prior.userId, fullName: prior.fullName },
+        update: { fullName: prior.fullName },
+      });
+
+      const posting = await adminDb.jobPosting.findUnique({
+        where: { id: prior.roleId },
+        select: { department: true, employmentType: true },
+      });
+
+      const { DEPT_TYPES } = await import("@/lib/users.functions");
+      const validDept = posting?.department && DEPT_TYPES.includes(posting.department as any)
+        ? (posting.department as any)
+        : null;
+
+      let orangehrmEmployeeId: number | null = null;
+
+      try {
+        const { isOrangeHRMProvisioningEnabled } = await import("@/lib/feature-flags.server");
+        const provisioningEnabled = await isOrangeHRMProvisioningEnabled();
+
+        if (provisioningEnabled) {
+          const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
+          const client = getOrangeHRMClient();
+
+          const nameParts = prior.fullName.trim().split(/\s+/);
+          const firstName = nameParts[0] || prior.fullName;
+          const lastName = nameParts.slice(1).join(" ") || "";
+
+          const ohrEmployee = await client.createEmployee({
+            firstName,
+            lastName,
+            employeeId: prior.userId,
+          });
+
+          orangehrmEmployeeId = ohrEmployee.empNumber;
+
+          await adminDb.auditLog.create({
+            data: {
+              actorId: context.userId,
+              actorEmail: (context.claims as any)?.email ?? null,
+              action: "ORANGEHRM_EMPLOYEE_CREATED",
+              targetResource: `employees/${prior.userId}`,
+              details: {
+                orangehrm_emp_number: ohrEmployee.empNumber,
+                candidate_name: prior.fullName,
+              },
+            },
+          });
+        }
+      } catch (ohrError: any) {
+        console.error("[hire-flow] OrangeHRM employee creation failed:", ohrError);
+        await adminDb.auditLog.create({
+          data: {
+            actorId: context.userId,
+            actorEmail: (context.claims as any)?.email ?? null,
+            action: "ORANGEHRM_EMPLOYEE_CREATION_FAILED",
+            targetResource: `employees/${prior.userId}`,
+            details: {
+              error: ohrError.message,
+              candidate_name: prior.fullName,
+            },
+          },
+        });
+      }
+
+      await adminDb.employee.upsert({
+        where: { userId: prior.userId },
+        create: {
+          userId: prior.userId,
+          orangehrmEmployeeId,
+          designation: prior.roleTitle,
+          employmentType: posting?.employmentType ?? "full_time",
+          department: validDept,
+          personalEmail: prior.email,
+        },
+        update: {
+          orangehrmEmployeeId,
+          designation: prior.roleTitle,
+          employmentType: posting?.employmentType ?? "full_time",
+          department: validDept,
+        },
+      });
+    }
 
     if (prior && prior.status !== data.status) {
       const { getStatusEmailContent, sendResendEmail } = await import("@/lib/notifications.server");
@@ -181,6 +322,8 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
           to: prior.email,
           subject: content.subject,
           html: content.html,
+          userId: prior.userId,
+          applicationId: prior.id,
         });
       } catch (e) {
         console.error("[status-email] send failed", e);

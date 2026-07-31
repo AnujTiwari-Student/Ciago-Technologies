@@ -22,7 +22,15 @@ export const listMyNotifications = createServerFn({ method: "GET" })
         take: 30,
       }),
     );
-    return rows as unknown as InAppNotification[];
+    return rows.map((r): InAppNotification => ({
+      id: r.id,
+      application_id: r.applicationId,
+      title: r.title,
+      body: r.body,
+      link: r.link,
+      read: r.read,
+      created_at: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    }));
   });
 
 const idSchema = z.object({ id: z.string().uuid() });
