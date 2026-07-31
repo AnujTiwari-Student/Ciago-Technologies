@@ -148,6 +148,16 @@ export async function provisionClerkUser(
     return { kind: "link_failed", message: String(e) };
   }
 
+  // (5) Assign default "user" role if none exists.
+  const existingRole = await adminDb.userRole.findFirst({
+    where: { userId: authUserId },
+  });
+  if (!existingRole) {
+    await adminDb.userRole.create({
+      data: { userId: authUserId, role: "user" as any },
+    });
+  }
+
   return ok(authUserId, true, false);
 }
 

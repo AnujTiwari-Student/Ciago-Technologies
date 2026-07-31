@@ -3,17 +3,16 @@
  * Handles salary fetch and ESS provisioning.
  */
 
-import { createServerFn } from "@tanstack/start";
+import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/lib/auth-middleware";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAdminDb } from "@/lib/db/admin";
-import { getActorRoles } from "@/lib/roles.functions";
 
 async function assertAdmin(db: any, userId: string) {
-  const roles = await getActorRoles(db, userId);
-  if (!roles.isAdmin) {
-    throw new Error("Forbidden: Admin access required");
-  }
+  const count = await db.withRLS((tx: any) =>
+    tx.userRole.count({ where: { userId, role: "admin" } }),
+  );
+  if (count === 0) throw new Error("Forbidden: Admin access required");
 }
 
 const fetchSalarySchema = z.object({

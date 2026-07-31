@@ -76,6 +76,15 @@ export const ensureClerkMapping = createServerFn({ method: "POST" })
       identity,
     );
     if ("authUserId" in result) {
+      // Ensure user has at least a default role
+      const existingRole = await adminDb.userRole.findFirst({
+        where: { userId: result.authUserId },
+      });
+      if (!existingRole) {
+        await adminDb.userRole.create({
+          data: { userId: result.authUserId, role: "user" as any },
+        });
+      }
       return {
         ok: true,
         authUserId: result.authUserId,

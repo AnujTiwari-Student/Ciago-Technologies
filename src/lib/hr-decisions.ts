@@ -37,7 +37,7 @@ export type DecisionResult = {
 };
 
 export function assertHrOrAdmin(roles: Set<string>): void {
-  if (!roles.has("hr") && !roles.has("admin")) {
+  if (!roles.has("admin")) {
     throw new Error("Forbidden");
   }
 }

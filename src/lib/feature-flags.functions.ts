@@ -19,20 +19,15 @@ export const getFeatureFlags = createServerFn({ method: "GET" }).handler(
 export const getMyFeatureFlags = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Capabilities> => {
-    const roleRows = await context.db.withRLS((tx) =>
-      tx.userRole.findMany({
-        where: { userId: context.userId },
-        select: { role: true },
-      }),
-    );
+    const { getAdminDb } = await import("@/lib/db/admin");
+    const adminDb = getAdminDb();
+    const roleRows = await adminDb.userRole.findMany({
+      where: { userId: context.userId },
+      select: { role: true },
+    });
 
-    const roles = new Set(roleRows.map((r) => r.role));
-    const role =
-      (roles.has("admin") && "admin") ||
-      (roles.has("hr") && "hr") ||
-      (roles.has("manager") && "manager") ||
-      (roles.has("employee") && "employee") ||
-      "user";
+    const roles = new Set(roleRows.map((r: any) => r.role));
+    const role = roles.has("admin") ? "admin" : "user";
 
     return getAllFeatureFlags({
       identifier: context.userId,

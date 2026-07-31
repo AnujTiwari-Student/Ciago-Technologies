@@ -59,7 +59,7 @@ export const listMyReports = createServerFn({ method: "GET" })
       const roles = await tx.userRole.findMany({
         where: {
           departmentId: { in: deptIds },
-          role: { in: ["employee", "manager"] },
+          role: "user",
           userId: { not: context.userId },
         },
         select: { userId: true, role: true, departmentId: true },

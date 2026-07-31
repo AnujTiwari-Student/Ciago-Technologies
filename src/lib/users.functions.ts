@@ -61,21 +61,76 @@ export type DirectoryRow = {
   created_at: string;
 };
 
-async function getActorRoles(db: any, userId: string) {
-  const roles = await db.withRLS((tx: any) =>
-    tx.userRole.findMany({ where: { userId }, select: { role: true } }),
-  );
+async function getActorRoles(_db: any, userId: string) {
+  // Use adminDb to bypass RLS for role checks — the user's own role
+  // must be readable regardless of RLS policies on user_roles table.
+  const adminDb = getAdminDb();
+  const roles = await adminDb.userRole.findMany({
+    where: { userId },
+    select: { role: true },
+  });
   const set = new Set(roles.map((r: any) => r.role));
-  return { isAdmin: set.has("admin"), isHr: false };
+  const isAdmin = set.has("admin");
+  return { isAdmin, isHr: isAdmin };
 }
 
 export const listDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<DirectoryRow[]> => {
-    const rows = await context.db.withRLS((tx) =>
-      tx.$queryRaw`SELECT * FROM public.list_directory()`,
-    );
-    return (rows as unknown as DirectoryRow[]) ?? [];
+    // First check actor is admin
+    const actor = await getActorRoles(null, context.userId);
+    if (!actor.isAdmin) throw new Error("Forbidden");
+
+    const adminDb = getAdminDb();
+    // Build directory from clerk_user_map + profiles + employees + user_roles
+    const users = await adminDb.clerkUserMap.findMany({
+      select: { authUserId: true, email: true },
+    });
+
+    const userIds = users.map((u) => u.authUserId);
+    const [profiles, employees, roles] = await Promise.all([
+      adminDb.profile.findMany({ where: { userId: { in: userIds } } }),
+      adminDb.employee.findMany({ where: { userId: { in: userIds } } }),
+      adminDb.userRole.findMany({ where: { userId: { in: userIds } } }),
+    ]);
+
+    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    const empMap = new Map(employees.map((e) => [e.userId, e]));
+    const roleMap = new Map(roles.map((r) => [r.userId, r]));
+
+    const rows: DirectoryRow[] = users.map((u) => {
+      const profile = profileMap.get(u.authUserId);
+      const emp = empMap.get(u.authUserId);
+      const role = roleMap.get(u.authUserId);
+      return {
+        user_id: u.authUserId,
+        email: u.email,
+        full_name: profile?.fullName ?? null,
+        role: (role?.role as any) ?? "user",
+        is_admin: role?.role === "admin",
+        department: (emp?.department as any) ?? null,
+        designation: emp?.designation ?? null,
+        team_name: emp?.teamName ?? null,
+        employment_type: emp?.employmentType ?? null,
+        work_model: emp?.workModel ?? null,
+        work_location: emp?.workLocation ?? null,
+        base_salary: emp?.baseSalary ?? null,
+        salary_currency: emp?.salaryCurrency ?? "INR",
+        doj: emp?.doj ?? null,
+        probation_status: emp?.probationStatus ?? "under_review",
+        background_check_status: emp?.backgroundCheckStatus ?? "not_started",
+        doc_verification_status: emp?.docVerificationStatus ?? "pending",
+        reporting_manager_id: emp?.reportingManagerId ?? null,
+        reporting_hr_id: emp?.reportingHrId ?? null,
+        job_id: null,
+        job_title: null,
+        docs_approved_count: 0,
+        docs_total_count: 0,
+        created_at: new Date().toISOString(),
+      };
+    });
+
+    return rows;
   });
 
 export const getUserDetail = createServerFn({ method: "GET" })
@@ -110,19 +165,26 @@ export const getUserDetail = createServerFn({ method: "GET" })
       }),
     ]);
 
-    // Storage: signed URLs for identity docs (R2)
-    const { getStorage } = await import("@/lib/storage");
-    const storage = getStorage();
-    const signedDocs = await Promise.all(
-      docs.map(async (d) => {
-        let signed_url: string | null = null;
-        if (d.storagePath) {
-          const result = await storage.createSignedUrl("identity-docs", d.storagePath, 60 * 60);
-          signed_url = result.signedUrl;
-        }
-        return { ...d, signed_url };
-      }),
-    );
+    // Storage: signed URLs for identity docs (R2) — non-fatal if storage fails
+    let signedDocs: Array<typeof docs[number] & { signed_url: string | null }> = [];
+    try {
+      const { getStorage } = await import("@/lib/storage");
+      const storage = getStorage();
+      signedDocs = await Promise.all(
+        docs.map(async (d) => {
+          let signed_url: string | null = null;
+          if (d.storagePath) {
+            try {
+              const result = await storage.createSignedUrl("identity-docs", d.storagePath, 60 * 60);
+              signed_url = result.signedUrl;
+            } catch {}
+          }
+          return { ...d, signed_url };
+        }),
+      );
+    } catch {
+      signedDocs = docs.map((d) => ({ ...d, signed_url: null }));
+    }
 
     return {
       employee: emp,
@@ -370,15 +432,31 @@ export const verifyIdentityDoc = createServerFn({ method: "POST" })
 export const listAssignables = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const actor = await getActorRoles(context.db, context.userId);
+    const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
-    const rows = await context.db.withRLS((tx) =>
-      tx.$queryRaw`SELECT * FROM public.list_directory()`,
-    ) as DirectoryRow[];
+    const adminDb = getAdminDb();
+    const users = await adminDb.clerkUserMap.findMany({
+      select: { authUserId: true, email: true },
+    });
+    const userIds = users.map((u) => u.authUserId);
+    const [profiles, roles] = await Promise.all([
+      adminDb.profile.findMany({ where: { userId: { in: userIds } } }),
+      adminDb.userRole.findMany({ where: { userId: { in: userIds } } }),
+    ]);
 
-    return {
-      managers: (rows ?? []).filter((r) => r.role === "admin"),
-      hrs: (rows ?? []).filter((r) => r.role === "admin"),
-    };
+    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    const roleMap = new Map(roles.map((r) => [r.userId, r]));
+
+    const admins = users
+      .filter((u) => roleMap.get(u.authUserId)?.role === "admin")
+      .map((u) => ({
+        user_id: u.authUserId,
+        email: u.email,
+        full_name: profileMap.get(u.authUserId)?.fullName ?? null,
+        role: "admin" as AppRole,
+        is_admin: true,
+      }));
+
+    return { managers: admins, hrs: admins };
   });

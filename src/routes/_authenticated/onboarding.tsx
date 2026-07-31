@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Toaster } from "@/components/ui/sonner";
@@ -70,6 +71,9 @@ function OnboardingPage() {
   });
 
   const [step, setStep] = useState(1);
+  const [currentAddress, setCurrentAddress] = useState("");
+  const [permanentAddress, setPermanentAddress] = useState("");
+  const [sameAsCurrent, setSameAsCurrent] = useState(false);
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyRelation, setEmergencyRelation] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
@@ -88,7 +92,7 @@ function OnboardingPage() {
     } else if (rec.emergency_contact) setStep(3);
     else if (rec.status === "accepted") setStep(2);
 
-    // Restore emergency contact from either the persisted column or the draft form_state.
+    // Restore emergency contact and addresses from form_state
     const fs = (rec.form_state ?? {}) as Record<string, unknown>;
     const ec = (rec.emergency_contact ?? (fs.emergency_contact as any)) as {
       name?: string;
@@ -100,6 +104,9 @@ function OnboardingPage() {
       setEmergencyRelation(ec.relation ?? "");
       setEmergencyPhone(ec.phone ?? "");
     }
+    setCurrentAddress((fs.current_address as string) ?? "");
+    setPermanentAddress((fs.permanent_address as string) ?? "");
+    setSameAsCurrent((fs.same_as_current as boolean) ?? false);
     setIdAck(rec.id_ack || fs.id_ack === true);
     setCodeAck(rec.code_of_conduct_ack || fs.code_of_conduct_ack === true);
     setHydrated(true);
@@ -131,6 +138,9 @@ function OnboardingPage() {
           id_ack: idAck,
           code_of_conduct_ack: codeAck,
           form_state: {
+            current_address: currentAddress,
+            permanent_address: permanentAddress,
+            same_as_current: sameAsCurrent,
             emergency_contact: {
               name: emergencyName,
               relation: emergencyRelation,
@@ -148,6 +158,9 @@ function OnboardingPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    currentAddress,
+    permanentAddress,
+    sameAsCurrent,
     emergencyName,
     emergencyRelation,
     emergencyPhone,
@@ -159,10 +172,11 @@ function OnboardingPage() {
 
   const acceptM = useMutation({
     mutationFn: () => acceptFn({ data: { application_id: offer!.application_id } }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Offer accepted");
+      await qc.invalidateQueries({ queryKey: ["my-onboarding"] });
       setStep(2);
-      qc.invalidateQueries({ queryKey: ["my-onboarding"] });
+      setHydrated(false); // Force re-hydration with fresh data
     },
     onError: (e: any) => toast.error(e?.message || "Could not accept offer"),
   });
@@ -190,10 +204,10 @@ function OnboardingPage() {
           code_of_conduct_ack: true as const,
         },
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Paperwork saved");
+      await qc.invalidateQueries({ queryKey: ["my-onboarding"] });
       setStep(3);
-      qc.invalidateQueries({ queryKey: ["my-onboarding"] });
     },
     onError: (e: any) => toast.error(e?.message || "Save failed"),
   });
@@ -209,10 +223,8 @@ function OnboardingPage() {
   });
 
   const compensation = useMemo(() => {
-    const seed =
-      (offer?.application_id ?? "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) || 1;
-    return 600000 + (seed % 220) * 10000;
-  }, [offer?.application_id]);
+    return offer?.onboarding?.compensation_inr ?? 0;
+  }, [offer?.onboarding?.compensation_inr]);
 
   // Doc bookkeeping for Step 2 gating.
   const docRequirements = offer?.doc_requirements ?? [];
@@ -229,6 +241,8 @@ function OnboardingPage() {
     .map((k) => docsByKey[k])
     .filter((d) => d && (d.status === "rejected" || d.status === "changes_requested"));
   const canSavePaperwork =
+    currentAddress.trim().length >= 10 &&
+    (sameAsCurrent || permanentAddress.trim().length >= 10) &&
     emergencyName.trim().length >= 2 &&
     emergencyRelation.trim().length >= 2 &&
     emergencyPhone.trim().length >= 6 &&
@@ -467,6 +481,47 @@ function OnboardingPage() {
                         </div>
                       </section>
                     )}
+
+                    <section className="space-y-4">
+                      <h3 className="text-sm font-semibold">Current address</h3>
+                      <div className="space-y-2">
+                        <Label htmlFor="current-address">Full address</Label>
+                        <Textarea
+                          id="current-address"
+                          value={currentAddress}
+                          onChange={(e) => setCurrentAddress(e.target.value)}
+                          placeholder="Flat/House No., Street, Locality, City, State, PIN"
+                          rows={3}
+                        />
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">Permanent address</h3>
+                        <label className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={sameAsCurrent}
+                            onCheckedChange={(v) => {
+                              setSameAsCurrent(!!v);
+                              if (v) setPermanentAddress(currentAddress);
+                            }}
+                          />
+                          <span>Same as current</span>
+                        </label>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="permanent-address">Full address</Label>
+                        <Textarea
+                          id="permanent-address"
+                          value={sameAsCurrent ? currentAddress : permanentAddress}
+                          onChange={(e) => !sameAsCurrent && setPermanentAddress(e.target.value)}
+                          placeholder="Flat/House No., Street, Locality, City, State, PIN"
+                          rows={3}
+                          disabled={sameAsCurrent}
+                        />
+                      </div>
+                    </section>
 
                     <section className="space-y-4">
                       <h3 className="text-sm font-semibold">Emergency contact</h3>

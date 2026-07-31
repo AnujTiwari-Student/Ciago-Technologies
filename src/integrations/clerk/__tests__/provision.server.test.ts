@@ -14,8 +14,14 @@ const mockClerkUserMap = {
   create: vi.fn(),
 };
 
+const mockUserRole = {
+  findFirst: vi.fn(),
+  create: vi.fn(),
+};
+
 const mockPrisma = {
   clerkUserMap: mockClerkUserMap,
+  userRole: mockUserRole,
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 } as unknown as PrismaClient;
@@ -96,9 +102,15 @@ describe("provisionClerkUser (Neon/Prisma)", () => {
     const newAuthUserId = "new-auth-uuid-456";
     (mockPrisma.$transaction as any).mockImplementationOnce(async (fn: any) => {
       return fn({
-        $queryRaw: vi.fn().mockResolvedValueOnce([{ id: newAuthUserId }]),
+        $queryRaw: vi.fn()
+          .mockResolvedValueOnce([]) // No existing user by email
+          .mockResolvedValueOnce([{ id: newAuthUserId }]), // New user created
         clerkUserMap: {
-          create: vi.fn().mockResolvedValueOnce({}),
+          upsert: vi.fn().mockResolvedValueOnce({}),
+        },
+        userRole: {
+          findFirst: vi.fn().mockResolvedValueOnce(null), // No existing role
+          create: vi.fn().mockResolvedValueOnce({}), // Role created
         },
       });
     });
@@ -109,6 +121,39 @@ describe("provisionClerkUser (Neon/Prisma)", () => {
       authUserId: newAuthUserId,
       created: true,
       reused: false,
+    });
+  });
+
+  it("creates user_role entry for new users", async () => {
+    mockClerkUserMap.findUnique.mockResolvedValueOnce(null);
+    mockClerkUserMap.findFirst.mockResolvedValueOnce(null);
+
+    const newAuthUserId = "new-auth-uuid-789";
+    const mockRoleCreate = vi.fn().mockResolvedValueOnce({});
+
+    (mockPrisma.$transaction as any).mockImplementationOnce(async (fn: any) => {
+      return fn({
+        $queryRaw: vi.fn()
+          .mockResolvedValueOnce([]) // No existing user by email
+          .mockResolvedValueOnce([{ id: newAuthUserId }]), // New user created
+        clerkUserMap: {
+          upsert: vi.fn().mockResolvedValueOnce({}),
+        },
+        userRole: {
+          findFirst: vi.fn().mockResolvedValueOnce(null), // No existing role
+          create: mockRoleCreate, // Should be called
+        },
+      });
+    });
+
+    await provisionClerkUser(mockPrisma, baseIdentity);
+
+    // Verify role was created with correct data
+    expect(mockRoleCreate).toHaveBeenCalledWith({
+      data: {
+        userId: newAuthUserId,
+        role: "user",
+      },
     });
   });
 });

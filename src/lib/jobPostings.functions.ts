@@ -40,10 +40,10 @@ export const listEmploymentTypes = createServerFn({ method: "GET" }).handler(asy
   return data.map((e) => ({ code: e.code, label: e.label, sort_order: e.sortOrder }));
 });
 
-async function assertAdminOrHr(db: any, userId: string) {
-  const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: { in: ["admin", "hr"] } } }),
-  );
+async function assertAdminOrHr(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
+  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 

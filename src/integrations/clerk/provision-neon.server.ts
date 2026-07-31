@@ -165,6 +165,20 @@ export async function provisionClerkUser(
           },
         });
 
+        // Create default user role if none exists
+        const existingRole = await tx.userRole.findFirst({
+          where: { userId: newAuthUserId },
+        });
+
+        if (!existingRole) {
+          await tx.userRole.create({
+            data: {
+              userId: newAuthUserId,
+              role: "user" as any,
+            },
+          });
+        }
+
         return newAuthUserId;
       });
 

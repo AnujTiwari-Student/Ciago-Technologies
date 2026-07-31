@@ -14,6 +14,7 @@ import {
   ExternalLink,
   FileText,
   Hash,
+  Loader2,
   PauseCircle,
   Pencil,
   PlayCircle,
@@ -28,6 +29,8 @@ import {
 
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
+import { ProfilePanel } from "@/components/admin/ProfilePanel";
+import { UsersDirectoryPanel } from "@/components/admin/UsersDirectoryPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -73,12 +77,13 @@ import {
   updateApplicationStatus,
 } from "@/lib/admin.functions";
 import {
-  listDepartments,
-  listStaffUsers,
-  setStaffUserRole,
-  type Department,
-  type StaffUser,
-} from "@/lib/orgHierarchy.functions";
+  listOnboardingQueue,
+  getOnboardingDetail,
+  reviewOnboardingDocument,
+  type OnboardingQueueRow,
+  type OnboardingDetail,
+} from "@/lib/hr.functions";
+// Removed unused imports: listDepartments, listStaffUsers, setStaffUserRole, Department, StaffUser
 import { listAuditLogs, type AuditLog } from "@/lib/audit.functions";
 import {
   deleteJobPosting,
@@ -94,7 +99,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
   validateSearch: zodValidator(
     z.object({
       tab: fallback(
-        z.enum(["applications", "postings", "users", "audit", "by-role"]).optional(),
+        z.enum(["applications", "postings", "users", "documents", "audit", "by-role", "profile"]).optional(),
         undefined,
       ),
     }),
@@ -152,7 +157,7 @@ const AUDIT_STYLE: Record<string, string> = {
 const inr = new Intl.NumberFormat("en-IN");
 
 const TAB_META: Record<
-  "applications" | "postings" | "users" | "audit" | "by-role",
+  "applications" | "postings" | "users" | "audit" | "by-role" | "documents" | "profile",
   { title: string; desc: string; icon: any }
 > = {
   applications: {
@@ -166,6 +171,11 @@ const TAB_META: Record<
     icon: Briefcase,
   },
   users: { title: "Users & Roles", desc: "Manage accounts and grant admin access.", icon: UserCog },
+  documents: {
+    title: "Document Verification",
+    desc: "Review and verify candidate onboarding documents.",
+    icon: FileText,
+  },
   audit: {
     title: "Audit Logs",
     desc: "Every privileged action, with full metadata.",
@@ -175,6 +185,11 @@ const TAB_META: Record<
     title: "Applicants by Job",
     desc: "Every job posting with its applicants, statuses and re-apply windows.",
     icon: Briefcase,
+  },
+  profile: {
+    title: "My Profile",
+    desc: "Manage your account settings and preferences.",
+    icon: UserCog,
   },
 };
 
@@ -310,7 +325,11 @@ function AdminPage() {
             </PanelFrame>
           ) : tab === "users" ? (
             <PanelFrame meta={TAB_META.users}>
-              <UsersPanel currentUserId={currentUserId} />
+              <UsersDirectoryPanel />
+            </PanelFrame>
+          ) : tab === "documents" ? (
+            <PanelFrame meta={TAB_META.documents}>
+              <DocumentVerificationPanel />
             </PanelFrame>
           ) : tab === "audit" ? (
             <PanelFrame meta={TAB_META.audit}>
@@ -319,6 +338,10 @@ function AdminPage() {
           ) : tab === "by-role" ? (
             <PanelFrame meta={TAB_META["by-role"]}>
               <ApplicantsByRolePanel />
+            </PanelFrame>
+          ) : tab === "profile" ? (
+            <PanelFrame meta={TAB_META.profile}>
+              <ProfilePanel />
             </PanelFrame>
           ) : (
             <DashboardLanding
@@ -1190,242 +1213,7 @@ function AuditLogsPanel() {
 }
 
 // ============ USERS ============
-
-const ROLE_LABEL: Record<StaffUser["role"], string> = {
-  user: "User",
-  admin: "Admin",
-};
-
-const ROLE_STYLE: Record<StaffUser["role"], string> = {
-  user: "border-border text-muted-foreground",
-  admin: "border-brand/40 bg-brand/10 text-brand",
-};
-
-function UsersPanel({ currentUserId }: { currentUserId: string }) {
-  const qc = useQueryClient();
-  const fetchUsers = useServerFn(listStaffUsers);
-  const fetchDepts = useServerFn(listDepartments);
-  const setRole = useServerFn(setStaffUserRole);
-  const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<StaffUser | null>(null);
-  const [pendingRole, setPendingRole] = useState<StaffUser["role"]>("user");
-  const [pendingDept, setPendingDept] = useState<string | null>(null);
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["admin-staff-users"],
-    queryFn: () => fetchUsers(),
-  });
-  const { data: departments } = useQuery({
-    queryKey: ["departments"],
-    queryFn: () => fetchDepts(),
-  });
-
-  const roleMutation = useMutation({
-    mutationFn: (v: { userId: string; role: StaffUser["role"]; departmentId: string | null }) =>
-      setRole({ data: v }),
-    onSuccess: () => {
-      toast.success("Role updated");
-      qc.invalidateQueries({ queryKey: ["admin-staff-users"] });
-      qc.invalidateQueries({ queryKey: ["admin-users"] });
-      qc.invalidateQueries({ queryKey: ["admin-audit"] });
-      setEditing(null);
-    },
-    onError: (e: any) => toast.error(e?.message || "Role update failed"),
-  });
-
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter(
-      (u) =>
-        u.email?.toLowerCase().includes(q) ||
-        u.full_name?.toLowerCase().includes(q) ||
-        u.department_name?.toLowerCase().includes(q) ||
-        u.id.includes(q),
-    );
-  }, [data, query]);
-
-  function openEditor(u: StaffUser) {
-    setEditing(u);
-    setPendingRole(u.role);
-    setPendingDept(u.department_id ?? null);
-  }
-
-  const needsDept = pendingRole === "admin";
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          placeholder="Search by email, name or department…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="max-w-sm"
-        />
-        <div className="text-xs text-muted-foreground">
-          {data ? `${data.length} account${data.length === 1 ? "" : "s"}` : ""}
-        </div>
-      </div>
-
-      <div className="mt-4">
-        {isLoading ? (
-          <div className="grid gap-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl border border-border bg-card" />
-            ))}
-          </div>
-        ) : error ? (
-          <Card className="border-destructive/40 bg-destructive/5">
-            <CardContent className="p-6 text-sm text-destructive">
-              {(error as Error).message}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="hidden grid-cols-[2fr_1.4fr_1fr_1fr_auto] gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground md:grid">
-              <div>User</div>
-              <div>Registered</div>
-              <div>Role</div>
-              <div>Department</div>
-              <div className="text-right">Actions</div>
-            </div>
-            <ul>
-              {filtered.map((u) => {
-                const isSelf = u.id === currentUserId;
-                return (
-                  <li
-                    key={u.id}
-                    className="grid grid-cols-1 gap-3 border-b border-border px-4 py-4 last:border-b-0 md:grid-cols-[2fr_1.4fr_1fr_1fr_auto] md:items-center md:gap-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {u.full_name || u.email || u.id}
-                      </p>
-                      {u.email && (
-                        <a
-                          href={`mailto:${u.email}`}
-                          className="truncate text-xs text-muted-foreground hover:text-brand"
-                        >
-                          {u.email}
-                        </a>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {new Date(u.created_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </div>
-                    <div>
-                      <Badge variant="outline" className={ROLE_STYLE[u.role]}>
-                        {ROLE_LABEL[u.role]}
-                      </Badge>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {u.department_name ?? <span className="text-xs italic">—</span>}
-                    </div>
-                    <div className="flex items-center justify-start gap-2 md:justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEditor(u)}
-                        disabled={isSelf && u.role === "admin"}
-                      >
-                        Manage role
-                      </Button>
-                      {isSelf && (
-                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                          You
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-              {filtered.length === 0 && (
-                <li className="p-8 text-center text-sm text-muted-foreground">No users found.</li>
-              )}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage role</DialogTitle>
-            <DialogDescription>
-              {editing?.full_name || editing?.email || editing?.id}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={pendingRole}
-                onValueChange={(v) => setPendingRole(v as StaffUser["role"])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Choosing <span className="font-semibold">User</span> strips every staff role and
-                drops the account back to a standard candidate.
-              </p>
-            </div>
-            {needsDept && (
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={pendingDept ?? "__none"}
-                  onValueChange={(v) => setPendingDept(v === "__none" ? null : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">— Unassigned —</SelectItem>
-                    {(departments ?? []).map((d: Department) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-brand text-brand-foreground hover:bg-brand-glow"
-              disabled={roleMutation.isPending || !editing}
-              onClick={() =>
-                editing &&
-                roleMutation.mutate({
-                  userId: editing.id,
-                  role: pendingRole,
-                  departmentId: needsDept ? pendingDept : null,
-                })
-              }
-            >
-              {roleMutation.isPending ? "Saving…" : "Apply"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+// (Users directory panel moved to @/components/admin/UsersDirectoryPanel)
 
 // (XCircle imported for potential future use in cancel actions)
 void XCircle;
@@ -1505,6 +1293,14 @@ function DashboardLanding({
       to: "/admin" as const,
       search: { tab: "users" as const },
       accent: "from-violet-500/20 to-transparent text-violet-500",
+    },
+    {
+      label: "Document verification",
+      desc: "Review candidate onboarding docs",
+      icon: FileText,
+      to: "/admin" as const,
+      search: { tab: "documents" as const },
+      accent: "from-amber-500/20 to-transparent text-amber-500",
     },
     {
       label: "Audit logs",
@@ -1742,6 +1538,382 @@ function ApplicantsByRolePanel() {
         );
       })}
     </div>
+  );
+}
+
+function DocumentVerificationPanel() {
+  const qc = useQueryClient();
+  const fetchQueue = useServerFn(listOnboardingQueue);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["onboarding-queue"],
+    queryFn: () => fetchQueue(),
+  });
+
+  const [filter, setFilter] = useState<"all" | "submitted" | "approved">("submitted");
+  const [selectedRecord, setSelectedRecord] = useState<OnboardingQueueRow | null>(null);
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    if (filter === "all") return data;
+    if (filter === "submitted") return data.filter((r) => r.status === "submitted");
+    if (filter === "approved") return data.filter((r) => r.verification_status === "approved");
+    return data;
+  }, [data, filter]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-card" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="p-10 text-center">
+          <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-semibold">No documents to review</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Submitted onboarding documents will appear here for verification.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <Button
+            variant={filter === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("all")}
+          >
+            All ({data.length})
+          </Button>
+          <Button
+            variant={filter === "submitted" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("submitted")}
+          >
+            Pending ({data.filter((r) => r.status === "submitted").length})
+          </Button>
+          <Button
+            variant={filter === "approved" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("approved")}
+          >
+            Approved ({data.filter((r) => r.verification_status === "approved").length})
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {filtered.map((row) => (
+          <Card
+            key={row.onboarding_id}
+            className="cursor-pointer transition-all hover:border-brand/40 hover:shadow-md"
+            onClick={() => setSelectedRecord(row)}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold">{row.candidate_name}</h3>
+                    <Badge variant="outline" className="text-xs">
+                      {row.role_title}
+                    </Badge>
+                    {row.verification_status === "approved" && (
+                      <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">
+                        <ShieldCheck className="mr-1 h-3 w-3" />
+                        Verified
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{row.candidate_email}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                    <span>
+                      Documents: {row.docs_approved}/{row.docs_total} approved
+                    </span>
+                    {row.docs_pending > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {row.docs_pending} pending
+                      </span>
+                    )}
+                    {row.docs_issues > 0 && (
+                      <span className="text-rose-600 dark:text-rose-400">
+                        {row.docs_issues} need attention
+                      </span>
+                    )}
+                    {row.submitted_at && (
+                      <span>
+                        Submitted {new Date(row.submitted_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setSelectedRecord(row); }}>
+                  View Documents
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {selectedRecord && (
+        <DocumentDetailDialog
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DocumentDetailDialog({
+  record,
+  onClose,
+}: {
+  record: OnboardingQueueRow;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const fetchDetail = useServerFn(getOnboardingDetail);
+  const reviewDoc = useServerFn(reviewOnboardingDocument);
+
+  const { data, isLoading } = useQuery<OnboardingDetail>({
+    queryKey: ["onboarding-detail", record.onboarding_id],
+    queryFn: () => fetchDetail({ data: { onboarding_id: record.onboarding_id } }),
+  });
+
+  const [reviewingDoc, setReviewingDoc] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
+
+  const reviewMutation = useMutation({
+    mutationFn: (vars: { document_id: string; status: "approved" | "changes_requested" | "rejected"; feedback?: string }) =>
+      reviewDoc({ data: vars }),
+    onSuccess: () => {
+      toast.success("Document reviewed");
+      qc.invalidateQueries({ queryKey: ["onboarding-detail", record.onboarding_id] });
+      qc.invalidateQueries({ queryKey: ["onboarding-queue"] });
+      setReviewingDoc(null);
+      setFeedback("");
+    },
+    onError: (e: any) => toast.error(e?.message || "Review failed"),
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Document Review - {record.candidate_name}</DialogTitle>
+          <DialogDescription>
+            {record.role_title} • {record.candidate_email}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-4 py-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-24 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+        ) : data ? (
+          <div className="space-y-6 py-4">
+            <div className="grid gap-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status:</span>
+                <Badge variant="outline">{data.onboarding.status}</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Verification:</span>
+                <Badge variant="outline">{data.onboarding.verification_status}</Badge>
+              </div>
+              {data.onboarding.submitted_at && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Submitted:</span>
+                  <span>{new Date(data.onboarding.submitted_at).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Documents ({data.documents.length})</h3>
+              {data.documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No documents uploaded yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {data.documents.map((doc) => (
+                    <Card key={doc.id} className="border-border/60">
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-medium text-sm">{doc.doc_key}</span>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    doc.status === "approved"
+                                      ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                                      : doc.status === "pending"
+                                        ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+                                        : "bg-rose-500/15 text-rose-500 border-rose-500/30"
+                                  }
+                                >
+                                  {doc.status}
+                                </Badge>
+                              </div>
+                              {doc.original_filename && (
+                                <p className="text-xs text-muted-foreground mt-1">{doc.original_filename}</p>
+                              )}
+                              {doc.feedback && (
+                                <p className="text-xs text-muted-foreground mt-2 italic">
+                                  Feedback: {doc.feedback}
+                                </p>
+                              )}
+                            </div>
+                            {doc.signed_url && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => window.open(doc.signed_url!, "_blank")}
+                              >
+                                View
+                              </Button>
+                            )}
+                          </div>
+
+                          {reviewingDoc === doc.id ? (
+                            <div className="space-y-3 pt-2 border-t">
+                              <div>
+                                <Label htmlFor={`feedback-${doc.id}`} className="text-xs">
+                                  Feedback (required for changes/rejection)
+                                </Label>
+                                <Textarea
+                                  id={`feedback-${doc.id}`}
+                                  value={feedback}
+                                  onChange={(e) => setFeedback(e.target.value)}
+                                  placeholder="Provide specific feedback..."
+                                  rows={3}
+                                  className="mt-1"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() => reviewMutation.mutate({ document_id: doc.id, status: "approved" })}
+                                  disabled={reviewMutation.isPending}
+                                >
+                                  {reviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-amber-600 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => {
+                                    if (!feedback.trim()) {
+                                      toast.error("Feedback is required for requesting changes");
+                                      return;
+                                    }
+                                    reviewMutation.mutate({ document_id: doc.id, status: "changes_requested", feedback: feedback.trim() });
+                                  }}
+                                  disabled={reviewMutation.isPending}
+                                >
+                                  Request Changes
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-rose-600 text-rose-600 hover:bg-rose-50"
+                                  onClick={() => {
+                                    if (!feedback.trim()) {
+                                      toast.error("Feedback is required for rejection");
+                                      return;
+                                    }
+                                    reviewMutation.mutate({ document_id: doc.id, status: "rejected", feedback: feedback.trim() });
+                                  }}
+                                  disabled={reviewMutation.isPending}
+                                >
+                                  Reject
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => { setReviewingDoc(null); setFeedback(""); }}
+                                  disabled={reviewMutation.isPending}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            doc.status !== "approved" && (
+                              <div className="pt-2 border-t">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setReviewingDoc(doc.id)}
+                                  className="w-full"
+                                >
+                                  Review Document
+                                </Button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {data.required_docs && data.required_docs.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Required Documents</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {data.required_docs.map((docKey) => {
+                      const uploaded = data.documents.some((d) => d.doc_key === docKey);
+                      return (
+                        <Badge
+                          key={docKey}
+                          variant="outline"
+                          className={uploaded ? "bg-emerald-500/10" : "bg-amber-500/10"}
+                        >
+                          {docKey}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-6">Failed to load details</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

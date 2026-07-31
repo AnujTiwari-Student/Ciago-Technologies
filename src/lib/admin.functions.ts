@@ -36,27 +36,26 @@ export type AdminUser = {
   full_name: string | null;
 };
 
-async function assertAdmin(db: any, userId: string) {
-  const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: "admin" } }),
-  );
+async function assertAdmin(_db: any, userId: string) {
+  const adminDb = getAdminDb();
+  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 
-async function assertHrOrAdmin(db: any, userId: string) {
-  const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: { in: ["admin", "hr"] } } }),
-  );
+async function assertHrOrAdmin(_db: any, userId: string) {
+  const adminDb = getAdminDb();
+  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const role = await context.db.withRLS((tx) =>
-      tx.userRole.findFirst({ where: { userId: context.userId, role: "admin" } }),
-    );
-    return { isAdmin: !!role };
+    const adminDb = getAdminDb();
+    const count = await adminDb.userRole.count({
+      where: { userId: context.userId, role: "admin" },
+    });
+    return { isAdmin: count > 0 };
   });
 
 export const listAllApplications = createServerFn({ method: "GET" })
@@ -156,6 +155,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         const requiredDocKeys = mandatoryDocKeys(
           posting?.employmentType ?? null,
           posting?.requiredOnboardingDocs ?? [],
+          "ug",
         );
 
         const documents = await adminDb.onboardingDocument.findMany({

@@ -68,17 +68,10 @@ export type OnboardingOffer = {
 };
 
 export const ONBOARDING_DOC_LABELS: Record<string, string> = {
-  pan: "PAN Card",
-  aadhaar: "Aadhaar Card",
-  marksheet_10: "10th Marksheet",
-  marksheet_12: "12th / Diploma Marksheet",
-  bank_details: "Bank Account Details",
-  photo: "Passport-size Photograph",
+  ...CONDITIONAL_DOC_LABELS,
   degree_provisional: "Provisional Degree Certificate",
   degree_final: "Final Degree Certificate",
-  address_proof: "Address Proof",
   passport: "Passport",
-  ...CONDITIONAL_DOC_LABELS,
 };
 
 export function docLabel(key: string): string {
@@ -174,7 +167,7 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
       "marksheet_12",
       "bank_details",
     ];
-    const docRequirements = computeDocRequirements(employmentType, postingRequired);
+    const docRequirements = computeDocRequirements(employmentType, postingRequired, "ug");
 
     return {
       application_id: app.id,
@@ -210,8 +203,13 @@ export const acceptOffer = createServerFn({ method: "POST" })
     const adminDb = getAdminDb();
     const posting = await adminDb.jobPosting.findUnique({
       where: { id: app.roleId },
-      select: { department: true },
+      select: { department: true, salaryMinInr: true, salaryMaxInr: true },
     });
+
+    // Use midpoint of salary range, or min if max not set
+    const compensationInr = posting?.salaryMaxInr && posting?.salaryMinInr
+      ? Math.round((posting.salaryMinInr + posting.salaryMaxInr) / 2)
+      : posting?.salaryMinInr ?? null;
 
     const rec = await adminDb.onboardingRecord.upsert({
       where: { applicationId: app.id },
@@ -220,12 +218,14 @@ export const acceptOffer = createServerFn({ method: "POST" })
         applicationId: app.id,
         roleTitle: app.roleTitle,
         department: posting?.department ?? null,
+        compensationInr,
         status: "accepted",
         offerAcceptedAt: new Date(),
         currentStep: 2,
       },
       update: {
         status: "accepted",
+        compensationInr,
         offerAcceptedAt: new Date(),
         offerDeclinedAt: null,
         currentStep: 2,
@@ -455,6 +455,7 @@ export const submitOnboarding = createServerFn({ method: "POST" })
     const required: string[] = mandatoryDocKeys(
       posting?.employmentType ?? null,
       posting?.requiredOnboardingDocs ?? [],
+      "ug",
     );
 
     if (required.length > 0) {

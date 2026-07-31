@@ -26,12 +26,11 @@ export const listAuditLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => filterSchema.parse(data ?? {}))
   .handler(async ({ data, context }) => {
-    const count = await context.db.withRLS((tx) =>
-      tx.userRole.count({ where: { userId: context.userId, role: { in: ["admin", "hr"] } } }),
-    );
-    if (count === 0) throw new Error("Forbidden");
-
     const adminDb = getAdminDb();
+    const count = await adminDb.userRole.count({
+      where: { userId: context.userId, role: "admin" },
+    });
+    if (count === 0) throw new Error("Forbidden");
     const rows = await adminDb.auditLog.findMany({
       where: {
         ...(data?.action && { action: data.action }),

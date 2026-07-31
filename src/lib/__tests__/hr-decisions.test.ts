@@ -84,16 +84,11 @@ function makeMockSupabase(
 // -------- RBAC gate --------
 
 describe("assertHrOrAdmin", () => {
-  it("allows hr role", () => {
-    expect(() => assertHrOrAdmin(new Set(["hr"]))).not.toThrow();
-  });
   it("allows admin role", () => {
     expect(() => assertHrOrAdmin(new Set(["admin"]))).not.toThrow();
   });
-  it("rejects manager/employee/user roles", () => {
-    for (const r of ["manager", "employee", "user"]) {
-      expect(() => assertHrOrAdmin(new Set([r]))).toThrow(/Forbidden/);
-    }
+  it("rejects user role", () => {
+    expect(() => assertHrOrAdmin(new Set(["user"]))).toThrow(/Forbidden/);
     expect(() => assertHrOrAdmin(new Set())).toThrow(/Forbidden/);
   });
 });
@@ -130,17 +125,17 @@ describe("applyDocumentDecision", () => {
   it("approves and writes update + audit + notification", async () => {
     const { supabase, calls } = makeMockSupabase({ document: doc });
     const res = await applyDocumentDecision(
-      { supabase, actorId: "hr-1", actorEmail: "hr@x.com", roles: new Set(["hr"]) },
+      { supabase, actorId: "admin-1", actorEmail: "admin@x.com", roles: new Set(["admin"]) },
       { document_id: "doc-1", status: "approved" },
     );
     expect(res.status).toBe("approved");
     expect(res.notified_user_id).toBe("candidate-1");
     expect(calls.updates).toHaveLength(1);
-    expect(calls.updates[0]).toMatchObject({ status: "approved", reviewed_by: "hr-1" });
+    expect(calls.updates[0]).toMatchObject({ status: "approved", reviewed_by: "admin-1" });
     expect(calls.audits).toHaveLength(1);
     expect(calls.audits[0]).toMatchObject({
-      actor_id: "hr-1",
-      actor_email: "hr@x.com",
+      actor_id: "admin-1",
+      actor_email: "admin@x.com",
       action: "ONBOARDING_DOC_REVIEWED",
       target_resource: "onboarding_records/onb-1",
     });
@@ -155,7 +150,7 @@ describe("applyDocumentDecision", () => {
     const { supabase, calls } = makeMockSupabase({ document: doc });
     await expect(
       applyDocumentDecision(
-        { supabase, actorId: "u", roles: new Set(["employee"]) },
+        { supabase, actorId: "u", roles: new Set(["user"]) },
         { document_id: "doc-1", status: "approved" },
       ),
     ).rejects.toThrow(/Forbidden/);
@@ -167,7 +162,7 @@ describe("applyDocumentDecision", () => {
     const { supabase } = makeMockSupabase({ document: doc });
     await expect(
       applyDocumentDecision(
-        { supabase, actorId: "hr-1", roles: new Set(["hr"]) },
+        { supabase, actorId: "admin-1", roles: new Set(["admin"]) },
         { document_id: "doc-1", status: "rejected" },
       ),
     ).rejects.toThrow(/Feedback is required/);
@@ -177,7 +172,7 @@ describe("applyDocumentDecision", () => {
     const { supabase } = makeMockSupabase({ document: null });
     await expect(
       applyDocumentDecision(
-        { supabase, actorId: "hr-1", roles: new Set(["hr"]) },
+        { supabase, actorId: "admin-1", roles: new Set(["admin"]) },
         { document_id: "missing", status: "approved" },
       ),
     ).rejects.toThrow(/not found/);
@@ -186,7 +181,7 @@ describe("applyDocumentDecision", () => {
   it("records the from → to transition in audit details", async () => {
     const { supabase, calls } = makeMockSupabase({ document: doc });
     await applyDocumentDecision(
-      { supabase, actorId: "hr-1", roles: new Set(["hr"]) },
+      { supabase, actorId: "admin-1", roles: new Set(["admin"]) },
       { document_id: "doc-1", status: "changes_requested", feedback: "please re-scan" },
     );
     expect(calls.audits[0]).toMatchObject({
@@ -209,7 +204,7 @@ describe("applyBulkDocumentDecisions", () => {
       },
     });
     const res = await applyBulkDocumentDecisions(
-      { supabase, actorId: "hr-1", roles: new Set(["hr"]) },
+      { supabase, actorId: "admin-1", roles: new Set(["admin"]) },
       [
         { document_id: "d1", status: "approved" },
         { document_id: "d2", status: "approved" },
@@ -242,7 +237,7 @@ describe("buildOnboardingDocSignedUrl", () => {
   it("uses the onboarding-docs bucket and a short TTL", async () => {
     const { supabase, calls } = makeMockSupabase();
     const url = await buildOnboardingDocSignedUrl(
-      { supabase, roles: new Set(["hr"]) },
+      { supabase, roles: new Set(["admin"]) },
       { storage_path: "user-1/aadhaar.pdf" },
     );
     expect(url).toContain("signed.example");
@@ -266,7 +261,7 @@ describe("buildOnboardingDocSignedUrl", () => {
     const { supabase } = makeMockSupabase();
     await expect(
       buildOnboardingDocSignedUrl(
-        { supabase, roles: new Set(["hr"]) },
+        { supabase, roles: new Set(["admin"]) },
         { storage_path: "x", ttl_seconds: 60 * 60 * 24 },
       ),
     ).rejects.toThrow(/TTL/);
@@ -276,7 +271,7 @@ describe("buildOnboardingDocSignedUrl", () => {
     const { supabase } = makeMockSupabase();
     await expect(
       buildOnboardingDocSignedUrl(
-        { supabase, roles: new Set(["hr"]) },
+        { supabase, roles: new Set(["admin"]) },
         { storage_path: "x", ttl_seconds: 0 },
       ),
     ).rejects.toThrow(/TTL/);

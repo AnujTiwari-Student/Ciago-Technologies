@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -82,7 +82,8 @@ export const Route = createFileRoute("/_authenticated/users")({
     ],
   }),
   beforeLoad: async () => {
-    await requireAuthenticated("/users");
+    // Redirect /users to home - this route has been consolidated into admin
+    throw redirect({ to: "/" });
   },
   component: UsersPage,
 });
@@ -191,7 +192,7 @@ function UsersPage() {
   const [openUser, setOpenUser] = useState<DirectoryRow | null>(null);
 
   // Actor role: determine if user is admin or HR to shape UI
-  const { isAdmin: actorIsAdmin, isHr: actorIsHr } = useMyRoles();
+  const { isAdmin: actorIsAdmin, isHr: actorIsHr, checked: rolesChecked } = useMyRoles();
 
   const canAccess = actorIsAdmin || actorIsHr;
 
@@ -237,7 +238,7 @@ function UsersPage() {
             </div>
           </header>
 
-          {!canAccess && !isLoading && (
+          {!canAccess && rolesChecked && (
             <Card className="border-destructive/40">
               <CardContent className="p-6 text-sm text-muted-foreground">
                 You need HR or Admin privileges to view this page.
@@ -245,7 +246,7 @@ function UsersPage() {
             </Card>
           )}
 
-          {canAccess && (
+          {(canAccess || !rolesChecked) && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <KpiCard label="Total users" value={kpis.total} />

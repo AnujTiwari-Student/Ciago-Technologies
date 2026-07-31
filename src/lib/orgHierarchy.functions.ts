@@ -25,10 +25,10 @@ export type StaffUser = {
 
 const STAFF_ROLES = ["admin"] as const;
 
-async function assertAdmin(db: any, userId: string) {
-  const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: "admin" } }),
-  );
+async function assertAdmin(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
+  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 
@@ -37,13 +37,13 @@ async function assertAdmin(db: any, userId: string) {
 // ============================================================
 export const listDepartments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<Department[]> => {
-    const rows = await context.db.withRLS((tx) =>
-      tx.department.findMany({
-        select: { id: true, name: true, code: true, description: true },
-        orderBy: { name: "asc" },
-      }),
-    );
+  .handler(async (): Promise<Department[]> => {
+    const { getAdminDb } = await import("@/lib/db/admin");
+    const adminDb = getAdminDb();
+    const rows = await adminDb.department.findMany({
+      select: { id: true, name: true, code: true, description: true },
+      orderBy: { name: "asc" },
+    });
     return rows as Department[];
   });
 

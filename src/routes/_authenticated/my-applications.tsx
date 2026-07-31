@@ -84,10 +84,13 @@ function MyApplicationsPage() {
     enabled: !isStaff,
   });
   // Banner hidden for any elevated role — staff never see candidate onboarding CTAs.
+  // Also hide if onboarding is submitted (awaiting admin verification) or already approved.
   const onboardingComplete =
     isStaff ||
     (!!onboarding?.onboarding &&
-      (onboarding.onboarding.verification_status === "approved" || !!onboarding.onboarding.doj));
+      (onboarding.onboarding.status === "submitted" ||
+        onboarding.onboarding.verification_status === "approved" ||
+        !!onboarding.onboarding.doj));
 
   const withdrawMutation = useMutation({
     mutationFn: (id: string) => withdrawFn({ data: { id } }),

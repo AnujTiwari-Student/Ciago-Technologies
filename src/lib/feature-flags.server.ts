@@ -158,3 +158,15 @@ export async function isResendEmailEnabled(target?: FlagTargetContext): Promise<
     DEFAULT_CAPABILITIES.resend_email_sending_enabled,
   );
 }
+
+/**
+ * Controls whether automatic offboarding is triggered on last_working_day.
+ * When false, offboarding must be done manually.
+ */
+export async function isAutoOffboardingEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "auto_offboarding_trigger_enabled",
+    target,
+    DEFAULT_CAPABILITIES.auto_offboarding_trigger_enabled,
+  );
+}

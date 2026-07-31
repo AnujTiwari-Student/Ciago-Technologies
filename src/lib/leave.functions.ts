@@ -30,7 +30,7 @@ const LEAVE_TYPES = ["casual", "sick", "earned", "unpaid"] as const;
 
 async function assertApprover(db: any, userId: string) {
   const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: { in: ["manager", "hr", "admin"] } } }),
+    tx.userRole.count({ where: { userId, role: "admin" } }),
   );
   if (count === 0) throw new Error("Forbidden");
 }
@@ -167,7 +167,7 @@ export const decideLeaveRequest = createServerFn({ method: "POST" })
         body: `${updated.startDate} → ${updated.endDate}${
           data.decision_note ? ` — ${data.decision_note}` : ""
         }`,
-        link: "/employee?tab=leave",
+        link: "/my-applications", // Leave management moved to user view
       },
     });
 

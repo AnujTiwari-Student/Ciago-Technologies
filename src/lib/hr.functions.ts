@@ -82,10 +82,10 @@ export type OnboardingDetail = {
   audit: OnboardingAuditEntry[];
 };
 
-async function assertHrOrAdmin(db: any, userId: string): Promise<void> {
-  const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: { in: ["hr", "admin"] } } }),
-  );
+async function assertHrOrAdmin(_db: any, userId: string): Promise<void> {
+  // Bypass RLS for role checks — roles must always be readable
+  const adminDb = getAdminDb();
+  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 
@@ -95,10 +95,10 @@ export const listOnboardingQueue = createServerFn({ method: "GET" })
     await assertHrOrAdmin(context.db, context.userId);
     const adminDb = getAdminDb();
 
-    const adminRoleCount = await context.db.withRLS((tx) =>
-      tx.userRole.count({ where: { userId: context.userId, role: "admin" } }),
-    );
-    const isAdmin = (adminRoleCount as number) > 0;
+    const adminRoleCount = await adminDb.userRole.count({
+      where: { userId: context.userId, role: "admin" },
+    });
+    const isAdmin = adminRoleCount > 0;
 
     const recs = await adminDb.onboardingRecord.findMany({
       where: { status: { in: ["accepted", "submitted"] } },
@@ -645,18 +645,8 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
         })
       : null;
 
-    const track = posting?.trackType ?? "standard";
-    // HR-track finalization is admin-only
-    if (track === "hr_track") {
-      const isAdmin = await context.db.withRLS((tx: any) =>
-        tx.userRole.count({ where: { userId: context.userId, role: "admin" } }),
-      );
-      if (isAdmin === 0) {
-        throw new Error("HR-track candidates must be finalized by an admin");
-      }
-    }
-    const targetRole =
-      track === "hr_track" ? "hr" : track === "manager_track" ? "manager" : "employee";
+    // All hired users get "user" role (track types hr_track/manager_track removed in Phase 1)
+    const targetRole = "user";
 
     await adminDb.userRole.upsert({
       where: { userId_role: { userId: rec.userId, role: targetRole as any } },
@@ -675,7 +665,6 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
           to: data.doj,
           candidate_email: app?.email ?? null,
           role_granted: targetRole,
-          track,
         },
       },
     });

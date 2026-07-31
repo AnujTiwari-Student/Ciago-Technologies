@@ -23,19 +23,15 @@ export const resolveMyPortal = createServerFn({ method: "POST" })
     return { portal: i.portal, requested };
   })
   .handler(async ({ context, data }): Promise<string> => {
-    const roleRows = await context.db.withRLS((tx) =>
-      tx.userRole.findMany({
-        where: { userId: context.userId },
-        select: { role: true },
-      }),
-    );
+    const { getAdminDb } = await import("@/lib/db/admin");
+    const adminDb = getAdminDb();
+    const roleRows = await adminDb.userRole.findMany({
+      where: { userId: context.userId },
+      select: { role: true },
+    });
 
-    const roleSet = new Set(roleRows.map((r) => r.role));
-    const isStaff =
-      roleSet.has("employee") ||
-      roleSet.has("manager") ||
-      roleSet.has("admin") ||
-      roleSet.has("hr");
+    const roleSet = new Set(roleRows.map((r: any) => r.role));
+    const isStaff = roleSet.has("user") || roleSet.has("admin");
 
     const { portal, requested } = data;
     if (portal === "employee") {

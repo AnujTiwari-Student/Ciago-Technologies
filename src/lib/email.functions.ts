@@ -1,5 +1,13 @@
 /**
  * Email sending functions with Resend integration and delivery tracking.
+ *
+ * WEBHOOK SETUP:
+ * TanStack Start doesn't support API routes for webhooks. To enable webhook tracking:
+ * 1. Use a separate webhook handler service (e.g., Vercel Edge Function, Cloudflare Worker)
+ * 2. Or implement webhook endpoint in your hosting platform (e.g., Next.js API route if migrating)
+ * 3. Webhook handler should call handleResendWebhook() function exported below
+ *
+ * For now, email tracking works but status updates require manual polling or external webhook.
  */
 
 import { getAdminDb } from "@/lib/db/admin";

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAdminDb } from "@/lib/db/admin";
 
 export type MyRoleRow = {
   role: string;
@@ -27,19 +28,19 @@ export type MyEmployeeAccessPayload = {
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyRolesPayload> => {
-    const rows = await context.db.withRLS((tx) =>
-      tx.userRole.findMany({
-        where: { userId: context.userId },
-        select: { role: true, departmentId: true },
-      }),
-    );
+    // Use adminDb to bypass RLS — user's own role must always be readable
+    const adminDb = getAdminDb();
+    const rows = await adminDb.userRole.findMany({
+      where: { userId: context.userId },
+      select: { role: true, departmentId: true },
+    });
 
     const roles = new Set(rows.map((r) => r.role));
     const isAdmin = roles.has("admin");
     const departmentId = rows.find((r) => r.departmentId)?.departmentId ?? null;
     return {
       isAdmin,
-      isHr: false,
+      isHr: isAdmin,
       isManager: false,
       isEmployee: false,
       isStaff: isAdmin,
@@ -56,18 +57,17 @@ export const getMyAuthUserId = createServerFn({ method: "GET" })
 export const getMyEmployeeAccess = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyEmployeeAccessPayload> => {
-    const [roleRows, onboardingRows] = await context.db.withRLS((tx) =>
-      Promise.all([
-        tx.userRole.findMany({
-          where: { userId: context.userId },
-          select: { role: true },
-        }),
-        tx.onboardingRecord.findMany({
-          where: { userId: context.userId, status: { in: ["accepted", "submitted"] } },
-          select: { id: true },
-        }),
-      ]),
-    );
+    const adminDb = getAdminDb();
+    const [roleRows, onboardingRows] = await Promise.all([
+      adminDb.userRole.findMany({
+        where: { userId: context.userId },
+        select: { role: true },
+      }),
+      adminDb.onboardingRecord.findMany({
+        where: { userId: context.userId, status: { in: ["accepted", "submitted"] } },
+        select: { id: true },
+      }),
+    ]);
 
     const roles = new Set(roleRows.map((r) => r.role));
     const isAdmin = roles.has("admin");
@@ -75,7 +75,7 @@ export const getMyEmployeeAccess = createServerFn({ method: "GET" })
     return {
       userId: context.userId,
       isAdmin,
-      isHr: false,
+      isHr: isAdmin,
       isManager: false,
       isEmployee: false,
       hasPreDojOnboarding: onboardingRows.length > 0,

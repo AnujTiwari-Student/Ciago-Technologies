@@ -47,9 +47,9 @@ export const adminNavItems: NavItem[] = [
   { label: "Applications", to: "/admin", search: { tab: "applications" } },
   { label: "By Job", to: "/admin", search: { tab: "by-role" } },
   { label: "Job Postings", to: "/admin", search: { tab: "postings" } },
-  { label: "Users", to: "/users" },
+  { label: "Users", to: "/admin", search: { tab: "users" } },
   { label: "Audit Logs", to: "/admin", search: { tab: "audit" } },
-  { label: "Profile", to: "/profile" },
+  { label: "Profile", to: "/admin", search: { tab: "profile" } },
 ];
 
 export const navItems = publicNavItems;

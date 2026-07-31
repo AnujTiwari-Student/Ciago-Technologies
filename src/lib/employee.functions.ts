@@ -6,15 +6,20 @@ import { getAdminDb } from "@/lib/db/admin";
 async function assertEmployee(db: any, userId: string) {
   const count = await db.withRLS((tx: any) =>
     tx.userRole.count({
-      where: { userId, role: { in: ["employee", "admin"] } },
+      where: { userId, role: { in: ["user", "admin"] } },
     }),
   );
   if (count === 0) throw new Error("Forbidden");
 }
 
 // ============================================================
-// TASKS
+// TASKS - REMOVED IN PHASE 2
 // ============================================================
+// NOTE: EmployeeTask model and all task-related functions were removed in Phase 2.
+// The Tasks feature was deleted as part of the architecture migration.
+// This entire section is commented out for reference only.
+
+/*
 export type EmployeeTask = {
   id: string;
   assignee_id: string;
@@ -109,6 +114,7 @@ export const deleteMyTask = createServerFn({ method: "POST" })
     );
     return { ok: true };
   });
+*/
 
 // ============================================================
 // TIMESHEETS

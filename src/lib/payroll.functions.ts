@@ -41,7 +41,7 @@ export type SalarySlip = {
 
 async function requireHr(db: any, userId: string) {
   const count = await db.withRLS((tx: any) =>
-    tx.userRole.count({ where: { userId, role: { in: ["hr", "admin"] } } }),
+    tx.userRole.count({ where: { userId, role: "admin" } }),
   );
   if (count === 0) throw new Error("Forbidden");
 }
@@ -187,7 +187,7 @@ export const listEmployeeDirectory = createServerFn({ method: "GET" })
     const adminDb = getAdminDb();
 
     const roles = await adminDb.userRole.findMany({
-      where: { role: { in: ["employee", "manager", "hr", "admin"] } },
+      where: { role: { in: ["user", "admin"] } },
       select: { userId: true },
     });
     const ids = Array.from(new Set(roles.map((r) => r.userId)));
