@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { FLAGS } from "@/lib/feature-flags";
 import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 import { resolveMyPortal } from "@/lib/portal.functions";
+import { ensureClerkMapping } from "@/integrations/clerk/ensure-mapping.server";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useClerk, useUser } from "@clerk/tanstack-react-start";
@@ -24,6 +25,32 @@ export async function enforceSsoCallbackAccess(): Promise<void> {
   }
 }
 
+declare global {
+  interface Window {
+    __clerkAuthToken?: string;
+    __clerkReady?: boolean;
+  }
+}
+
+async function waitForClerkToken(timeoutMs = 5000): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (window.__clerkAuthToken) return window.__clerkAuthToken;
+  if (window.__clerkReady) return null;
+
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (window.__clerkAuthToken) {
+        clearInterval(interval);
+        resolve(window.__clerkAuthToken);
+      } else if (window.__clerkReady || Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        resolve(null);
+      }
+    }, 50);
+  });
+}
+
 function SsoCallbackPage() {
   const navigate = useNavigate();
   const clerk = useClerk();
@@ -32,46 +59,41 @@ function SsoCallbackPage() {
   const [attemptedRedirect, setAttemptedRedirect] = useState(false);
 
   useEffect(() => {
-    // Don't run if already redirecting or if we've already tried
     if (redirecting || attemptedRedirect) return;
-
-    // Wait for Clerk to fully load
     if (!isLoaded) return;
 
-    // If we have a signed-in user, handle the OAuth callback
-    if (clerkUser) {
+    const finishSignIn = async () => {
       setAttemptedRedirect(true);
       setRedirecting(true);
+      try {
+        const token = await waitForClerkToken();
+        if (!token) {
+          throw new Error("Clerk session token is not ready yet");
+        }
 
-      // Give the session a moment to fully establish
-      setTimeout(() => {
-        resolveMyPortal({ data: { portal: "candidate", requested: "/" } })
-          .then((dest) => {
-            toast.success("Signed in successfully.");
-            navigate({ to: dest });
-          })
-          .catch((err) => {
-            console.error("[sso-callback] Failed to resolve portal:", err);
-            // Fallback to /my-applications on error
-            toast.success("Signed in successfully.");
-            navigate({ to: "/my-applications" });
-          });
-      }, 100);
+        const mapping = await ensureClerkMapping();
+        if (!mapping.ok) {
+          throw new Error(`Failed to ensure user mapping: ${mapping.reason}`);
+        }
+
+        const dest = await resolveMyPortal({ data: { portal: "candidate", requested: "/" } });
+        toast.success("Signed in successfully.");
+        navigate({ to: dest });
+      } catch (err) {
+        console.error("[sso-callback] Failed to complete OAuth callback:", err);
+        toast.error("Authentication incomplete. Please try again.");
+        navigate({ to: "/auth" });
+      }
+    };
+
+    if (clerkUser || clerk.session) {
+      void finishSignIn();
       return;
     }
 
-    // If loaded but no user, check if there's an active session being created
-    // Clerk might still be processing the OAuth callback
-    if (clerk.session) {
-      // Session exists, wait a bit more for user to populate
-      return;
-    }
-
-    // No user and no session after loading - something went wrong
-    // But give it a few seconds before giving up
     const giveUpTimer = setTimeout(() => {
       if (!attemptedRedirect && isLoaded && !clerkUser && !clerk.session) {
-        console.error("[sso-callback] No user after OAuth redirect");
+        console.error("[sso-callback] No Clerk session after OAuth redirect");
         toast.error("Authentication incomplete. Please try again.");
         navigate({ to: "/auth" });
       }
