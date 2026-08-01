@@ -194,11 +194,59 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       }
     }
 
+    // Update application status
     await adminDb.jobApplication.update({
       where: { id: data.id },
       data: { status: data.status },
     });
 
+    // Send notifications and audit log IMMEDIATELY after status update
+    // This ensures user gets notified even if employee provisioning fails
+    if (prior && prior.status !== data.status) {
+      await adminDb.auditLog.create({
+        data: {
+          actorId: context.userId,
+          actorEmail: (context.claims as any)?.email ?? null,
+          action: "APPLICATION_STATUS_UPDATED",
+          targetResource: `job_applications/${data.id}`,
+          details: {
+            from: prior.status,
+            to: data.status,
+            candidate_email: prior.email,
+            role_title: prior.roleTitle,
+          },
+        },
+      });
+
+      const { getStatusEmailContent, sendResendEmail } = await import("@/lib/notifications.server");
+      const content = getStatusEmailContent(data.status, prior.roleTitle, prior.fullName);
+
+      // Create in-app notification
+      if (prior.userId) {
+        await adminDb.inAppNotification.create({
+          data: {
+            userId: prior.userId,
+            applicationId: prior.id,
+            title: content.inAppTitle,
+            body: content.inAppBody,
+            link: data.status === "hired" ? "/onboarding" : "/my-applications",
+          },
+        });
+      }
+
+      // Send email notification (non-blocking)
+      sendResendEmail({
+        to: prior.email,
+        subject: content.subject,
+        html: content.html,
+        userId: prior.userId,
+        applicationId: prior.id,
+      }).catch((e) => {
+        console.error("[status-email] send failed", e);
+      });
+    }
+
+    // If hired, provision employee record and OrangeHRM
     if (data.status === "hired" && prior && prior.status !== "hired") {
       await adminDb.profile.upsert({
         where: { userId: prior.userId },
@@ -218,25 +266,27 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
 
       let orangehrmEmployeeId: number | null = null;
 
+      // Try to provision in OrangeHRM (non-critical, can fail)
       try {
         const { isOrangeHRMProvisioningEnabled } = await import("@/lib/feature-flags.server");
         const provisioningEnabled = await isOrangeHRMProvisioningEnabled();
 
         if (provisioningEnabled) {
           const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
+          const { provisionEmployeeInOrangeHRM } = await import("@/lib/orangehrm-sync");
           const client = getOrangeHRMClient();
 
-          const nameParts = prior.fullName.trim().split(/\s+/);
-          const firstName = nameParts[0] || prior.fullName;
-          const lastName = nameParts.slice(1).join(" ") || "";
-
-          const ohrEmployee = await client.createEmployee({
-            firstName,
-            lastName,
-            employeeId: prior.userId,
+          // Provision employee with full details (name, email, job title, department, etc.)
+          const result = await provisionEmployeeInOrangeHRM(client, {
+            fullName: prior.fullName,
+            email: prior.email,
+            jobTitle: prior.roleTitle,
+            employmentType: posting?.employmentType ?? "full_time",
+            department: posting?.department,
+            startDate: new Date(),
           });
 
-          orangehrmEmployeeId = ohrEmployee.empNumber;
+          orangehrmEmployeeId = result.empNumber;
 
           await adminDb.auditLog.create({
             data: {
@@ -245,8 +295,15 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
               action: "ORANGEHRM_EMPLOYEE_CREATED",
               targetResource: `employees/${prior.userId}`,
               details: {
-                orangehrm_emp_number: ohrEmployee.empNumber,
+                orangehrm_emp_number: result.empNumber,
+                orangehrm_employee_id: result.employeeId,
                 candidate_name: prior.fullName,
+                job_title: prior.roleTitle,
+                employment_type: posting?.employmentType,
+                department: posting?.department,
+                job_title_id: result.details.jobTitleId,
+                employment_status_id: result.details.empStatusId,
+                subunit_id: result.details.subUnitId,
               },
             },
           });
@@ -267,68 +324,47 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         });
       }
 
-      await adminDb.employee.upsert({
-        where: { userId: prior.userId },
-        create: {
-          userId: prior.userId,
-          orangehrmEmployeeId,
-          designation: prior.roleTitle,
-          employmentType: posting?.employmentType ?? "full_time",
-          department: validDept,
-          personalEmail: prior.email,
-        },
-        update: {
-          orangehrmEmployeeId,
-          designation: prior.roleTitle,
-          employmentType: posting?.employmentType ?? "full_time",
-          department: validDept,
-        },
-      });
-    }
-
-    if (prior && prior.status !== data.status) {
-      const { getStatusEmailContent, sendResendEmail } = await import("@/lib/notifications.server");
-      const content = getStatusEmailContent(data.status, prior.roleTitle, prior.fullName);
-
-      await adminDb.auditLog.create({
-        data: {
-          actorId: context.userId,
-          actorEmail: (context.claims as any)?.email ?? null,
-          action: "APPLICATION_STATUS_UPDATED",
-          targetResource: `job_applications/${data.id}`,
-          details: {
-            from: prior.status,
-            to: data.status,
-            candidate_email: prior.email,
-            role_title: prior.roleTitle,
-          },
-        },
-      });
-
-      if (prior.userId) {
-        await adminDb.inAppNotification.create({
-          data: {
-            userId: prior.userId,
-            applicationId: prior.id,
-            title: content.inAppTitle,
-            body: content.inAppBody,
-            link: "/my-applications",
-          },
-        });
-      }
-
+      // Create employee record in our system
       try {
-        await sendResendEmail({
-          to: prior.email,
-          subject: content.subject,
-          html: content.html,
-          userId: prior.userId,
-          applicationId: prior.id,
+        await adminDb.employee.upsert({
+          where: { userId: prior.userId },
+          create: {
+            userId: prior.userId,
+            orangehrmEmployeeId,
+            designation: prior.roleTitle,
+            employmentType: posting?.employmentType ?? "full_time",
+            department: validDept,
+            personalEmail: prior.email,
+            backgroundCheckStatus: "not_started",
+            docVerificationStatus: "pending",
+          },
+          update: {
+            orangehrmEmployeeId,
+            designation: prior.roleTitle,
+            employmentType: posting?.employmentType ?? "full_time",
+            department: validDept,
+          },
         });
-      } catch (e) {
-        console.error("[status-email] send failed", e);
+      } catch (empError: any) {
+        console.error("[hire-flow] Employee record creation failed:", empError);
+        await adminDb.auditLog.create({
+          data: {
+            actorId: context.userId,
+            actorEmail: (context.claims as any)?.email ?? null,
+            action: "EMPLOYEE_CREATION_FAILED",
+            targetResource: `employees/${prior.userId}`,
+            details: {
+              error: empError.message,
+              candidate_name: prior.fullName,
+              candidate_email: prior.email,
+            },
+          },
+        });
+        // Don't throw - we've already notified the user and updated status
+        // HR can manually fix the employee record later
       }
     }
+
 
     return { ok: true };
   });

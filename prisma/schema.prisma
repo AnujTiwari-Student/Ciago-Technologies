@@ -135,7 +135,7 @@ model Employee {
   accountStatus         String    @default("active") @map("account_status")
   probationStatus       String    @default("active") @map("probation_status")
   probationMonths       Int?      @map("probation_months")
-  backgroundCheckStatus String    @default("pending") @map("background_check_status")
+  backgroundCheckStatus String    @default("not_started") @map("background_check_status")
   docVerificationStatus String    @default("pending") @map("doc_verification_status")
   department            DeptType?
   designation           String?

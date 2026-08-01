@@ -15,7 +15,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Toaster } from "@/components/ui/sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { OnboardingDocUploader } from "@/components/site/OnboardingDocUploader";
+
+const EMERGENCY_RELATIONSHIPS = [
+  "Father",
+  "Mother",
+  "Spouse",
+  "Sibling",
+  "Son",
+  "Daughter",
+  "Guardian",
+  "Friend",
+  "Other",
+] as const;
 import {
   acceptOffer,
   declineOffer,
@@ -77,8 +96,33 @@ function OnboardingPage() {
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyRelation, setEmergencyRelation] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [emergencyAlternatePhone, setEmergencyAlternatePhone] = useState("");
+  const [emergencyEmail, setEmergencyEmail] = useState("");
+  const [emergencyAddress, setEmergencyAddress] = useState("");
+
+  // Personal contact details
+  const [personalEmail, setPersonalEmail] = useState("");
+  const [personalPhone, setPersonalPhone] = useState("");
+  const [alternatePhone, setAlternatePhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [nationality, setNationality] = useState("Indian");
+
+  // Banking details
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [panNumber, setPanNumber] = useState("");
+
+  // E-signature and acknowledgements
+  const [eSignature, setESignature] = useState("");
   const [idAck, setIdAck] = useState(false);
   const [codeAck, setCodeAck] = useState(false);
+  const [termsAck, setTermsAck] = useState(false);
+  const [privacyAck, setPrivacyAck] = useState(false);
+  const [dataProcessingAck, setDataProcessingAck] = useState(false);
+  const [backgroundCheckAck, setBackgroundCheckAck] = useState(false);
+
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
@@ -96,19 +140,48 @@ function OnboardingPage() {
     const fs = (rec.form_state ?? {}) as Record<string, unknown>;
     const ec = (rec.emergency_contact ?? (fs.emergency_contact as any)) as {
       name?: string;
+      relationship?: string;
       relation?: string;
       phone?: string;
+      alternate_phone?: string;
+      email?: string;
+      address?: string;
     } | null;
     if (ec) {
       setEmergencyName(ec.name ?? "");
-      setEmergencyRelation(ec.relation ?? "");
+      setEmergencyRelation(ec.relationship ?? ec.relation ?? "");
       setEmergencyPhone(ec.phone ?? "");
+      setEmergencyAlternatePhone(ec.alternate_phone ?? "");
+      setEmergencyEmail(ec.email ?? "");
+      setEmergencyAddress(ec.address ?? "");
     }
     setCurrentAddress((fs.current_address as string) ?? "");
     setPermanentAddress((fs.permanent_address as string) ?? "");
     setSameAsCurrent((fs.same_as_current as boolean) ?? false);
+
+    // Restore personal contact details
+    setPersonalEmail((fs.personal_email as string) ?? "");
+    setPersonalPhone((fs.personal_phone as string) ?? "");
+    setAlternatePhone((fs.alternate_phone as string) ?? "");
+    setDateOfBirth((fs.date_of_birth as string) ?? "");
+    setBloodGroup((fs.blood_group as string) ?? "");
+    setNationality((fs.nationality as string) ?? "Indian");
+
+    // Restore banking details
+    setBankName((fs.bank_name as string) ?? "");
+    setAccountNumber((fs.account_number as string) ?? "");
+    setIfscCode((fs.ifsc_code as string) ?? "");
+    setPanNumber((fs.pan_number as string) ?? "");
+
+    // Restore e-signature and acknowledgements
+    setESignature((fs.e_signature as string) ?? "");
     setIdAck(rec.id_ack || fs.id_ack === true);
     setCodeAck(rec.code_of_conduct_ack || fs.code_of_conduct_ack === true);
+    setTermsAck((fs.terms_ack as boolean) ?? false);
+    setPrivacyAck((fs.privacy_ack as boolean) ?? false);
+    setDataProcessingAck((fs.data_processing_ack as boolean) ?? false);
+    setBackgroundCheckAck((fs.background_check_ack as boolean) ?? false);
+
     setHydrated(true);
   }, [offer?.onboarding, hydrated]);
 
@@ -132,8 +205,11 @@ function OnboardingPage() {
           onboarding_id: offer.onboarding!.id,
           emergency_contact: {
             name: emergencyName,
-            relation: emergencyRelation,
+            relationship: emergencyRelation,
             phone: emergencyPhone,
+            alternate_phone: emergencyAlternatePhone,
+            email: emergencyEmail,
+            address: emergencyAddress,
           },
           id_ack: idAck,
           code_of_conduct_ack: codeAck,
@@ -146,8 +222,23 @@ function OnboardingPage() {
               relation: emergencyRelation,
               phone: emergencyPhone,
             },
+            personal_email: personalEmail,
+            personal_phone: personalPhone,
+            alternate_phone: alternatePhone,
+            date_of_birth: dateOfBirth,
+            blood_group: bloodGroup,
+            nationality: nationality,
+            bank_name: bankName,
+            account_number: accountNumber,
+            ifsc_code: ifscCode,
+            pan_number: panNumber,
+            e_signature: eSignature,
             id_ack: idAck,
             code_of_conduct_ack: codeAck,
+            terms_ack: termsAck,
+            privacy_ack: privacyAck,
+            data_processing_ack: dataProcessingAck,
+            background_check_ack: backgroundCheckAck,
             last_saved_at: new Date().toISOString(),
           },
         },
@@ -164,8 +255,26 @@ function OnboardingPage() {
     emergencyName,
     emergencyRelation,
     emergencyPhone,
+    emergencyAlternatePhone,
+    emergencyEmail,
+    emergencyAddress,
+    personalEmail,
+    personalPhone,
+    alternatePhone,
+    dateOfBirth,
+    bloodGroup,
+    nationality,
+    bankName,
+    accountNumber,
+    ifscCode,
+    panNumber,
+    eSignature,
     idAck,
     codeAck,
+    termsAck,
+    privacyAck,
+    dataProcessingAck,
+    backgroundCheckAck,
     hydrated,
     offer?.onboarding?.id,
   ]);
@@ -197,8 +306,11 @@ function OnboardingPage() {
           onboarding_id: offer!.onboarding!.id,
           emergency_contact: {
             name: emergencyName,
-            relation: emergencyRelation,
+            relationship: emergencyRelation,
             phone: emergencyPhone,
+            alternate_phone: emergencyAlternatePhone,
+            email: emergencyEmail,
+            address: emergencyAddress,
           },
           id_ack: true as const,
           code_of_conduct_ack: true as const,
@@ -246,8 +358,20 @@ function OnboardingPage() {
     emergencyName.trim().length >= 2 &&
     emergencyRelation.trim().length >= 2 &&
     emergencyPhone.trim().length >= 6 &&
+    personalEmail.trim().length >= 5 &&
+    personalPhone.trim().length >= 10 &&
+    dateOfBirth.trim().length > 0 &&
+    bankName.trim().length >= 2 &&
+    accountNumber.trim().length >= 8 &&
+    ifscCode.trim().length === 11 &&
+    panNumber.trim().length === 10 &&
+    eSignature.trim().length >= 2 &&
     idAck &&
     codeAck &&
+    termsAck &&
+    privacyAck &&
+    dataProcessingAck &&
+    backgroundCheckAck &&
     missingDocs.length === 0 &&
     rejectedDocs.length === 0;
 
@@ -525,6 +649,9 @@ function OnboardingPage() {
 
                     <section className="space-y-4">
                       <h3 className="text-sm font-semibold">Emergency contact</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Person to contact in case of emergency
+                      </p>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label htmlFor="ec-name">Full name</Label>
@@ -533,30 +660,213 @@ function OnboardingPage() {
                             value={emergencyName}
                             onChange={(e) => setEmergencyName(e.target.value)}
                             placeholder="Full name"
+                            required
                           />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="ec-rel">Relationship</Label>
-                          <Input
-                            id="ec-rel"
+                          <Select
                             value={emergencyRelation}
-                            onChange={(e) => setEmergencyRelation(e.target.value)}
-                            placeholder="Parent, Spouse, Sibling…"
-                          />
+                            onValueChange={(v) => setEmergencyRelation(v)}
+                          >
+                            <SelectTrigger id="ec-rel">
+                              <SelectValue placeholder="Select relationship" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EMERGENCY_RELATIONSHIPS.map((rel) => (
+                                <SelectItem key={rel} value={rel}>
+                                  {rel}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <div className="space-y-2 sm:col-span-2">
+                        <div className="space-y-2">
                           <Label htmlFor="ec-phone">Phone number</Label>
                           <Input
                             id="ec-phone"
+                            type="tel"
                             value={emergencyPhone}
                             onChange={(e) => setEmergencyPhone(e.target.value)}
+                            placeholder="+91 1234567890"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ec-alt-phone">Alternate number (optional)</Label>
+                          <Input
+                            id="ec-alt-phone"
+                            type="tel"
+                            value={emergencyAlternatePhone}
+                            onChange={(e) => setEmergencyAlternatePhone(e.target.value)}
                             placeholder="+91 …"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ec-email">Email (optional)</Label>
+                          <Input
+                            id="ec-email"
+                            type="email"
+                            value={emergencyEmail}
+                            onChange={(e) => setEmergencyEmail(e.target.value)}
+                            placeholder="emergency@example.com"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="ec-address">Address (optional)</Label>
+                          <Textarea
+                            id="ec-address"
+                            value={emergencyAddress}
+                            onChange={(e) => setEmergencyAddress(e.target.value)}
+                            placeholder="Full address of emergency contact"
+                            rows={2}
                           />
                         </div>
                       </div>
                     </section>
 
+                    <section className="space-y-4">
+                      <h3 className="text-sm font-semibold">Personal contact details</h3>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="personal-email">Personal email</Label>
+                          <Input
+                            id="personal-email"
+                            type="email"
+                            value={personalEmail}
+                            onChange={(e) => setPersonalEmail(e.target.value)}
+                            placeholder="your.email@example.com"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="personal-phone">Mobile number</Label>
+                          <Input
+                            id="personal-phone"
+                            type="tel"
+                            value={personalPhone}
+                            onChange={(e) => setPersonalPhone(e.target.value)}
+                            placeholder="+91 1234567890"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="alternate-phone">Alternate number (optional)</Label>
+                          <Input
+                            id="alternate-phone"
+                            type="tel"
+                            value={alternatePhone}
+                            onChange={(e) => setAlternatePhone(e.target.value)}
+                            placeholder="+91 …"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="dob">Date of birth</Label>
+                          <Input
+                            id="dob"
+                            type="date"
+                            value={dateOfBirth}
+                            onChange={(e) => setDateOfBirth(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="blood-group">Blood group (optional)</Label>
+                          <Input
+                            id="blood-group"
+                            value={bloodGroup}
+                            onChange={(e) => setBloodGroup(e.target.value)}
+                            placeholder="A+, B+, O-, AB+…"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nationality">Nationality</Label>
+                          <Input
+                            id="nationality"
+                            value={nationality}
+                            onChange={(e) => setNationality(e.target.value)}
+                            placeholder="Indian"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-sm font-semibold">Banking & Tax details</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Required for salary processing and tax compliance
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="bank-name">Bank name</Label>
+                          <Input
+                            id="bank-name"
+                            value={bankName}
+                            onChange={(e) => setBankName(e.target.value)}
+                            placeholder="State Bank of India, HDFC Bank…"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="account-number">Account number</Label>
+                          <Input
+                            id="account-number"
+                            value={accountNumber}
+                            onChange={(e) => setAccountNumber(e.target.value)}
+                            placeholder="Account number"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ifsc">IFSC code</Label>
+                          <Input
+                            id="ifsc"
+                            value={ifscCode}
+                            onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                            placeholder="SBIN0001234"
+                            maxLength={11}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="pan">PAN number</Label>
+                          <Input
+                            id="pan"
+                            value={panNumber}
+                            onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                            placeholder="ABCDE1234F"
+                            maxLength={10}
+                            required
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-sm font-semibold">Electronic signature</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Type your full legal name exactly as it appears on your government ID
+                      </p>
+                      <div className="space-y-2">
+                        <Label htmlFor="e-signature">Full legal name</Label>
+                        <Input
+                          id="e-signature"
+                          value={eSignature}
+                          onChange={(e) => setESignature(e.target.value)}
+                          placeholder="Your full legal name"
+                          className="font-serif text-lg"
+                          required
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          By typing your name, you acknowledge this serves as your legally binding
+                          electronic signature
+                        </p>
+                      </div>
+                    </section>
+
                     <section className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+                      <h3 className="text-sm font-semibold mb-2">Terms, policies & acknowledgements</h3>
                       <label className="flex items-start gap-3">
                         <Checkbox
                           checked={idAck}
@@ -574,8 +884,57 @@ function OnboardingPage() {
                           className="mt-1"
                         />
                         <span className="text-sm">
-                          I have read and agree to abide by the Ciago Technologies Code of Conduct
-                          and Information-Security policies.
+                          I have read and agree to abide by the{" "}
+                          <strong>Code of Conduct</strong> and{" "}
+                          <strong>Information Security policies</strong> of Ciago Technologies.
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3">
+                        <Checkbox
+                          checked={termsAck}
+                          onCheckedChange={(v) => setTermsAck(!!v)}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          I accept the <strong>Terms of Employment</strong> and understand my
+                          rights and obligations as outlined in the Employee Handbook.
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3">
+                        <Checkbox
+                          checked={privacyAck}
+                          onCheckedChange={(v) => setPrivacyAck(!!v)}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          I acknowledge the <strong>Privacy Policy</strong> and consent to the
+                          collection and processing of my personal information for employment
+                          purposes.
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3">
+                        <Checkbox
+                          checked={dataProcessingAck}
+                          onCheckedChange={(v) => setDataProcessingAck(!!v)}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          I consent to <strong>data processing</strong> activities including
+                          payroll, benefits administration, performance tracking, and internal
+                          communications as required for my employment.
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3">
+                        <Checkbox
+                          checked={backgroundCheckAck}
+                          onCheckedChange={(v) => setBackgroundCheckAck(!!v)}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          I authorize Ciago Technologies to conduct{" "}
+                          <strong>background verification</strong> checks including employment
+                          history, educational qualifications, and reference checks as part of the
+                          onboarding process.
                         </span>
                       </label>
                     </section>
@@ -592,46 +951,165 @@ function OnboardingPage() {
                         {paperworkM.isPending ? "Saving…" : "Save & Continue"}
                       </Button>
                     </div>
-                    {!canSavePaperwork && missingDocs.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Still needed: {missingDocs.map((k) => docLabel(k)).join(", ")}.
-                      </p>
+                    {!canSavePaperwork && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {missingDocs.length > 0 && (
+                          <p>• Missing documents: {missingDocs.map((k) => docLabel(k)).join(", ")}</p>
+                        )}
+                        {!personalEmail.trim() && <p>• Personal email is required</p>}
+                        {personalPhone.trim().length < 10 && <p>• Valid mobile number is required</p>}
+                        {!dateOfBirth && <p>• Date of birth is required</p>}
+                        {bankName.trim().length < 2 && <p>• Bank name is required</p>}
+                        {accountNumber.trim().length < 8 && <p>• Valid account number is required</p>}
+                        {ifscCode.trim().length !== 11 && <p>• Valid 11-character IFSC code is required</p>}
+                        {panNumber.trim().length !== 10 && <p>• Valid 10-character PAN number is required</p>}
+                        {eSignature.trim().length < 2 && <p>• Electronic signature is required</p>}
+                        {(!idAck || !codeAck || !termsAck || !privacyAck || !dataProcessingAck || !backgroundCheckAck) && (
+                          <p>• All acknowledgements must be accepted</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
 
                 {step === 3 && offer.onboarding && (
-                  <div className="space-y-6 text-center">
-                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand/10 text-brand">
-                      <ShieldCheck className="h-6 w-6" />
+                  <div className="space-y-6">
+                    <div className="text-center">
+                      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand/10 text-brand">
+                        <ShieldCheck className="h-6 w-6" />
+                      </div>
+                      <div className="mt-4">
+                        <h2 className="text-xl font-bold">Final review</h2>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Please review your information before submitting. This will be sent to Admin
+                          for document verification and Date of Joining assignment.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold">Final review</h2>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Submitting will hand your file to Admin for document verification and Date of
-                        Joining assignment.
-                      </p>
+
+                    <div className="mx-auto max-w-2xl space-y-4">
+                      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                        <h3 className="font-semibold text-brand">Position Details</h3>
+                        <p>
+                          <span className="text-muted-foreground">Role:</span>{" "}
+                          <strong>{offer.role_title}</strong>
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Department:</span>{" "}
+                          {offer.department ?? "—"}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Compensation:</span>{" "}
+                          {inr.format(compensation)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                        <h3 className="font-semibold text-brand">Personal Information</h3>
+                        <p>
+                          <span className="text-muted-foreground">Email:</span> {personalEmail}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Mobile:</span> {personalPhone}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Date of Birth:</span>{" "}
+                          {new Date(dateOfBirth).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Nationality:</span> {nationality}
+                        </p>
+                        {bloodGroup && (
+                          <p>
+                            <span className="text-muted-foreground">Blood Group:</span> {bloodGroup}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                        <h3 className="font-semibold text-brand">Emergency Contact</h3>
+                        <p>
+                          <span className="text-muted-foreground">Name:</span> {emergencyName}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Relationship:</span>{" "}
+                          {emergencyRelation}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Phone:</span> {emergencyPhone}
+                        </p>
+                        {emergencyAlternatePhone && (
+                          <p>
+                            <span className="text-muted-foreground">Alternate Phone:</span>{" "}
+                            {emergencyAlternatePhone}
+                          </p>
+                        )}
+                        {emergencyEmail && (
+                          <p>
+                            <span className="text-muted-foreground">Email:</span> {emergencyEmail}
+                          </p>
+                        )}
+                        {emergencyAddress && (
+                          <p>
+                            <span className="text-muted-foreground">Address:</span>{" "}
+                            {emergencyAddress}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                        <h3 className="font-semibold text-brand">Banking Details</h3>
+                        <p>
+                          <span className="text-muted-foreground">Bank:</span> {bankName}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Account Number:</span>{" "}
+                          {accountNumber.slice(0, -4).replace(/./g, "•")}
+                          {accountNumber.slice(-4)}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">IFSC:</span> {ifscCode}
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">PAN:</span> {panNumber}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                        <h3 className="font-semibold text-brand">Documents & Acknowledgements</h3>
+                        <p>
+                          <span className="text-muted-foreground">Documents uploaded:</span>{" "}
+                          {requiredDocs.length - missingDocs.length} / {requiredDocs.length}
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Document authenticity confirmed
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Code of Conduct accepted
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Terms of Employment accepted
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Privacy Policy acknowledged
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Data processing consent granted
+                        </p>
+                        <p className="text-emerald-600 dark:text-emerald-400">
+                          ✓ Background verification authorized
+                        </p>
+                        <p className="mt-3 pt-3 border-t border-border">
+                          <span className="text-muted-foreground">Electronic Signature:</span>{" "}
+                          <span className="font-serif text-base">{eSignature}</span>
+                        </p>
+                      </div>
                     </div>
-                    <div className="mx-auto max-w-md space-y-2 rounded-lg border border-border bg-muted/30 p-4 text-left text-sm">
-                      <p>
-                        <span className="text-muted-foreground">Role:</span>{" "}
-                        <strong>{offer.role_title}</strong>
-                      </p>
-                      <p>
-                        <span className="text-muted-foreground">Emergency contact:</span>{" "}
-                        {emergencyName} ({emergencyRelation}) · {emergencyPhone}
-                      </p>
-                      <p>
-                        <span className="text-muted-foreground">Documents uploaded:</span>{" "}
-                        {requiredDocs.length - missingDocs.length} / {requiredDocs.length}
-                      </p>
-                      <p className="text-emerald-600 dark:text-emerald-400">
-                        ✓ Document authenticity confirmed
-                      </p>
-                      <p className="text-emerald-600 dark:text-emerald-400">
-                        ✓ Code of Conduct accepted
-                      </p>
-                    </div>
+
                     <div className="flex justify-center gap-3">
                       <Button variant="outline" onClick={() => setStep(2)}>
                         Back

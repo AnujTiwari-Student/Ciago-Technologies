@@ -4,6 +4,11 @@ import type {
   OrangeHRMUser,
   CreateEmployeePayload,
   CreateUserPayload,
+  EmployeeJobDetailsPayload,
+  EmployeeContactDetailsPayload,
+  JobVacancy,
+  CreateJobVacancyPayload,
+  UpdateJobVacancyPayload,
 } from "./types";
 
 import { loadToken, saveToken } from "./token-store";
@@ -236,6 +241,135 @@ export class OrangeHRMClient {
 
   async updateEmployee(empNumber: number, payload: Partial<CreateEmployeePayload>) {
     return this.request("PUT", `/pim/employees/${empNumber}`, payload);
+  }
+
+  /**
+   * Update employee job details (job title, employment status, department, etc.)
+   */
+  async updateEmployeeJobDetails(empNumber: number, payload: EmployeeJobDetailsPayload) {
+    return this.request("PUT", `/pim/employees/${empNumber}/job-details`, payload);
+  }
+
+  /**
+   * Update employee contact details (email, phone, address, etc.)
+   */
+  async updateEmployeeContactDetails(empNumber: number, payload: EmployeeContactDetailsPayload) {
+    return this.request("PUT", `/pim/employees/${empNumber}/contact-details`, payload);
+  }
+
+  /**
+   * Get available job titles from OrangeHRM
+   */
+  async getJobTitles() {
+    const result = await this.request<Array<{ id: number; title: string; deleted: boolean }>>(
+      "GET",
+      "/admin/job-titles"
+    );
+    return result.data;
+  }
+
+  /**
+   * Get available employment statuses from OrangeHRM
+   */
+  async getEmploymentStatuses() {
+    const result = await this.request<Array<{ id: number; name: string }>>(
+      "GET",
+      "/admin/employment-statuses"
+    );
+    return result.data;
+  }
+
+  /**
+   * Get available sub units (departments) from OrangeHRM
+   */
+  async getSubunits() {
+    const result = await this.request<Array<{ id: number; name: string; unitId: string }>>(
+      "GET",
+      "/admin/subunits"
+    );
+    return result.data;
+  }
+
+  /**
+   * Create a new job title in OrangeHRM
+   */
+  async createJobTitle(title: string) {
+    const result = await this.request<{ id: number; title: string; deleted: boolean }>(
+      "POST",
+      "/admin/job-titles",
+      { title }
+    );
+    return result.data;
+  }
+
+  /**
+   * Create a new employment status in OrangeHRM
+   */
+  async createEmploymentStatus(name: string) {
+    const result = await this.request<{ id: number; name: string }>(
+      "POST",
+      "/admin/employment-statuses",
+      { name }
+    );
+    return result.data;
+  }
+
+  /**
+   * Create a new sub-unit (department) in OrangeHRM
+   */
+  async createSubunit(name: string, parentId?: number) {
+    const result = await this.request<{ id: number; name: string; unitId: string }>(
+      "POST",
+      "/admin/subunits",
+      {
+        name,
+        parentId: parentId || null
+      }
+    );
+    return result.data;
+  }
+
+  /**
+   * Get all job vacancies from OrangeHRM
+   */
+  async getJobVacancies() {
+    const result = await this.request<JobVacancy[]>("GET", "/recruitment/vacancies");
+    return result.data;
+  }
+
+  /**
+   * Get a specific job vacancy
+   */
+  async getJobVacancy(vacancyId: number): Promise<JobVacancy | null> {
+    try {
+      const result = await this.request<JobVacancy>("GET", `/recruitment/vacancies/${vacancyId}`);
+      return result.data;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("404")) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Create a job vacancy in OrangeHRM
+   */
+  async createJobVacancy(payload: CreateJobVacancyPayload) {
+    const result = await this.request<JobVacancy>("POST", "/recruitment/vacancies", payload);
+    return result.data;
+  }
+
+  /**
+   * Update a job vacancy in OrangeHRM
+   */
+  async updateJobVacancy(vacancyId: number, payload: UpdateJobVacancyPayload) {
+    const result = await this.request<JobVacancy>(
+      "PUT",
+      `/recruitment/vacancies/${vacancyId}`,
+      payload
+    );
+    return result.data;
   }
 
   async getSalary(empNumber: number): Promise<OrangeHRMSalary[]> {

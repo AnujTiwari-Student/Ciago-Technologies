@@ -21,8 +21,12 @@ export type OnboardingRecord = {
   offer_declined_at: string | null;
   emergency_contact: {
     name?: string;
-    relation?: string;
+    relationship?: string;
+    relation?: string; // Legacy field, kept for backwards compatibility
     phone?: string;
+    alternate_phone?: string;
+    email?: string;
+    address?: string;
   } | null;
   id_ack: boolean;
   code_of_conduct_ack: boolean;
@@ -270,8 +274,11 @@ const draftSchema = z.object({
   emergency_contact: z
     .object({
       name: z.string().trim().max(120).optional(),
-      relation: z.string().trim().max(60).optional(),
+      relationship: z.string().trim().max(60).optional(),
       phone: z.string().trim().max(30).optional(),
+      alternate_phone: z.string().trim().max(30).optional(),
+      email: z.string().trim().max(120).optional(),
+      address: z.string().trim().max(500).optional(),
     })
     .optional(),
   id_ack: z.boolean().optional(),
@@ -304,8 +311,11 @@ const paperworkSchema = z.object({
   onboarding_id: z.string().uuid(),
   emergency_contact: z.object({
     name: z.string().trim().min(2).max(120),
-    relation: z.string().trim().min(2).max(60),
+    relationship: z.string().trim().min(2).max(60),
     phone: z.string().trim().min(6).max(30),
+    alternate_phone: z.string().trim().max(30).optional(),
+    email: z.string().trim().email().max(120).optional().or(z.literal("")),
+    address: z.string().trim().max(500).optional(),
   }),
   id_ack: z.literal(true),
   code_of_conduct_ack: z.literal(true),
