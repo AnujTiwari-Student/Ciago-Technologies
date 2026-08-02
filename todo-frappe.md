@@ -1,8 +1,8 @@
 # Frappe HR Migration - Living Checklist
 
 **Last Updated**: 2026-08-02  
-**Current Phase**: Phase 0 - Infrastructure & Discovery  
-**Overall Status**: 🚧 IN PROGRESS
+**Current Phase**: Phase 2 - Frappe Provisioning Implementation  
+**Overall Status**: ✅ PHASE 2 COMPLETE - Ready for Phase 3
 
 > **Reference Document**: See `docs/frappe.md` for comprehensive migration plan, architecture decisions, and field mappings
 
@@ -97,7 +97,126 @@
 
 **Completed**: 2026-08-02
 
-### Completed Actions
+---
+
+## Phase 2: Frappe Provisioning Implementation ✅ COMPLETE
+
+**Completed**: 2026-08-02  
+**Status**: ✅ ALL TESTS PASSING (8/8 - 100%)
+
+### Implementation Complete
+- [x] Create `src/lib/frappe-provisioning.ts` (638 lines)
+- [x] Create `src/lib/frappe-hired-handler.ts` (674 lines)
+- [x] Create `src/lib/frappe-applied-handler.ts` (257 lines)
+- [x] Create `scripts/test-frappe-phase2-integration.ts` (405 lines)
+- [x] Preserve idempotency from OrangeHRM (lifecycle_version locking)
+- [x] Preserve race protection from OrangeHRM (event claiming)
+- [x] Preserve crash recovery from OrangeHRM (email reconciliation)
+- [x] Preserve manual review fallback
+- [x] Preserve audit logging
+- [x] Handle required fields (gender/DOB) with placeholder + flag
+- [x] Implement APPLIED provisioning with Frappe API
+- [x] Implement HIRED enrichment with field mapping
+- [x] Implement reconciliation by email
+- [x] Test complete APPLIED→HIRED lifecycle
+- [x] Test idempotency (re-run update)
+- [x] Test reconciliation (search by email)
+- [x] Test required fields validation
+- [x] Test cleanup (terminate employee)
+- [x] Create Phase 2 completion report
+
+### Live Test Results
+```
+Total:          8 tests
+Passed:         8 (100%)
+Failed:         0
+Skipped:        0
+Success Rate:   100%
+```
+
+### Test Scenarios Verified
+1. ✅ Authentication (Administrator user)
+2. ✅ Create Employee (APPLIED) → HR-EMP-00006
+3. ✅ Retrieve Employee
+4. ✅ Update Employee (HIRED enrichment)
+5. ✅ Idempotency (re-run update)
+6. ✅ Reconciliation (search by email)
+7. ✅ Required Fields Validation (MandatoryError)
+8. ✅ Cleanup (terminate → status=Left)
+
+### Database Fields Used
+**JobApplication**:
+- `frappeEmployeeName` (string) — HR-EMP-XXXXX
+- `frappeProvisioningState` — not_started | pending | processing | succeeded | failed | needs_manual_review
+- `frappeProvisioningAttemptedAt` (timestamp)
+- `frappeProvisioningSucceededAt` (timestamp)
+- `frappeRecordStatus` — ACTIVE | INACTIVE | SUSPENDED | LEFT | TERMINATED
+- `frappeTerminatedAt` (timestamp)
+
+**Employee**:
+- `frappeEmployeeName` (string)
+- `frappeRecordStatus`
+- `frappeTerminatedAt` (timestamp)
+
+### Field Mapping Implemented (from Phase 1)
+| Ciago Field | Frappe Field | Status |
+|-------------|--------------|--------|
+| firstName | first_name | ✅ |
+| middleName | middle_name | ✅ |
+| lastName | last_name | ✅ |
+| joinedDate | date_of_joining | ✅ |
+| workEmail | company_email | ✅ |
+| personalEmail | personal_email | ✅ |
+| mobile | cell_number | ✅ |
+| address | current_address | ✅ |
+| emergencyContact.name | emergency_contact_name | ✅ |
+| emergencyContact.phone | emergency_phone | ✅ |
+| emergencyContact.relationship | relation | ✅ |
+
+### Link Fields (NOT YET IMPLEMENTED - Phase 2.1)
+| Ciago Field | Frappe Field | Status |
+|-------------|--------------|--------|
+| jobTitleId → title | designation (Link) | ⏳ Future |
+| subUnitId → name | department (Link) | ⏳ Future |
+| locationId → name | branch (Link) | ⏳ Future |
+| empStatusId → name | employment_type (Link) | ⏳ Future |
+
+### Required Fields Handling (BLOCKER RESOLVED)
+**Problem**: Frappe requires `gender` and `date_of_birth`, not in onboarding flow
+
+**Solution Implemented**:
+- Gender: "Other" (neutral placeholder)
+- DOB: "1990-01-01" (generic placeholder)
+- Provisioning state: `needs_manual_review` when placeholders used
+- Audit log: Documents placeholder usage with reason
+
+**Awaiting Product Decision**:
+- Continue with placeholder + manual review?
+- OR add gender/DOB to onboarding form?
+
+### Remaining Work (Phase 2.1 - Link Fields)
+- [ ] Implement `ensureDesignation()` — create/find Designation DocType
+- [ ] Implement `ensureDepartment()` — create/find Department DocType
+- [ ] Implement `ensureEmploymentType()` — create/find Employment Type DocType
+- [ ] Implement `ensureBranch()` — create/find Branch DocType
+- [ ] Add Link field mapping to enrichment
+- [ ] Test Link field creation and reconciliation
+
+### Phase 2 Deliverables
+- ✅ Frappe provisioning logic (APPLIED state)
+- ✅ Frappe enrichment logic (HIRED state)
+- ✅ Frappe orchestration (integration events)
+- ✅ Live integration test (8/8 passing)
+- ✅ Phase 2 completion report
+- ✅ Idempotency preserved
+- ✅ Race protection preserved
+- ✅ Crash recovery preserved
+- ✅ Audit logging preserved
+- ✅ Manual review fallback preserved
+
+---
+
+### Completed Actions (Phase 1)
 - [x] Logged into Frappe HR at http://localhost:8180 (credentials: Administrator/PLMqaz2901@)
 - [ ] User navigates to Employee form
 - [ ] User documents actual field names/IDs visible in form
