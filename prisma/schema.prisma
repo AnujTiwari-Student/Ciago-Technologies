@@ -68,6 +68,111 @@ enum JobTrackType {
   @@map("job_track_type")
 }
 
+// Phase 1: OrangeHRM Lifecycle Enums (v2.1 - Phase 0 verified)
+
+enum OrangeHRMRecordStatus {
+  ACTIVE
+  TERMINATED
+  RETENTION
+  MANUAL_DELETION_REQUIRED
+  DELETED
+  UNKNOWN
+
+  @@map("orangehrm_record_status")
+}
+
+enum OrangeHRMTerminationReason {
+  PRE_HIRE_REJECTION
+  EMPLOYEE_RESIGNATION
+  ADMIN_TERMINATION
+  CONTRACT_END
+  OFFBOARDING
+  OTHER
+
+  @@map("orangehrm_termination_reason")
+}
+
+enum ESSAccountStatus {
+  not_provisioned
+  provisioning
+  setup_pending
+  needs_manual_password_setup
+  active
+  disabled
+  failed
+  unknown
+
+  @@map("ess_account_status")
+}
+
+enum OrangeHRMProvisioningState {
+  not_started
+  pending
+  processing
+  succeeded
+  failed
+  needs_manual_review
+
+  @@map("orangehrm_provisioning_state")
+}
+
+enum OffboardingStatus {
+  initiated
+  exit_processing
+  access_revocation
+  offboarded
+  purged
+
+  @@map("offboarding_status")
+}
+
+enum OffboardingReason {
+  resignation
+  termination
+  contract_end
+  other
+
+  @@map("offboarding_reason")
+}
+
+enum ExternalProvider {
+  clickup
+  microsoft_teams
+  github
+
+  @@map("external_provider")
+}
+
+enum ExternalAccessStatus {
+  pending
+  invited
+  active
+  failed
+  needs_manual_review
+
+  @@map("external_access_status")
+}
+
+enum IntegrationEventStatus {
+  pending
+  claimed
+  processing
+  succeeded
+  failed
+
+  @@map("integration_event_status")
+}
+
+enum BackgroundVerificationStatus {
+  not_started
+  pending
+  passed
+  failed
+  waived
+
+  @@map("background_verification_status")
+}
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -130,33 +235,52 @@ model Department {
 
 
 model Employee {
-  userId                String    @db.Uuid @map("user_id")
-  orangehrmEmployeeId   Int?      @map("orangehrm_employee_id")
-  accountStatus         String    @default("active") @map("account_status")
-  probationStatus       String    @default("active") @map("probation_status")
-  probationMonths       Int?      @map("probation_months")
-  backgroundCheckStatus String    @default("not_started") @map("background_check_status")
-  docVerificationStatus String    @default("pending") @map("doc_verification_status")
-  department            DeptType?
-  designation           String?
-  teamName              String?   @map("team_name")
-  doj                   String?
-  employmentType        String?   @map("employment_type")
-  workLocation          String?   @map("work_location")
-  workModel             String?   @map("work_model")
-  workEmail             String?   @map("work_email")
-  personalEmail         String?   @map("personal_email")
-  contactNumber         String?   @map("contact_number")
-  address               String?
-  baseSalary            Float?    @map("base_salary")
-  salaryCurrency        String    @default("INR") @map("salary_currency")
-  reportingManagerId    String?   @db.Uuid @map("reporting_manager_id")
-  reportingHrId         String?   @db.Uuid @map("reporting_hr_id")
-  notes                 String?
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  userId                    String                       @db.Uuid @map("user_id")
+  orangehrmEmployeeId       Int?                         @map("orangehrm_employee_id")
+  orangehrmSystemUserId     Int?                         @map("orangehrm_system_user_id")
+  accountStatus             String                       @default("active") @map("account_status")
+  probationStatus           String                       @default("active") @map("probation_status")
+  probationMonths           Int?                         @map("probation_months")
+  backgroundCheckStatus     String                       @default("not_started") @map("background_check_status")
+  docVerificationStatus     String                       @default("pending") @map("doc_verification_status")
+
+  // OrangeHRM lifecycle (Phase 1 - Phase 0 verified: termination not deletion)
+  essAccountStatus          ESSAccountStatus             @default(not_provisioned) @map("ess_account_status")
+  orangehrmRecordStatus     OrangeHRMRecordStatus        @default(ACTIVE) @map("orangehrm_record_status")
+  orangehrmTerminatedAt     DateTime?                    @map("orangehrm_terminated_at")
+  orangehrmTerminationReason OrangeHRMTerminationReason? @map("orangehrm_termination_reason")
+
+  // Offboarding lifecycle (Phase 1)
+  offboardingStatus         OffboardingStatus?           @map("offboarding_status")
+  offboardingInitiatedAt    DateTime?                    @map("offboarding_initiated_at")
+  offboardingCompletedAt    DateTime?                    @map("offboarding_completed_at")
+  lastWorkingDay            DateTime?                    @map("last_working_day") @db.Date
+  offboardingReason         OffboardingReason?           @map("offboarding_reason")
+
+  department                DeptType?
+  designation               String?
+  teamName                  String?                      @map("team_name")
+  doj                       String?
+  employmentType            String?                      @map("employment_type")
+  workLocation              String?                      @map("work_location")
+  workModel                 String?                      @map("work_model")
+  workEmail                 String?                      @map("work_email")
+  personalEmail             String?                      @map("personal_email")
+  contactNumber             String?                      @map("contact_number")
+  address                   String?
+  baseSalary                Float?                       @map("base_salary")
+  salaryCurrency            String                       @default("INR") @map("salary_currency")
+  reportingManagerId        String?                      @db.Uuid @map("reporting_manager_id")
+  reportingHrId             String?                      @db.Uuid @map("reporting_hr_id")
+  notes                     String?
+  createdAt                 DateTime                     @default(now()) @map("created_at")
+  updatedAt                 DateTime                     @updatedAt @map("updated_at")
 
   @@id([userId])
+  @@index([orangehrmEmployeeId], map: "idx_employees_orangehrm_employee_id")
+  @@index([essAccountStatus], map: "idx_employees_ess_account_status")
+  @@index([orangehrmRecordStatus], map: "idx_employees_orangehrm_record_status")
+  @@index([offboardingStatus], map: "idx_employees_offboarding_status")
   @@map("employees")
 }
 
@@ -216,23 +340,38 @@ model InterviewSlot {
 }
 
 model JobApplication {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId             String    @db.Uuid @map("user_id")
-  roleId             String    @db.Uuid @map("role_id")
-  roleTitle          String    @map("role_title")
-  fullName           String    @map("full_name")
-  email              String
-  resumeLink         String?   @map("resume_link")
-  resumeStoragePath  String?   @map("resume_storage_path")
-  portfolioUrl       String?   @map("portfolio_url")
-  status             String    @default("applied")
-  isSoftDeleted      Boolean   @default(false) @map("is_soft_deleted")
-  deletedAt          DateTime? @map("deleted_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
+  id                              String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                          String                         @db.Uuid @map("user_id")
+  roleId                          String                         @db.Uuid @map("role_id")
+  roleTitle                       String                         @map("role_title")
+  fullName                        String                         @map("full_name")
+  email                           String
+  resumeLink                      String?                        @map("resume_link")
+  resumeStoragePath               String?                        @map("resume_storage_path")
+  portfolioUrl                    String?                        @map("portfolio_url")
+  status                          String                         @default("applied")
+  isSoftDeleted                   Boolean                        @default(false) @map("is_soft_deleted")
+  deletedAt                       DateTime?                      @map("deleted_at")
+  createdAt                       DateTime                       @default(now()) @map("created_at")
 
-  interviewSlots     InterviewSlot[]
-  onboardingRecord   OnboardingRecord?
+  // OrangeHRM lifecycle (Phase 1 - Phase 0 verified: termination not deletion)
+  orangehrmEmployeeId             Int?                           @map("orangehrm_employee_id")
+  orangehrmProvisioningState      OrangeHRMProvisioningState     @default(not_started) @map("orangehrm_provisioning_state")
+  orangehrmProvisioningAttemptedAt DateTime?                     @map("orangehrm_provisioning_attempted_at")
+  orangehrmProvisioningSucceededAt DateTime?                     @map("orangehrm_provisioning_succeeded_at")
+  orangehrmRecordStatus           OrangeHRMRecordStatus          @default(ACTIVE) @map("orangehrm_record_status")
+  orangehrmTerminatedAt           DateTime?                      @map("orangehrm_terminated_at")
+  orangehrmTerminationReason      OrangeHRMTerminationReason?    @map("orangehrm_termination_reason")
+  lifecycleVersion                Int                            @default(1) @map("lifecycle_version")
 
+  interviewSlots                  InterviewSlot[]
+  onboardingRecord                OnboardingRecord?
+  setupTokens                     SetupToken[]
+  backgroundVerification          BackgroundVerification?
+
+  @@index([orangehrmEmployeeId], map: "idx_job_applications_orangehrm_employee_id")
+  @@index([orangehrmRecordStatus], map: "idx_job_applications_orangehrm_record_status")
+  @@index([lifecycleVersion], map: "idx_job_applications_lifecycle_version")
   @@map("job_applications")
 }
 
@@ -528,4 +667,211 @@ model UserRole {
 
   @@unique([userId, role])
   @@map("user_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: OrangeHRM Lifecycle Tables (v2.1 - Phase 0 verified)
+// ---------------------------------------------------------------------------
+
+model SetupToken {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String    @db.Uuid @map("application_id")
+  userId        String    @db.Uuid @map("user_id")
+  tokenHash     String    @unique @map("token_hash")
+  status        String    @default("unused")
+  expiresAt     DateTime  @map("expires_at")
+  issuedAt      DateTime  @default(now()) @map("issued_at")
+  usedAt        DateTime? @map("used_at")
+  usedFromIp    String?   @map("used_from_ip")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId], map: "idx_setup_tokens_application_id")
+  @@index([userId], map: "idx_setup_tokens_user_id")
+  @@index([status], map: "idx_setup_tokens_status")
+  @@index([expiresAt], map: "idx_setup_tokens_expires_at")
+  @@map("setup_tokens")
+}
+
+model IntegrationEvent {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType             String                  @map("event_type")
+  idempotencyKey        String                  @unique @map("idempotency_key")
+  correlationId         String?                 @map("correlation_id")
+  entityType            String                  @map("entity_type")
+  entityId              String                  @db.Uuid @map("entity_id")
+  status                IntegrationEventStatus  @default(pending)
+  claimedAt             DateTime?               @map("claimed_at")
+  claimedBy             String?                 @map("claimed_by")
+  processingStartedAt   DateTime?               @map("processing_started_at")
+  completedAt           DateTime?               @map("completed_at")
+  succeededAt           DateTime?               @map("succeeded_at")
+  failedAt              DateTime?               @map("failed_at")
+  attemptCount          Int                     @default(0) @map("attempt_count")
+  maxAttempts           Int                     @default(3) @map("max_attempts")
+  nextRetryAt           DateTime?               @map("next_retry_at")
+  resultData            Json?                   @map("result_data")
+  errorMessage          String?                 @map("error_message")
+  errorCode             String?                 @map("error_code")
+  source                String?
+  payload               Json?
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+
+  @@index([entityType, entityId], map: "idx_integration_events_entity")
+  @@index([status], map: "idx_integration_events_status")
+  @@index([eventType], map: "idx_integration_events_event_type")
+  @@index([claimedAt], map: "idx_integration_events_claimed_at")
+  @@index([nextRetryAt], map: "idx_integration_events_next_retry_at")
+  @@map("integration_events")
+}
+
+model BackgroundVerification {
+  id            String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String                        @unique @db.Uuid @map("application_id")
+  userId        String                        @db.Uuid @map("user_id")
+  status        BackgroundVerificationStatus  @default(not_started)
+  result        String?
+  waiveReason   String?                       @map("waive_reason")
+  notes         String?
+  verifiedBy    String?                       @db.Uuid @map("verified_by")
+  verifiedAt    DateTime?                     @map("verified_at")
+  createdAt     DateTime                      @default(now()) @map("created_at")
+  updatedAt     DateTime                      @updatedAt @map("updated_at")
+
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId], map: "idx_background_verifications_application_id")
+  @@index([userId], map: "idx_background_verifications_user_id")
+  @@index([status], map: "idx_background_verifications_status")
+  @@map("background_verifications")
+}
+
+model OffboardingRecord {
+  id                          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId                  String              @db.Uuid @map("employee_id")
+  userId                      String              @db.Uuid @map("user_id")
+  resignationId               String?             @db.Uuid @map("resignation_id")
+  reason                      OffboardingReason
+  status                      OffboardingStatus   @default(initiated)
+  initiatedBy                 String?             @db.Uuid @map("initiated_by")
+  lastWorkingDay              DateTime?           @map("last_working_day") @db.Date
+  initiatedAt                 DateTime            @default(now()) @map("initiated_at")
+  exitProcessingStartedAt     DateTime?           @map("exit_processing_started_at")
+  accessRevocationStartedAt   DateTime?           @map("access_revocation_started_at")
+  completedAt                 DateTime?           @map("completed_at")
+  purgeEligibleAt             DateTime?           @map("purge_eligible_at")
+  purgedAt                    DateTime?           @map("purged_at")
+  legalHold                   Boolean             @default(false) @map("legal_hold")
+  legalHoldReason             String?             @map("legal_hold_reason")
+  legalHoldSetBy              String?             @db.Uuid @map("legal_hold_set_by")
+  legalHoldSetAt              DateTime?           @map("legal_hold_set_at")
+  notes                       String?
+  createdAt                   DateTime            @default(now()) @map("created_at")
+  updatedAt                   DateTime            @updatedAt @map("updated_at")
+
+  tasks                       OffboardingTask[]
+  revocationEvents            ExternalAccessRevocationEvent[]
+
+  @@index([employeeId], map: "idx_offboarding_records_employee_id")
+  @@index([userId], map: "idx_offboarding_records_user_id")
+  @@index([status], map: "idx_offboarding_records_status")
+  @@index([purgeEligibleAt], map: "idx_offboarding_records_purge_eligible")
+  @@map("offboarding_records")
+}
+
+model OffboardingTask {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offboardingId   String            @db.Uuid @map("offboarding_id")
+  taskType        String            @map("task_type")
+  taskDescription String?           @map("task_description")
+  status          String            @default("pending")
+  startedAt       DateTime?         @map("started_at")
+  completedAt     DateTime?         @map("completed_at")
+  failedAt        DateTime?         @map("failed_at")
+  resultData      Json?             @map("result_data")
+  errorMessage    String?           @map("error_message")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  offboarding     OffboardingRecord @relation(fields: [offboardingId], references: [id], onDelete: Cascade)
+
+  @@index([offboardingId], map: "idx_offboarding_tasks_offboarding_id")
+  @@index([status], map: "idx_offboarding_tasks_status")
+  @@index([taskType], map: "idx_offboarding_tasks_task_type")
+  @@map("offboarding_tasks")
+}
+
+model ExternalAccessProvision {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId      String                @db.Uuid @map("employee_id")
+  userId          String                @db.Uuid @map("user_id")
+  provider        ExternalProvider
+  status          ExternalAccessStatus  @default(pending)
+  externalUserId  String?               @map("external_user_id")
+  invitationId    String?               @map("invitation_id")
+  correlationId   String?               @map("correlation_id")
+  attemptCount    Int                   @default(0) @map("attempt_count")
+  lastAttemptAt   DateTime?             @map("last_attempt_at")
+  nextRetryAt     DateTime?             @map("next_retry_at")
+  providerConfig  Json?                 @map("provider_config")
+  provisionedAt   DateTime?             @map("provisioned_at")
+  failedAt        DateTime?             @map("failed_at")
+  errorMessage    String?               @map("error_message")
+  errorCode       String?               @map("error_code")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  @@index([employeeId], map: "idx_external_access_provisions_employee_id")
+  @@index([userId], map: "idx_external_access_provisions_user_id")
+  @@index([provider], map: "idx_external_access_provisions_provider")
+  @@index([status], map: "idx_external_access_provisions_status")
+  @@map("external_access_provisions")
+}
+
+model ExternalAccessRevocationEvent {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offboardingId   String            @db.Uuid @map("offboarding_id")
+  employeeId      String            @db.Uuid @map("employee_id")
+  userId          String            @db.Uuid @map("user_id")
+  provider        ExternalProvider
+  status          String            @default("pending")
+  externalUserId  String?           @map("external_user_id")
+  attemptCount    Int               @default(0) @map("attempt_count")
+  lastAttemptAt   DateTime?         @map("last_attempt_at")
+  nextRetryAt     DateTime?         @map("next_retry_at")
+  revokedAt       DateTime?         @map("revoked_at")
+  failedAt        DateTime?         @map("failed_at")
+  errorMessage    String?           @map("error_message")
+  errorCode       String?           @map("error_code")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  offboarding     OffboardingRecord @relation(fields: [offboardingId], references: [id], onDelete: Restrict)
+
+  @@index([offboardingId], map: "idx_external_access_revocation_events_offboarding_id")
+  @@index([employeeId], map: "idx_external_access_revocation_events_employee_id")
+  @@index([provider], map: "idx_external_access_revocation_events_provider")
+  @@index([status], map: "idx_external_access_revocation_events_status")
+  @@map("external_access_revocation_events")
+}
+
+model AccessRoleMapping {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleName     String           @map("role_name")
+  provider     ExternalProvider
+  providerRole String           @map("provider_role")
+  description  String?
+  isActive     Boolean          @default(true) @map("is_active")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  @@unique([roleName, provider], map: "access_role_mappings_unique")
+  @@index([roleName], map: "idx_access_role_mappings_role_name")
+  @@index([provider], map: "idx_access_role_mappings_provider")
+  @@map("access_role_mappings")
 }

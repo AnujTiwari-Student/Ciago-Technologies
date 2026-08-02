@@ -239,8 +239,41 @@ export class OrangeHRMClient {
     }
   }
 
+  /**
+   * Update employee basic details (name)
+   *
+   * Note: PUT /pim/employees/{empNumber} returns 403 in OrangeHRM Community v5.7
+   * Use updateEmployeePersonalDetails() instead which works via /personal-details endpoint
+   *
+   * @deprecated Use updateEmployeePersonalDetails() instead
+   */
   async updateEmployee(empNumber: number, payload: Partial<CreateEmployeePayload>) {
     return this.request("PUT", `/pim/employees/${empNumber}`, payload);
+  }
+
+  /**
+   * Update employee personal details including name
+   *
+   * OrangeHRM Community v5.7: PUT /pim/employees/{empNumber} returns 403
+   * Alternative: PUT /pim/employees/{empNumber}/personal-details WORKS
+   */
+  async updateEmployeePersonalDetails(
+    empNumber: number,
+    payload: {
+      firstName?: string;
+      middleName?: string;
+      lastName?: string;
+      employeeId?: string;
+      otherId?: string;
+      drivingLicenseNo?: string;
+      drivingLicenseExpiredDate?: string;
+      gender?: 1 | 2 | 3;
+      maritalStatus?: string;
+      birthday?: string;
+      nationalityId?: number;
+    }
+  ) {
+    return this.request("PUT", `/pim/employees/${empNumber}/personal-details`, payload);
   }
 
   /**
@@ -405,6 +438,22 @@ export class OrangeHRMClient {
     return this.request("PUT", `/admin/users/${userId}`, {
       status: enabled,
     });
+  }
+
+  /**
+   * Terminate an employee (Phase 0 verified: SUPPORTED for OrangeHRM Community v5.7)
+   * Note: DELETE employee API is NOT supported (405 Method Not Allowed)
+   * Use this termination API instead for rejection cleanup and offboarding
+   */
+  async terminateEmployee(
+    empNumber: number,
+    payload: {
+      date: string; // YYYY-MM-DD format
+      terminationReasonId: number;
+      note: string;
+    }
+  ): Promise<void> {
+    await this.request("POST", `/pim/employees/${empNumber}/terminations`, payload);
   }
 }
 

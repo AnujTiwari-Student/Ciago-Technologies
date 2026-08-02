@@ -38,7 +38,7 @@ describe("clerk auth route/callback enforcement", () => {
 
   it("blocks protected-route auth when clerkAuthentication is OFF", async () => {
     const { isClerkAuthEnabledFn } = await import("@/lib/feature-flags.functions");
-    vi.mocked(isClerkAuthEnabledFn).mockResolvedValueOnce(false);
+    (isClerkAuthEnabledFn as any).mockResolvedValueOnce(false);
     const { requireAuthenticated } = await import("@/routes/_authenticated/-guard");
 
     await expect(requireAuthenticated("/employee")).rejects.toMatchObject({
@@ -51,7 +51,7 @@ describe("clerk auth route/callback enforcement", () => {
 
   it("blocks direct callback access when clerkAuthentication is OFF", async () => {
     const { isClerkAuthEnabledFn } = await import("@/lib/feature-flags.functions");
-    vi.mocked(isClerkAuthEnabledFn).mockResolvedValueOnce(false);
+    (isClerkAuthEnabledFn as any).mockResolvedValueOnce(false);
     const { enforceSsoCallbackAccess } = await import("@/routes/auth.sso-callback");
 
     await expect(enforceSsoCallbackAccess()).rejects.toMatchObject({
@@ -64,7 +64,7 @@ describe("clerk auth route/callback enforcement", () => {
 
   it("allows callback when clerkAuthentication is ON", async () => {
     const { isClerkAuthEnabledFn } = await import("@/lib/feature-flags.functions");
-    vi.mocked(isClerkAuthEnabledFn).mockResolvedValueOnce(true);
+    (isClerkAuthEnabledFn as any).mockResolvedValueOnce(true);
     const { enforceSsoCallbackAccess } = await import("@/routes/auth.sso-callback");
     await expect(enforceSsoCallbackAccess()).resolves.toBeUndefined();
   });

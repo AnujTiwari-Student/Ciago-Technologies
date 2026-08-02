@@ -64,6 +64,7 @@ export const FEATURE_FLAGS = {
   // -- OrangeHRM Integration -------------------------------------------------
   essAutoProvisioning: "ess_auto_provisioning_enabled",
   orangehrmSalarySync: "orangehrm_salary_sync_enabled",
+  orangehrmEmployeeSync: "orangehrm_employee_sync_enabled",
   // -- Email -----------------------------------------------------------------
   resendEmailSending: "resend_email_sending_enabled",
   // -- Provisioning & Offboarding --------------------------------------------
@@ -95,6 +96,7 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
   // OrangeHRM Integration
   ess_auto_provisioning_enabled: false,
   orangehrm_salary_sync_enabled: false,
+  orangehrm_employee_sync_enabled: false,
   // Email
   resend_email_sending_enabled: false,
   // Provisioning & Offboarding

@@ -16,7 +16,8 @@ describe("isClerkAuthenticationEnabled", () => {
   const oldEnv = { ...process.env };
 
   beforeEach(() => {
-    vi.resetModules();
+    // Vitest-specific: clear module cache. Bun doesn't support this, but tests will work in Vitest.
+    if (vi.resetModules) vi.resetModules();
     getClientMock.mockReset();
     process.env.CONFIGCAT_SERVER_SDK_KEY = "sdk-key";
   });

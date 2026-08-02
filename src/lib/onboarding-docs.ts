@@ -70,9 +70,7 @@ export function computeDocRequirements(
   const baseMandatory = ["pan", "aadhaar", "bank_details", "photo", "marksheet_10"];
 
   for (const key of baseMandatory) {
-    if (!configured.has(key)) {
-      out.push({ key, mandatory: true, reason: "Required for all candidates" });
-    }
+    out.push({ key, mandatory: true, reason: "Required for all candidates" });
   }
 
   // Add HR-configured requirements (all mandatory)
@@ -84,6 +82,12 @@ export function computeDocRequirements(
 
   const type = (employmentType ?? "").toLowerCase().replace(/[\s-]+/g, "_");
   const isInternOrPartTime = type === "internship" || type === "intern" || type === "part_time" || type === "parttime";
+
+  // Helper: check if any degree document is already configured
+  const degreeDocKeys = ["ug_degree", "pg_degree", "degree_final", "degree_provisional", "degree_certificate"];
+  const hasDegreeDoc = Array.from(configured).some(key =>
+    degreeDocKeys.includes(key) || key.includes("degree")
+  );
 
   // 12th/Diploma is mandatory for all
   if (!configured.has("marksheet_12") && !configured.has("diploma_marksheet")) {
@@ -102,7 +106,7 @@ export function computeDocRequirements(
     }
 
     // Optional: UG Degree, PG Degree
-    if (!configured.has("ug_degree")) {
+    if (!configured.has("ug_degree") && !hasDegreeDoc) {
       out.push({
         key: "ug_degree",
         mandatory: false,
@@ -120,7 +124,7 @@ export function computeDocRequirements(
   } else {
     // ALL OTHER EMPLOYMENT TYPES (Full-time, Contract, etc.)
     // Required: UG Degree
-    if (!configured.has("ug_degree")) {
+    if (!configured.has("ug_degree") && !hasDegreeDoc) {
       out.push({
         key: "ug_degree",
         mandatory: true,

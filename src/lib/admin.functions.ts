@@ -246,6 +246,68 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       });
     }
 
+    // Phase 2: If applied, create durable integration event (non-blocking processing)
+    if (data.status === "applied" && prior && prior.status !== "applied") {
+      // CRITICAL: Create integration event synchronously to ensure provisioning intent is recorded
+      // Processing happens asynchronously, but event creation must succeed
+      try {
+        const { createIntegrationEvent, generateIdempotencyKey } = await import("@/lib/integration-events");
+        const { handleApplicationApplied } = await import("@/lib/orangehrm-applied-handler");
+        const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
+
+        // Create event SYNCHRONOUSLY - this is the durable record of provisioning intent
+        const idempotencyKey = generateIdempotencyKey(
+          "orangehrm_employee_provision",
+          "job_application",
+          data.id
+        );
+
+        const eventResult = await createIntegrationEvent(adminDb, {
+          eventType: "orangehrm_employee_provision",
+          entityType: "job_application",
+          entityId: data.id,
+          idempotencyKey,
+          correlationId: `status-update-${data.id}`,
+          source: "application_status_update",
+          maxAttempts: 3,
+        });
+
+        console.log("[applied-orangehrm] Integration event created", {
+          applicationId: data.id,
+          eventId: eventResult.id,
+          alreadyExists: eventResult.alreadyExists,
+        });
+
+        // Process asynchronously ONLY if event was newly created or is pending
+        if (!eventResult.alreadyCompleted) {
+          const client = getOrangeHRMClient();
+
+          // Non-blocking processing - event is already durably recorded
+          handleApplicationApplied({
+            db: adminDb,
+            client,
+            applicationId: data.id,
+            correlationId: `status-update-${data.id}`,
+          }).catch((e) => {
+            console.error("[applied-orangehrm] Async provisioning processing failed", {
+              applicationId: data.id,
+              eventId: eventResult.id,
+              error: e.message,
+            });
+            // Event exists and can be retried by background worker or manual intervention
+          });
+        }
+      } catch (eventError) {
+        // Event creation itself failed - this is a critical error
+        console.error("[applied-orangehrm] CRITICAL: Failed to create integration event", {
+          applicationId: data.id,
+          error: eventError instanceof Error ? eventError.message : String(eventError),
+        });
+        // Status update still succeeds, but provisioning intent not recorded
+        // Admin must manually create event or trigger provisioning
+      }
+    }
+
     // If hired, provision employee record and OrangeHRM
     if (data.status === "hired" && prior && prior.status !== "hired") {
       await adminDb.profile.upsert({
@@ -264,64 +326,59 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         ? (posting.department as any)
         : null;
 
+      // Phase 3: OrangeHRM employee upsert/enrichment at HIRED
+      // Employee was created at APPLIED state (Phase 2)
+      // HIRED reconciles/updates the existing employee with full onboarding data
+      // NEVER creates duplicate employee - uses centralized provisioning for fallback
       let orangehrmEmployeeId: number | null = null;
 
-      // Try to provision in OrangeHRM (non-critical, can fail)
       try {
-        const { isOrangeHRMProvisioningEnabled } = await import("@/lib/feature-flags.server");
-        const provisioningEnabled = await isOrangeHRMProvisioningEnabled();
+        const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
+        const { handleApplicationHired } = await import("@/lib/orangehrm-hired-handler");
 
-        if (provisioningEnabled) {
-          const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
-          const { provisionEmployeeInOrangeHRM } = await import("@/lib/orangehrm-sync");
-          const client = getOrangeHRMClient();
+        const client = getOrangeHRMClient();
 
-          // Provision employee with full details (name, email, job title, department, etc.)
-          const result = await provisionEmployeeInOrangeHRM(client, {
-            fullName: prior.fullName,
-            email: prior.email,
-            jobTitle: prior.roleTitle,
-            employmentType: posting?.employmentType ?? "full_time",
-            department: posting?.department,
-            startDate: new Date(),
+        console.log("[hire-flow] Triggering Phase 3 OrangeHRM upsert/enrichment");
+
+        // Non-blocking call: HIRED flow must not fail due to OrangeHRM issues
+        handleApplicationHired({
+          db: adminDb,
+          client,
+          applicationId: prior.id,
+          candidateId: prior.userId,
+          correlationId: `status-update-hired-${prior.id}`,
+        }).catch((e) => {
+          console.error("[hire-flow] OrangeHRM upsert/enrichment trigger failed", {
+            applicationId: prior.id,
+            error: e.message,
           });
+        });
 
-          orangehrmEmployeeId = result.empNumber;
-
-          await adminDb.auditLog.create({
-            data: {
-              actorId: context.userId,
-              actorEmail: (context.claims as any)?.email ?? null,
-              action: "ORANGEHRM_EMPLOYEE_CREATED",
-              targetResource: `employees/${prior.userId}`,
-              details: {
-                orangehrm_emp_number: result.empNumber,
-                orangehrm_employee_id: result.employeeId,
-                candidate_name: prior.fullName,
-                job_title: prior.roleTitle,
-                employment_type: posting?.employmentType,
-                department: posting?.department,
-                job_title_id: result.details.jobTitleId,
-                employment_status_id: result.details.empStatusId,
-                subunit_id: result.details.subUnitId,
-              },
-            },
-          });
-        }
-      } catch (ohrError: any) {
-        console.error("[hire-flow] OrangeHRM employee creation failed:", ohrError);
-        await adminDb.auditLog.create({
-          data: {
-            actorId: context.userId,
-            actorEmail: (context.claims as any)?.email ?? null,
-            action: "ORANGEHRM_EMPLOYEE_CREATION_FAILED",
-            targetResource: `employees/${prior.userId}`,
-            details: {
-              error: ohrError.message,
-              candidate_name: prior.fullName,
-            },
+        // Load orangehrmEmployeeId for local Employee record creation
+        // This is best-effort - even if handler hasn't completed yet,
+        // we create the Employee row with whatever mapping exists
+        const application = await adminDb.jobApplication.findUnique({
+          where: { id: prior.id },
+          select: {
+            orangehrmEmployeeId: true,
+            orangehrmProvisioningState: true,
           },
         });
+
+        orangehrmEmployeeId = application?.orangehrmEmployeeId || null;
+
+        if (orangehrmEmployeeId) {
+          console.log("[hire-flow] OrangeHRM employee ID available", {
+            empNumber: orangehrmEmployeeId,
+            provisioningState: application?.orangehrmProvisioningState,
+          });
+        } else {
+          console.warn(
+            "[hire-flow] OrangeHRM employee ID not yet available (provisioning may be in progress)"
+          );
+        }
+      } catch (lookupError) {
+        console.error("[hire-flow] Failed to trigger OrangeHRM upsert/enrichment", lookupError);
       }
 
       // Create employee record in our system

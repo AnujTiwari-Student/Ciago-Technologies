@@ -170,3 +170,16 @@ export async function isAutoOffboardingEnabled(target?: FlagTargetContext): Prom
     DEFAULT_CAPABILITIES.auto_offboarding_trigger_enabled,
   );
 }
+
+/**
+ * Controls whether OrangeHRM employee is automatically created at APPLIED state.
+ * When false, no OrangeHRM provisioning occurs at APPLIED.
+ * When true, APPLIED status transition triggers employee creation in OrangeHRM.
+ */
+export async function isOrangeHRMEmployeeSyncEnabled(target?: FlagTargetContext): Promise<boolean> {
+  return isFlagOn(
+    "orangehrm_employee_sync_enabled",
+    target,
+    DEFAULT_CAPABILITIES.orangehrm_employee_sync_enabled,
+  );
+}
