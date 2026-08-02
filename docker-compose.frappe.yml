@@ -1,0 +1,202 @@
+# Frappe HR / ERPNext v15 + HRMS Stack
+# Source: https://github.com/frappe/frappe_docker
+#
+# Custom image: frappe-erpnext-hrms:v15 (includes HRMS app baked in)
+# Build: docker build -t frappe-erpnext-hrms:v15 docker/frappe/
+#
+# First-time setup (after build):
+#   docker compose -f docker-compose.frappe.yml up -d
+#   docker compose -f docker-compose.frappe.yml exec frappe-backend \
+#     bench new-site ciago.localhost \
+#       --mariadb-user-host-login-scope='%' \
+#       --db-root-password='REPLACE_WITH_SECURE_PASSWORD_123' \
+#       --admin-password=admin \
+#       --install-app erpnext
+#   docker compose -f docker-compose.frappe.yml exec frappe-backend \
+#     bench --site ciago.localhost install-app hrms
+#   docker compose -f docker-compose.frappe.yml exec frappe-backend \
+#     bench use ciago.localhost
+#
+# Persistence: survives `docker compose down && docker compose up -d`
+#   - DB user created with @% (wildcard host) via --mariadb-user-host-login-scope='%'
+#   - HRMS app baked into image layer (not ephemeral container filesystem)
+#   - Site data in named volumes (frappe-db-data, frappe-sites)
+#
+# Port: 8180 (alongside OrangeHRM at 8280 during migration)
+
+services:
+  # ================================================================
+  # Infrastructure Services
+  # ================================================================
+
+  frappe-db:
+    image: mariadb:11.8
+    container_name: frappe-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${FRAPPE_DB_PASSWORD}
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - frappe-db-data:/var/lib/mysql
+    networks:
+      - frappe-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  frappe-redis-cache:
+    image: redis:8.6-alpine
+    container_name: frappe-redis-cache
+    restart: unless-stopped
+    networks:
+      - frappe-net
+
+  frappe-redis-queue:
+    image: redis:8.6-alpine
+    container_name: frappe-redis-queue
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - frappe-redis-queue-data:/data
+    networks:
+      - frappe-net
+
+  # ================================================================
+  # Configurator (runs once per up, writes common_site_config.json)
+  # ================================================================
+
+  frappe-configurator:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-configurator
+    restart: "no"
+    command: >
+      bash -c "bench set-config -g db_host $$DB_HOST &&
+               bench set-config -gp db_port $$DB_PORT &&
+               bench set-config -g redis_cache $$REDIS_CACHE &&
+               bench set-config -g redis_queue $$REDIS_QUEUE &&
+               bench set-config -gp socketio_port $$SOCKETIO_PORT"
+    environment:
+      DB_HOST: frappe-db
+      DB_PORT: "3306"
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+      SOCKETIO_PORT: "9000"
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-db:
+        condition: service_healthy
+
+  # ================================================================
+  # Application Services (all depend on configurator)
+  # ================================================================
+
+  frappe-backend:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-backend
+    restart: unless-stopped
+    environment:
+      GUNICORN_WORKERS: "2"
+      GUNICORN_THREADS: "4"
+      GUNICORN_TIMEOUT: "120"
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-configurator:
+        condition: service_completed_successfully
+
+  frappe-websocket:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-websocket
+    restart: unless-stopped
+    command: node /home/frappe/frappe-bench/apps/frappe/socketio.js
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-configurator:
+        condition: service_completed_successfully
+
+  frappe-scheduler:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-scheduler
+    restart: unless-stopped
+    command: bench schedule
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-configurator:
+        condition: service_completed_successfully
+
+  frappe-queue-short:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-queue-short
+    restart: unless-stopped
+    command: bench worker --queue short
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-configurator:
+        condition: service_completed_successfully
+
+  frappe-queue-long:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-queue-long
+    restart: unless-stopped
+    command: bench worker --queue long
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-net
+    depends_on:
+      frappe-configurator:
+        condition: service_completed_successfully
+
+  frappe-frontend:
+    image: frappe-erpnext-hrms:v15
+    container_name: frappe-frontend
+    restart: unless-stopped
+    command: nginx-entrypoint.sh
+    environment:
+      BACKEND: frappe-backend:8000
+      SOCKETIO: frappe-websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
+    ports:
+      - "8180:8080"
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe-net
+    depends_on:
+      - frappe-backend
+      - frappe-websocket
+
+volumes:
+  frappe-db-data:
+  frappe-sites:
+  frappe-redis-queue-data:
+  frappe-logs:
+
+networks:
+  frappe-net:
+    driver: bridge

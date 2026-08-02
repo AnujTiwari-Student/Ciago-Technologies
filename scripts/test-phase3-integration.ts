@@ -101,17 +101,26 @@ async function main() {
       results.push({ scenario: "4. Update contact details", status: "PASS" });
     } catch (error: any) {
       if (error.message.includes("404")) {
-        console.log(`⚠️ EXPECTED_UNSUPPORTED - OrangeHRM API error [PUT /pim/employees/${empNumber}/contact-details]: 404`);
-        console.log(`   OrangeHRM Community v5.7 does not have PUT /pim/employees/{empNumber}/contact-details endpoint`);
+        console.log(
+          `⚠️ EXPECTED_UNSUPPORTED - OrangeHRM API error [PUT /pim/employees/${empNumber}/contact-details]: 404`,
+        );
+        console.log(
+          `   OrangeHRM Community v5.7 does not have PUT /pim/employees/{empNumber}/contact-details endpoint`,
+        );
         console.log(`   Verified via focused API testing: endpoint consistently returns 404\n`);
         results.push({
           scenario: "4. Update contact details",
           status: "EXPECTED_UNSUPPORTED",
-          notes: "PUT /pim/employees/{empNumber}/contact-details endpoint does not exist in OrangeHRM Community v5.7",
+          notes:
+            "PUT /pim/employees/{empNumber}/contact-details endpoint does not exist in OrangeHRM Community v5.7",
         });
       } else {
         console.error(`❌ FAIL - ${error.message}\n`);
-        results.push({ scenario: "4. Update contact details", status: "FAIL", error: error.message });
+        results.push({
+          scenario: "4. Update contact details",
+          status: "FAIL",
+          error: error.message,
+        });
         // Don't throw - continue
       }
     }
@@ -189,8 +198,12 @@ async function main() {
       process.exit(1);
     } else if (unsupported > 0) {
       console.log("⚠️ Phase 3 Integration Test: PASSED WITH LIMITATIONS\n");
-      console.log("All critical operations passed, but contact details enrichment is unsupported in OrangeHRM Community v5.7:");
-      console.log("  - Contact details endpoint (PUT /pim/employees/{empNumber}/contact-details) does not exist (404)");
+      console.log(
+        "All critical operations passed, but contact details enrichment is unsupported in OrangeHRM Community v5.7:",
+      );
+      console.log(
+        "  - Contact details endpoint (PUT /pim/employees/{empNumber}/contact-details) does not exist (404)",
+      );
       console.log("\nWorking capabilities:");
       console.log("  ✅ createEmployee()");
       console.log("  ✅ getEmployee()");
@@ -202,10 +215,11 @@ async function main() {
     } else {
       console.log("✅ Phase 3 Integration Test: FULLY PASSED\n");
       console.log("All operations succeeded including name and joinedDate enrichment.\n");
-      console.log("Note: Contact details enrichment is not available in OrangeHRM Community v5.7.\n");
+      console.log(
+        "Note: Contact details enrichment is not available in OrangeHRM Community v5.7.\n",
+      );
       process.exit(0);
     }
-
   } catch (error: any) {
     console.error("\n=== Phase 3 Integration Test: ❌ FATAL ERROR ===\n");
     console.error(`Error: ${error.message}\n`);
