@@ -31,7 +31,7 @@ import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { ProfilePanel } from "@/components/admin/ProfilePanel";
 import { UsersDirectoryPanel } from "@/components/admin/UsersDirectoryPanel";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -76,6 +76,13 @@ import {
   listApplicantsByRole,
   updateApplicationStatus,
 } from "@/lib/admin.functions";
+import { getFrappeDashboardStats } from "@/lib/frappe-dashboard.functions";
+import {
+  listAllEmployees,
+  getDepartmentStats,
+  type EmployeeDirectoryEntry,
+} from "@/lib/employee-directory.functions";
+import { getDashboardMetrics } from "@/lib/admin.functions";
 import {
   listOnboardingQueue,
   getOnboardingDetail,
@@ -99,7 +106,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
   validateSearch: zodValidator(
     z.object({
       tab: fallback(
-        z.enum(["applications", "postings", "users", "documents", "audit", "by-role", "profile"]).optional(),
+        z.enum(["applications", "postings", "users", "documents", "audit", "by-role", "profile", "frappe", "employee-directory"]).optional(),
         undefined,
       ),
     }),
@@ -156,7 +163,7 @@ const AUDIT_STYLE: Record<string, string> = {
 const inr = new Intl.NumberFormat("en-IN");
 
 const TAB_META: Record<
-  "applications" | "postings" | "users" | "audit" | "by-role" | "documents" | "profile",
+  "applications" | "postings" | "users" | "audit" | "by-role" | "documents" | "profile" | "frappe" | "employee-directory",
   { title: string; desc: string; icon: any }
 > = {
   applications: {
@@ -190,6 +197,16 @@ const TAB_META: Record<
     desc: "Manage your account settings and preferences.",
     icon: UserCog,
   },
+  frappe: {
+    title: "Frappe HR Integration",
+    desc: "Monitor Frappe employee sync status and provisioning.",
+    icon: Activity,
+  },
+  "employee-directory": {
+    title: "Employee Directory",
+    desc: "View and manage employee information with department scoping.",
+    icon: Users,
+  },
 };
 
 function AdminPage() {
@@ -199,10 +216,16 @@ function AdminPage() {
   const fetchUsers = useServerFn(listAllUsers);
   const fetchPostings = useServerFn(listAllJobPostings);
   const fetchLogs = useServerFn(listAuditLogs);
+  const fetchDashboardMetrics = useServerFn(getDashboardMetrics);
 
   const apps = useQuery({ queryKey: ["admin-applications"], queryFn: () => fetchAll() });
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => fetchUsers() });
   const postings = useQuery({ queryKey: ["admin-postings"], queryFn: () => fetchPostings() });
+  const dashboardMetrics = useQuery({
+    queryKey: ["dashboard-metrics"],
+    queryFn: () => fetchDashboardMetrics(),
+    enabled: !tab,
+  });
   const recentLogs = useQuery({
     queryKey: ["admin-audit", "all", "", "", "recent"],
     queryFn: () => fetchLogs({ data: { limit: 6 } }),
@@ -342,6 +365,14 @@ function AdminPage() {
             <PanelFrame meta={TAB_META.profile}>
               <ProfilePanel />
             </PanelFrame>
+          ) : tab === "frappe" ? (
+            <PanelFrame meta={TAB_META.frappe}>
+              <FrappeDashboardPanel />
+            </PanelFrame>
+          ) : tab === "employee-directory" ? (
+            <PanelFrame meta={TAB_META["employee-directory"]}>
+              <EmployeeDirectoryPanel />
+            </PanelFrame>
           ) : (
             <DashboardLanding
               apps={apps.data ?? []}
@@ -349,6 +380,7 @@ function AdminPage() {
               users={users.data ?? []}
               recent={recentLogs.data ?? []}
               recentLoading={recentLogs.isLoading}
+              metrics={dashboardMetrics.data ?? null}
             />
           )}
         </div>
@@ -1254,12 +1286,23 @@ function DashboardLanding({
   users,
   recent,
   recentLoading,
+  metrics,
 }: {
   apps: any[];
   postings: any[];
   users: any[];
   recent: AuditLog[];
   recentLoading: boolean;
+  metrics: {
+    totalApplications: number;
+    applicationsByDepartment: Array<{ department: string; count: number }>;
+    pendingApplications: number;
+    totalPostings: number;
+    postingsByDepartment: Array<{ department: string; count: number }>;
+    activePostings: number;
+    totalHired: number;
+    hiredByDepartment: Array<{ department: string; count: number }>;
+  } | null;
 }) {
   const inQueue = apps.filter((a) => a.status === "applied").length;
   const underReview = apps.filter(
@@ -1345,7 +1388,125 @@ function DashboardLanding({
         </div>
       </div>
 
-      <div>
+      <div className="space-y-8">
+        {/* Department Metrics */}
+        {metrics && (
+          <div>
+            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Department Metrics</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Department-scoped insights and statistics.
+            </p>
+
+            {/* Summary Cards */}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Applications</p>
+                      <p className="text-2xl font-bold">{metrics.totalApplications}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {metrics.pendingApplications} pending
+                      </p>
+                    </div>
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Job Postings</p>
+                      <p className="text-2xl font-bold">{metrics.totalPostings}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {metrics.activePostings} active
+                      </p>
+                    </div>
+                    <Briefcase className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Hired</p>
+                      <p className="text-2xl font-bold">{metrics.totalHired}</p>
+                    </div>
+                    <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Departments</p>
+                      <p className="text-2xl font-bold">
+                        {metrics.applicationsByDepartment.length}
+                      </p>
+                    </div>
+                    <Hash className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Department Breakdowns */}
+            {(metrics.applicationsByDepartment.length > 0 ||
+              metrics.postingsByDepartment.length > 0) && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {metrics.applicationsByDepartment.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Applications by Department</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {metrics.applicationsByDepartment.map((dept) => (
+                          <div
+                            key={dept.department}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <span className="text-muted-foreground">{dept.department}</span>
+                            <Badge variant="outline">{dept.count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {metrics.postingsByDepartment.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Postings by Department</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {metrics.postingsByDepartment.map((dept) => (
+                          <div
+                            key={dept.department}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <span className="text-muted-foreground">{dept.department}</span>
+                            <Badge variant="outline">{dept.count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recent Activity */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Recent activity</h2>
@@ -1916,3 +2077,594 @@ function DocumentDetailDialog({
   );
 }
 
+function FrappeDashboardPanel() {
+  const fetchStats = useServerFn(getFrappeDashboardStats);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["frappe-dashboard-stats"],
+    queryFn: () => fetchStats(),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-brand" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-destructive/40 bg-destructive/5">
+        <CardContent className="p-6 text-sm text-destructive">
+          {(error as Error).message}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  const connectionColor =
+    data.connectionStatus === "connected"
+      ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+      : data.connectionStatus === "sync_disabled"
+        ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+        : data.connectionStatus === "error"
+          ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
+          : "bg-slate-500/15 text-slate-600 border-slate-500/30";
+
+  return (
+    <div className="space-y-6">
+      {/* Environment & Safety Status */}
+      <Card className="border-amber-500/20 bg-amber-500/5">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-amber-600" />
+            Environment & Safety Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">Environment</span>
+              <Badge variant="outline" className="bg-sky-500/15 text-sky-600 border-sky-500/30">
+                {data.environment}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">Frappe Sync</span>
+              <Badge
+                variant="outline"
+                className={
+                  data.syncEnabled
+                    ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                    : "bg-rose-500/15 text-rose-600 border-rose-500/30"
+                }
+              >
+                {data.syncEnabled ? "ENABLED" : "OFF"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">OrangeHRM</span>
+              <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
+                {data.orangehrmOperational ? "OPERATIONAL" : "OFFLINE"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">Production</span>
+              <Badge
+                variant="outline"
+                className={
+                  data.productionDeployed
+                    ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                    : "bg-slate-500/15 text-slate-600 border-slate-500/30"
+                }
+              >
+                {data.productionDeployed ? "DEPLOYED" : "NOT DEPLOYED"}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Connection Health */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Connection Health
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Status</span>
+            <Badge variant="outline" className={connectionColor}>
+              {data.connectionStatus.replace("_", " ").toUpperCase()}
+            </Badge>
+          </div>
+          {data.frappeBaseUrl && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Base URL</span>
+              <code className="text-xs bg-muted px-2 py-1 rounded">{data.frappeBaseUrl}</code>
+            </div>
+          )}
+          {data.siteName && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Site Name</span>
+              <code className="text-xs bg-muted px-2 py-1 rounded">{data.siteName}</code>
+            </div>
+          )}
+          {data.frappeVersion && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Version</span>
+              <Badge variant="outline">{data.frappeVersion}</Badge>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Provisioning Overview */}
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold">{data.totalApplications}</div>
+            <p className="text-xs text-muted-foreground">Total Applications</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-emerald-600">{data.provisionedToFrappe}</div>
+            <p className="text-xs text-muted-foreground">Provisioned</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-sky-600">{data.processing}</div>
+            <p className="text-xs text-muted-foreground">Processing</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-amber-600">{data.pendingProvisioning}</div>
+            <p className="text-xs text-muted-foreground">Pending</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-rose-600">{data.failed}</div>
+            <p className="text-xs text-muted-foreground">Failed</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-purple-600">{data.needsManualReview}</div>
+            <p className="text-xs text-muted-foreground">Manual Review</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* APPLIED → HIRED Lifecycle */}
+      <Card>
+        <CardHeader>
+          <CardTitle>APPLIED → HIRED Lifecycle</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold">{data.appliedProvisionCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">APPLIED Provisioning</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold">{data.hiredEnrichmentCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">HIRED Enrichment</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-emerald-600">{data.hiredSuccessful}</div>
+              <p className="text-xs text-muted-foreground mt-1">HIRED Successful</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-rose-600">{data.hiredFailed}</div>
+              <p className="text-xs text-muted-foreground mt-1">HIRED Failed</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Integration Events */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Integration Events</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold">{data.totalIntegrationEvents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total Events</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-amber-600">{data.pendingEvents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Pending</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-sky-600">{data.processingEvents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Processing</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-emerald-600">{data.succeededEvents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Succeeded</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <div className="text-2xl font-bold text-rose-600">{data.failedEvents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Failed</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Department Insights */}
+      {(data.applicationsByDepartment.length > 0 || data.provisionedByDepartment.length > 0) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {data.applicationsByDepartment.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Applications by Department</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {data.applicationsByDepartment.map((dept) => (
+                    <div
+                      key={dept.department}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="text-muted-foreground">{dept.department}</span>
+                      <Badge variant="outline">{dept.count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {data.provisionedByDepartment.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Provisioned by Department</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {data.provisionedByDepartment.map((dept) => (
+                    <div
+                      key={dept.department}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="text-muted-foreground">{dept.department}</span>
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                        {dept.count}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Failed / Manual Review Queue */}
+      {(data.failedQueue.length > 0 || data.manualReviewQueue.length > 0) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {data.failedQueue.length > 0 && (
+            <Card className="border-rose-500/20">
+              <CardHeader>
+                <CardTitle className="text-base text-rose-600">Failed Provisioning</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {data.failedQueue.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">{item.fullName}</p>
+                          <p className="text-xs text-muted-foreground">{item.email}</p>
+                          <p className="text-xs text-muted-foreground">Status: {item.status}</p>
+                          {item.provisioningAttemptedAt && (
+                            <p className="text-xs text-muted-foreground">
+                              Attempted: {new Date(item.provisioningAttemptedAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="bg-rose-500/15 text-rose-600 border-rose-500/30">
+                          {item.provisioningState}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {data.manualReviewQueue.length > 0 && (
+            <Card className="border-purple-500/20">
+              <CardHeader>
+                <CardTitle className="text-base text-purple-600">Manual Review Required</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {data.manualReviewQueue.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">{item.fullName}</p>
+                          <p className="text-xs text-muted-foreground">{item.email}</p>
+                          <p className="text-xs text-muted-foreground">Status: {item.status}</p>
+                          {item.reason && (
+                            <p className="text-xs text-purple-600">{item.reason}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="bg-purple-500/15 text-purple-600 border-purple-500/30">
+                          {item.provisioningState}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Recent Provisioning */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Frappe Provisioning</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.recentlyProvisioned.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              No employees provisioned to Frappe yet.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="hidden md:grid grid-cols-[1.5fr_1.5fr_1fr_1fr_1fr_1fr] gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <div>Name</div>
+                <div>Email</div>
+                <div>Frappe ID</div>
+                <div>State</div>
+                <div>Status</div>
+                <div>Provisioned</div>
+              </div>
+              <ul>
+                {data.recentlyProvisioned.map((emp) => (
+                  <li
+                    key={emp.id}
+                    className="grid md:grid-cols-[1.5fr_1.5fr_1fr_1fr_1fr_1fr] gap-3 border-b border-border px-4 py-4 last:border-b-0 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="font-medium">{emp.fullName}</div>
+                    <div className="text-sm text-muted-foreground">{emp.email}</div>
+                    <div className="font-mono text-xs">
+                      {emp.frappeEmployeeName || "—"}
+                    </div>
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          emp.provisioningState === "succeeded"
+                            ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                            : emp.provisioningState === "processing"
+                              ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
+                              : "bg-slate-500/15 text-slate-600 border-slate-500/30"
+                        }
+                      >
+                        {emp.provisioningState}
+                      </Badge>
+                    </div>
+                    <div className="text-sm">
+                      <Badge variant="outline">{emp.status}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {emp.provisioningSucceededAt
+                        ? new Date(emp.provisioningSucceededAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "—"}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ====================================================
+// EMPLOYEE DIRECTORY PANEL
+// ====================================================
+
+function EmployeeDirectoryPanel() {
+  const listAllEmployeesFn = useServerFn(listAllEmployees);
+  const getDepartmentStatsFn = useServerFn(getDepartmentStats);
+
+  const employeesQuery = useQuery({
+    queryKey: ["employees", "directory"],
+    queryFn: () => listAllEmployeesFn(),
+  });
+
+  const statsQuery = useQuery({
+    queryKey: ["employees", "stats"],
+    queryFn: () => getDepartmentStatsFn(),
+  });
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredEmployees = useMemo(() => {
+    if (!employeesQuery.data) return [];
+    if (!searchTerm) return employeesQuery.data;
+
+    const term = searchTerm.toLowerCase();
+    return employeesQuery.data.filter(
+      (emp) =>
+        emp.fullName?.toLowerCase().includes(term) ||
+        emp.workEmail?.toLowerCase().includes(term) ||
+        emp.personalEmail?.toLowerCase().includes(term) ||
+        emp.department?.toLowerCase().includes(term) ||
+        emp.designation?.toLowerCase().includes(term) ||
+        emp.teamName?.toLowerCase().includes(term),
+    );
+  }, [employeesQuery.data, searchTerm]);
+
+  const stats = statsQuery.data;
+
+  return (
+    <div className="space-y-6">
+      {/* Statistics Cards */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Employees</p>
+                  <p className="text-3xl font-bold">{stats.totalEmployees}</p>
+                </div>
+                <Users className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Recent Hires (90d)</p>
+                  <p className="text-3xl font-bold">{stats.recentHires}</p>
+                </div>
+                <Activity className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Departments</p>
+                  <p className="text-3xl font-bold">{stats.byDepartment.length}</p>
+                </div>
+                <Briefcase className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Department Breakdown */}
+      {stats && stats.byDepartment.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Employees by Department</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {stats.byDepartment.map((dept) => (
+                <div
+                  key={dept.department}
+                  className="flex items-center justify-between rounded-lg border border-border px-4 py-2"
+                >
+                  <span className="font-medium">{dept.department}</span>
+                  <Badge variant="outline">{dept.count}</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Employee Directory Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Employee Directory</CardTitle>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search employees..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-64"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {employeesQuery.isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredEmployees.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              {searchTerm ? "No employees match your search." : "No employees found."}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="hidden md:grid grid-cols-[2fr_2fr_1.5fr_1.5fr_1.5fr_1fr] gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <div>Name</div>
+                <div>Email</div>
+                <div>Department</div>
+                <div>Designation</div>
+                <div>Team</div>
+                <div>Join Date</div>
+              </div>
+              <ul>
+                {filteredEmployees.map((emp) => (
+                  <li
+                    key={emp.userId}
+                    className="grid md:grid-cols-[2fr_2fr_1.5fr_1.5fr_1.5fr_1fr] gap-3 border-b border-border px-4 py-4 last:border-b-0 hover:bg-muted/20 transition-colors"
+                  >
+                    <div>
+                      <div className="font-medium">{emp.fullName || "—"}</div>
+                      {emp.accountStatus !== "active" && (
+                        <Badge variant="outline" className="mt-1 text-xs">
+                          {emp.accountStatus}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {emp.workEmail || emp.personalEmail || "—"}
+                    </div>
+                    <div className="text-sm">
+                      <Badge variant="outline">{emp.department || "Unassigned"}</Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {emp.designation || "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {emp.teamName || "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {emp.doj
+                        ? new Date(emp.doj).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "—"}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

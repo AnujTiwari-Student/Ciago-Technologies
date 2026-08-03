@@ -815,3 +815,140 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
     }
     return Array.from(groups.values()).sort((a, b) => b.total - a.total);
   });
+
+/**
+ * Gets department-aware dashboard metrics.
+ *
+ * Authorization:
+ * - admin, system_engineer, developer: see all data
+ * - hr, manager: see only their department's data
+ */
+export const getDashboardMetrics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{
+    totalApplications: number;
+    applicationsByDepartment: Array<{ department: string; count: number }>;
+    pendingApplications: number;
+    totalPostings: number;
+    postingsByDepartment: Array<{ department: string; count: number }>;
+    activePostings: number;
+    totalHired: number;
+    hiredByDepartment: Array<{ department: string; count: number }>;
+  }> => {
+    await assertHrOrAdmin(context.db, context.userId);
+    const adminDb = getAdminDb();
+
+    const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
+
+    // Build where clause for job postings
+    const postingWhere: any = {};
+    if (scopedDepartmentId) {
+      postingWhere.departmentId = scopedDepartmentId;
+    }
+
+    // Get job postings (with department filter if needed)
+    const postings = await adminDb.jobPosting.findMany({
+      where: postingWhere,
+      select: { id: true, status: true },
+    });
+
+    const postingIds = postings.map((p) => p.id);
+
+    // Get applications for these job postings
+    const applicationWhere: any = {
+      isSoftDeleted: false,
+    };
+    if (postingIds.length > 0) {
+      applicationWhere.roleId = { in: postingIds };
+    } else if (scopedDepartmentId) {
+      // No postings in this department, so no applications either
+      return {
+        totalApplications: 0,
+        applicationsByDepartment: [],
+        pendingApplications: 0,
+        totalPostings: 0,
+        postingsByDepartment: [],
+        activePostings: 0,
+        totalHired: 0,
+        hiredByDepartment: [],
+      };
+    }
+
+    const [applications, totalApplications, pendingApplications, totalHired] = await Promise.all([
+      adminDb.jobApplication.findMany({
+        where: applicationWhere,
+        select: {
+          id: true,
+          status: true,
+          roleId: true,
+        },
+      }),
+      adminDb.jobApplication.count({ where: applicationWhere }),
+      adminDb.jobApplication.count({
+        where: {
+          ...applicationWhere,
+          status: { in: ["applied", "screening", "interviewing"] },
+        },
+      }),
+      adminDb.jobApplication.count({
+        where: {
+          ...applicationWhere,
+          status: "hired",
+        },
+      }),
+    ]);
+
+    // Get department information for job postings
+    const postingsWithDept = await adminDb.jobPosting.findMany({
+      where: postingWhere,
+      select: {
+        id: true,
+        status: true,
+        departmentId: true,
+        department: true,
+      },
+    });
+
+    // Count applications by department
+    const appsByDept = new Map<string, number>();
+    const hiredByDept = new Map<string, number>();
+    for (const app of applications) {
+      const posting = postingsWithDept.find((p) => p.id === app.roleId);
+      const deptName = posting?.department ? (typeof posting.department === 'string' ? posting.department : posting.department.name) : "Unassigned";
+      appsByDept.set(deptName, (appsByDept.get(deptName) || 0) + 1);
+      if (app.status === "hired") {
+        hiredByDept.set(deptName, (hiredByDept.get(deptName) || 0) + 1);
+      }
+    }
+
+    // Count postings by department
+    const postingsByDept = new Map<string, number>();
+    let activePostings = 0;
+    for (const posting of postingsWithDept) {
+      const deptName = posting.department ? (typeof posting.department === 'string' ? posting.department : posting.department.name) : "Unassigned";
+      postingsByDept.set(deptName, (postingsByDept.get(deptName) || 0) + 1);
+      if (posting.status === "published") {
+        activePostings += 1;
+      }
+    }
+
+    return {
+      totalApplications,
+      applicationsByDepartment: Array.from(appsByDept.entries()).map(([department, count]) => ({
+        department,
+        count,
+      })),
+      pendingApplications,
+      totalPostings: postingsWithDept.length,
+      postingsByDepartment: Array.from(postingsByDept.entries()).map(([department, count]) => ({
+        department,
+        count,
+      })),
+      activePostings,
+      totalHired,
+      hiredByDepartment: Array.from(hiredByDept.entries()).map(([department, count]) => ({
+        department,
+        count,
+      })),
+    };
+  });

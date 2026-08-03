@@ -35,6 +35,54 @@ import {
   isFrappeRetryable,
   type FrappeProvisioningResult,
 } from "./frappe-provisioning";
+import { provisionFrappeUser } from "./frappe-user-provisioning";
+
+/**
+ * NON-BLOCKING: Provision Frappe User after Employee enrichment succeeds.
+ * Failure here does NOT roll back the successful Employee enrichment.
+ */
+async function provisionUserAfterEnrichment(
+  applicationId: string,
+  employeeName: string,
+  email: string,
+  fullName: string,
+  userId: string,
+  db: PrismaClient,
+  client: FrappeClient,
+  correlationId: string | undefined,
+  logPrefix: string
+): Promise<void> {
+  try {
+    console.log(`${logPrefix} Provisioning Frappe User for ${email}`);
+
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || fullName;
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : null;
+
+    const userResult = await provisionFrappeUser(
+      applicationId,
+      employeeName,
+      email,
+      firstName,
+      lastName,
+      userId,
+      db,
+      client,
+      correlationId
+    );
+
+    if (userResult.success) {
+      console.log(`${logPrefix} Frappe User provisioned: ${userResult.action} - ${userResult.message}`);
+    } else {
+      console.warn(`${logPrefix} Frappe User provisioning failed (non-blocking): ${userResult.error}`);
+    }
+  } catch (error) {
+    console.warn(
+      `${logPrefix} Frappe User provisioning threw (non-blocking):`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
 
 /**
  * Complete onboarding data for HIRED enrichment
@@ -418,6 +466,19 @@ export async function upsertFrappeEmployeeAtHired(
             logPrefix
           );
 
+          // Non-blocking: provision Frappe User (idempotent - safe on repeat)
+          await provisionUserAfterEnrichment(
+            applicationId,
+            application.frappeEmployeeName,
+            application.email,
+            application.fullName,
+            application.userId,
+            db,
+            client,
+            correlationId,
+            logPrefix
+          );
+
           return {
             success: true,
             employeeName: application.frappeEmployeeName,
@@ -466,6 +527,19 @@ export async function upsertFrappeEmployeeAtHired(
               lifecycleVersion: { increment: 1 },
             },
           });
+
+          // Non-blocking: provision Frappe User after enrichment
+          await provisionUserAfterEnrichment(
+            applicationId,
+            existing.name,
+            application.email,
+            application.fullName,
+            application.userId,
+            db,
+            client,
+            correlationId,
+            logPrefix
+          );
 
           await db.auditLog.create({
             data: {
@@ -563,6 +637,19 @@ export async function upsertFrappeEmployeeAtHired(
               logPrefix
             );
 
+            // Non-blocking: provision Frappe User after enrichment
+            await provisionUserAfterEnrichment(
+              applicationId,
+              existing.name,
+              application.email,
+              application.fullName,
+              application.userId,
+              db,
+              client,
+              correlationId,
+              logPrefix
+            );
+
             await db.auditLog.create({
               data: {
                 action: "FRAPPE_EMPLOYEE_RECONCILED_FROM_EMPLOYEES_TABLE",
@@ -630,6 +717,19 @@ export async function upsertFrappeEmployeeAtHired(
         provisioningResult.employeeName,
         onboardingData,
         client,
+        logPrefix
+      );
+
+      // Non-blocking: provision Frappe User after enrichment
+      await provisionUserAfterEnrichment(
+        applicationId,
+        provisioningResult.employeeName,
+        onboardingData.email,
+        onboardingData.fullName,
+        application.userId,
+        db,
+        client,
+        correlationId,
         logPrefix
       );
 

@@ -45,6 +45,9 @@ export type FrappeEmployee = {
   emergency_phone?: string;
   relation?: string;
 
+  // User link
+  user_id?: string; // Link to User (email)
+
   // System fields
   creation?: string;
   modified?: string;
@@ -101,6 +104,9 @@ export type UpdateEmployeePayload = {
   employment_type?: string;
   branch?: string;
 
+  // User link
+  user_id?: string; // Link to User (email)
+
   // Status change
   status?: "Active" | "Inactive" | "Suspended" | "Left";
   relieving_date?: string; // When status = "Left"
@@ -129,4 +135,35 @@ export type FrappeAPIResponse<T> = {
  */
 export type FrappeListResponse<T> = {
   data: Array<{ name: string } & Partial<T>>;
+};
+
+/**
+ * Frappe User record structure
+ * Based on /api/resource/User
+ */
+export type FrappeUser = {
+  name: string; // Email (primary key)
+  email: string;
+  enabled: number; // 1 = enabled, 0 = disabled
+  first_name: string;
+  last_name?: string;
+  full_name?: string;
+  user_type: "System User" | "Website User";
+  roles?: Array<{ role: string; parent: string }>;
+  send_welcome_email?: number; // 1 = send, 0 = don't send
+  creation?: string;
+  modified?: string;
+};
+
+/**
+ * Payload for creating a new Frappe User
+ */
+export type CreateUserPayload = {
+  email: string;
+  first_name: string;
+  last_name?: string;
+  user_type?: "System User" | "Website User";
+  enabled?: number;
+  send_welcome_email?: number;
+  roles?: Array<{ role: string }>;
 };

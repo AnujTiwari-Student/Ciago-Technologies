@@ -89,6 +89,10 @@ export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Cap
       flags.ess_auto_provisioning_enabled ?? getCapabilityDefault(FEATURE_FLAGS.essAutoProvisioning),
     orangehrm_salary_sync_enabled:
       flags.orangehrm_salary_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.orangehrmSalarySync),
+    orangehrm_employee_sync_enabled:
+      flags.orangehrm_employee_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.orangehrmEmployeeSync),
+    frappe_employee_sync_enabled:
+      flags.frappe_employee_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.frappeEmployeeSync),
     resend_email_sending_enabled:
       flags.resend_email_sending_enabled ?? getCapabilityDefault(FEATURE_FLAGS.resendEmailSending),
     auto_offboarding_trigger_enabled:

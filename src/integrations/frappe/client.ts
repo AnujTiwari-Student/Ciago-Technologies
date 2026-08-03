@@ -14,6 +14,8 @@ import type {
   FrappeAPIResponse,
   FrappeListResponse,
   FrappeErrorResponse,
+  FrappeUser,
+  CreateUserPayload,
 } from "./types";
 
 export class FrappeError extends Error {
@@ -263,6 +265,104 @@ export class FrappeClient {
       console.error("Failed to search employees by email:", error);
       return [];
     }
+  }
+
+  // ============================================================
+  // USER MANAGEMENT METHODS
+  // ============================================================
+
+  /**
+   * Get a Frappe User by email
+   *
+   * @param email User email (primary key)
+   * @returns User record or null if not found
+   */
+  async getUser(email: string): Promise<FrappeUser | null> {
+    try {
+      const response = await this.request<FrappeAPIResponse<FrappeUser>>(
+        `/api/resource/User/${encodeURIComponent(email)}`
+      );
+      return response.data;
+    } catch (error) {
+      if (error instanceof FrappeError && error.statusCode === 404) {
+        return null; // User not found
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new Frappe User with secure invitation
+   *
+   * SECURITY: Uses Frappe's send_welcome_email mechanism for secure password setup.
+   * Password is NOT stored in CiagoTech. User receives invitation link to set own password.
+   *
+   * @param payload User creation payload
+   * @returns Created user record
+   */
+  async createUser(payload: CreateUserPayload): Promise<FrappeUser> {
+    const response = await this.request<FrappeAPIResponse<FrappeUser>>(
+      "/api/resource/User",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          user_type: payload.user_type || "System User",
+          enabled: payload.enabled !== undefined ? payload.enabled : 1,
+          send_welcome_email: payload.send_welcome_email !== undefined ? payload.send_welcome_email : 1,
+        }),
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Link a Frappe User to an Employee via user_id field
+   *
+   * @param employeeName Employee ID (HR-EMP-XXXXX)
+   * @param userEmail User email to link
+   */
+  async linkUserToEmployee(employeeName: string, userEmail: string): Promise<void> {
+    await this.updateEmployee(employeeName, {
+      user_id: userEmail,
+    });
+  }
+
+  /**
+   * Update Frappe User roles
+   * Must be called AFTER linking User to Employee (Frappe removes Employee/ESS roles if no linked employee)
+   *
+   * @param email User email
+   * @param roles Array of role objects
+   */
+  async updateUserRoles(email: string, roles: Array<{ role: string }>): Promise<void> {
+    await this.request<FrappeAPIResponse<FrappeUser>>(
+      `/api/resource/User/${encodeURIComponent(email)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          roles: roles.map((r) => ({ role: r.role, doctype: "Has Role" })),
+        }),
+      }
+    );
+  }
+
+  /**
+   * Disable a Frappe User (offboarding)
+   *
+   * @param email User email
+   */
+  async disableUser(email: string): Promise<void> {
+    await this.request<FrappeAPIResponse<FrappeUser>>(
+      `/api/resource/User/${encodeURIComponent(email)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: 0,
+        }),
+      }
+    );
   }
 }
 
