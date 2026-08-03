@@ -183,3 +183,33 @@ export async function isOrangeHRMEmployeeSyncEnabled(target?: FlagTargetContext)
     DEFAULT_CAPABILITIES.orangehrm_employee_sync_enabled,
   );
 }
+
+/**
+ * Controls whether Frappe HR employee is automatically created at APPLIED state.
+ * When false, no Frappe provisioning occurs at APPLIED.
+ * When true, APPLIED status transition triggers employee creation in Frappe HR.
+ * Independent of OrangeHRM flag - both can be enabled for parallel testing.
+ * DEFAULT: false (must be explicitly enabled)
+ *
+ * Priority: 1) Environment variable FRAPPE_EMPLOYEE_SYNC_ENABLED
+ *           2) ConfigCat flag frappe_employee_sync_enabled
+ *           3) Default false
+ */
+export async function isFrappeEmployeeSyncEnabled(target?: FlagTargetContext): Promise<boolean> {
+  // Allow environment variable override for development validation
+  // This is critical for testing before ConfigCat flag is registered
+  const envOverride = process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED;
+  if (envOverride === "true") {
+    return true;
+  }
+  if (envOverride === "false") {
+    return false;
+  }
+
+  // Fall back to ConfigCat
+  return isFlagOn(
+    "frappe_employee_sync_enabled",
+    target,
+    DEFAULT_CAPABILITIES.frappe_employee_sync_enabled,
+  );
+}

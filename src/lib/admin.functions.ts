@@ -44,8 +44,38 @@ async function assertAdmin(_db: any, userId: string) {
 
 async function assertHrOrAdmin(_db: any, userId: string) {
   const adminDb = getAdminDb();
-  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
+  const count = await adminDb.userRole.count({
+    where: { userId, role: { in: ["admin", "hr"] } },
+  });
   if (count === 0) throw new Error("Forbidden");
+}
+
+/**
+ * Determines if the user's roles require department-scoped data.
+ * Admin and system-level roles see all data.
+ * HR and manager roles see only their department's data.
+ */
+async function shouldScopeToDepartment(userId: string): Promise<string | null> {
+  const adminDb = getAdminDb();
+  const roles = await adminDb.userRole.findMany({
+    where: { userId },
+    select: { role: true, departmentId: true },
+  });
+
+  const roleSet = new Set(roles.map((r) => r.role));
+
+  // Admin and system roles see everything
+  if (roleSet.has("admin") || roleSet.has("system_engineer") || roleSet.has("developer")) {
+    return null; // No department filtering
+  }
+
+  // HR and manager roles are department-scoped
+  if (roleSet.has("hr") || roleSet.has("manager")) {
+    const departmentId = roles.find((r) => r.departmentId)?.departmentId;
+    return departmentId ?? null;
+  }
+
+  return null; // Default: no filtering
 }
 
 export const checkIsAdmin = createServerFn({ method: "GET" })
@@ -64,8 +94,28 @@ export const listAllApplications = createServerFn({ method: "GET" })
     await assertHrOrAdmin(context.db, context.userId);
     const adminDb = getAdminDb();
 
+    // Determine if we need to scope by department
+    const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
+
+    // If department scoping is required, first get the relevant job postings
+    let roleIdFilter: string[] | undefined;
+    if (scopedDepartmentId) {
+      const departmentPostings = await adminDb.jobPosting.findMany({
+        where: { departmentId: scopedDepartmentId },
+        select: { id: true },
+      });
+      roleIdFilter = departmentPostings.map((p) => p.id);
+      if (roleIdFilter.length === 0) {
+        // No postings in this department, return empty array
+        return [];
+      }
+    }
+
     const apps = await adminDb.jobApplication.findMany({
-      where: { isSoftDeleted: false },
+      where: {
+        isSoftDeleted: false,
+        ...(roleIdFilter ? { roleId: { in: roleIdFilter } } : {}),
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -246,12 +296,14 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       });
     }
 
-    // Phase 2: If applied, create durable integration event (non-blocking processing)
+    // Phase 2/3: If applied, create durable integration events (non-blocking processing)
     if (data.status === "applied" && prior && prior.status !== "applied") {
-      // CRITICAL: Create integration event synchronously to ensure provisioning intent is recorded
+      // CRITICAL: Create integration events synchronously to ensure provisioning intent is recorded
       // Processing happens asynchronously, but event creation must succeed
+      const { createIntegrationEvent, generateIdempotencyKey } = await import("@/lib/integration-events");
+
+      // OrangeHRM provisioning (existing)
       try {
-        const { createIntegrationEvent, generateIdempotencyKey } = await import("@/lib/integration-events");
         const { handleApplicationApplied } = await import("@/lib/orangehrm-applied-handler");
         const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
 
@@ -306,6 +358,62 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         // Status update still succeeds, but provisioning intent not recorded
         // Admin must manually create event or trigger provisioning
       }
+
+      // Phase 3: Frappe HR provisioning (NEW - independent flag)
+      try {
+        const { handleFrappeApplicationApplied } = await import("@/lib/frappe-applied-handler");
+        const { createFrappeClient } = await import("@/integrations/frappe/client");
+
+        // Create event SYNCHRONOUSLY
+        const idempotencyKey = generateIdempotencyKey(
+          "frappe_employee_provision",
+          "job_application",
+          data.id
+        );
+
+        const eventResult = await createIntegrationEvent(adminDb, {
+          eventType: "frappe_employee_provision",
+          entityType: "job_application",
+          entityId: data.id,
+          idempotencyKey,
+          correlationId: `status-update-frappe-${data.id}`,
+          source: "application_status_update",
+          maxAttempts: 3,
+        });
+
+        console.log("[applied-frappe] Integration event created", {
+          applicationId: data.id,
+          eventId: eventResult.id,
+          alreadyExists: eventResult.alreadyExists,
+        });
+
+        // Process asynchronously ONLY if event was newly created or is pending
+        if (!eventResult.alreadyCompleted) {
+          const client = createFrappeClient();
+
+          // Non-blocking processing - event is already durably recorded
+          handleFrappeApplicationApplied({
+            db: adminDb,
+            client,
+            applicationId: data.id,
+            correlationId: `status-update-frappe-${data.id}`,
+          }).catch((e) => {
+            console.error("[applied-frappe] Async provisioning processing failed", {
+              applicationId: data.id,
+              eventId: eventResult.id,
+              error: e.message,
+            });
+            // Event exists and can be retried by background worker or manual intervention
+          });
+        }
+      } catch (eventError) {
+        // Event creation itself failed - log but don't block
+        console.error("[applied-frappe] CRITICAL: Failed to create integration event", {
+          applicationId: data.id,
+          error: eventError instanceof Error ? eventError.message : String(eventError),
+        });
+        // Status update still succeeds, but Frappe provisioning intent not recorded
+      }
     }
 
     // If hired, provision employee record and OrangeHRM
@@ -326,7 +434,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         ? (posting.department as any)
         : null;
 
-      // Phase 3: OrangeHRM employee upsert/enrichment at HIRED
+      // Phase 3: OrangeHRM employee upsert/enrichment at HIRED (existing)
       // Employee was created at APPLIED state (Phase 2)
       // HIRED reconciles/updates the existing employee with full onboarding data
       // NEVER creates duplicate employee - uses centralized provisioning for fallback
@@ -381,13 +489,67 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         console.error("[hire-flow] Failed to trigger OrangeHRM upsert/enrichment", lookupError);
       }
 
-      // Create employee record in our system
+      // Phase 3: Frappe HR employee upsert/enrichment at HIRED (NEW)
+      // Independent of OrangeHRM - controlled by separate feature flag
+      // Employee was created at APPLIED state - HIRED enriches the existing employee
+      // NEVER creates duplicate employee
+      let frappeEmployeeName: string | null = null;
+
+      try {
+        const { createFrappeClient } = await import("@/integrations/frappe/client");
+        const { handleFrappeApplicationHired } = await import("@/lib/frappe-hired-handler-orchestration");
+
+        const client = createFrappeClient();
+
+        console.log("[hire-flow] Triggering Phase 3 Frappe upsert/enrichment");
+
+        // Non-blocking call: HIRED flow must not fail due to Frappe issues
+        handleFrappeApplicationHired({
+          db: adminDb,
+          client,
+          applicationId: prior.id,
+          candidateId: prior.userId,
+          correlationId: `status-update-hired-frappe-${prior.id}`,
+        }).catch((e) => {
+          console.error("[hire-flow] Frappe upsert/enrichment trigger failed", {
+            applicationId: prior.id,
+            error: e.message,
+          });
+        });
+
+        // Load frappeEmployeeName for local Employee record creation
+        const application = await adminDb.jobApplication.findUnique({
+          where: { id: prior.id },
+          select: {
+            frappeEmployeeName: true,
+            frappeProvisioningState: true,
+          },
+        });
+
+        frappeEmployeeName = application?.frappeEmployeeName || null;
+
+        if (frappeEmployeeName) {
+          console.log("[hire-flow] Frappe employee name available", {
+            employeeName: frappeEmployeeName,
+            provisioningState: application?.frappeProvisioningState,
+          });
+        } else {
+          console.log(
+            "[hire-flow] Frappe employee name not yet available (provisioning may be in progress or flag OFF)"
+          );
+        }
+      } catch (lookupError) {
+        console.error("[hire-flow] Failed to trigger Frappe upsert/enrichment", lookupError);
+      }
+
+      // Create employee record in our system (includes both OrangeHRM and Frappe IDs)
       try {
         await adminDb.employee.upsert({
           where: { userId: prior.userId },
           create: {
             userId: prior.userId,
             orangehrmEmployeeId,
+            frappeEmployeeName,
             designation: prior.roleTitle,
             employmentType: posting?.employmentType ?? "full_time",
             department: validDept,
@@ -397,6 +559,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
           },
           update: {
             orangehrmEmployeeId,
+            frappeEmployeeName,
             designation: prior.roleTitle,
             employmentType: posting?.employmentType ?? "full_time",
             department: validDept,
@@ -568,7 +731,23 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
     await assertHrOrAdmin(context.db, context.userId);
     const adminDb = getAdminDb();
 
+    const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
+
+    // If department scoping is required, first get the relevant job postings
+    let roleIdFilter: string[] | undefined;
+    if (scopedDepartmentId) {
+      const departmentPostings = await adminDb.jobPosting.findMany({
+        where: { departmentId: scopedDepartmentId },
+        select: { id: true },
+      });
+      roleIdFilter = departmentPostings.map((p) => p.id);
+      if (roleIdFilter.length === 0) {
+        return [];
+      }
+    }
+
     const apps = await adminDb.jobApplication.findMany({
+      where: roleIdFilter ? { roleId: { in: roleIdFilter } } : {},
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

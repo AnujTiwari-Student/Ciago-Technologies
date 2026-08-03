@@ -83,6 +83,24 @@ const STATUS_OPTIONS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DEV USER ROLES — assign dashboard roles to development accounts
+// These entries are looked up by email via clerk_user_map.
+// Roles: admin = full admin, system_engineer = system/infra access, developer = dev dashboard access
+// ─────────────────────────────────────────────────────────────────────────────
+const DEV_USER_ROLES: { email: string; roles: string[]; department_code: string }[] = [
+  {
+    email: "anujavengers@gmail.com",
+    roles: ["admin", "system_engineer", "developer"],
+    department_code: "ENG",
+  },
+  {
+    email: "atpay2901@gmail.com",
+    roles: ["admin", "system_engineer", "developer"],
+    department_code: "ENG",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SEED EXECUTION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -121,6 +139,39 @@ async function main() {
     );
   }
   console.log(`✓ status_options: ${STATUS_OPTIONS.length} rows`);
+
+  // Seed dev user roles (idempotent via ON CONFLICT)
+  let devRolesAssigned = 0;
+  for (const devUser of DEV_USER_ROLES) {
+    // Look up user_id from clerk_user_map by email
+    const userResult = await client.query(
+      `SELECT auth_user_id FROM clerk_user_map WHERE lower(email) = lower($1)`,
+      [devUser.email]
+    );
+    if (userResult.rows.length === 0) {
+      console.log(`  ⚠ skipping ${devUser.email} — not in clerk_user_map (user has not signed up yet)`);
+      continue;
+    }
+    const userId = userResult.rows[0].auth_user_id;
+
+    // Look up department_id
+    const deptResult = await client.query(
+      `SELECT id FROM departments WHERE code = $1`,
+      [devUser.department_code]
+    );
+    const departmentId = deptResult.rows[0]?.id ?? null;
+
+    for (const role of devUser.roles) {
+      await client.query(
+        `INSERT INTO user_roles (id, user_id, role, department_id)
+         VALUES (gen_random_uuid(), $1, $2::app_role, $3)
+         ON CONFLICT (user_id, role) DO UPDATE SET department_id = COALESCE($3, user_roles.department_id)`,
+        [userId, role, departmentId]
+      );
+      devRolesAssigned++;
+    }
+  }
+  console.log(`✓ dev_user_roles: ${devRolesAssigned} role assignments`);
 
   console.log("\n✅ Seed complete\n");
 }

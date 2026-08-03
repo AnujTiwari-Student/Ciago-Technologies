@@ -61,18 +61,12 @@ export interface FrappeApplicationAppliedResult {
 /**
  * Check if Frappe employee sync is enabled
  *
- * TODO: Create separate frappe_employee_sync_enabled flag
- * For now, can use environment variable or reuse orangehrm flag during transition
+ * Uses feature-flags.server.ts for consistent flag evaluation
+ * Independent of OrangeHRM flag - allows parallel operation during migration
  */
 async function isFrappeEmployeeSyncEnabled(): Promise<boolean> {
-  // Check environment variable
-  if (process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED === "true") {
-    return true;
-  }
-
-  // During migration: can share orangehrm flag or have separate flag
-  // This allows parallel operation during testing
-  return false; // Default: disabled until explicitly enabled
+  const { isFrappeEmployeeSyncEnabled: checkFlag } = await import("@/lib/feature-flags.server");
+  return checkFlag();
 }
 
 /**

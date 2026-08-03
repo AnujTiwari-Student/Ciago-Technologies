@@ -781,6 +781,8 @@ enum AppRole {
   employee
   hr
   manager
+  system_engineer
+  developer
 
   @@map("app_role")
   @@schema("public")

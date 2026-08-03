@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { getMyRoles, type MyRolesPayload } from "@/lib/roles.functions";
+import type { AppRole } from "@prisma/client";
 
 export type MyRoles = {
   isAdmin: boolean;
@@ -8,6 +9,8 @@ export type MyRoles = {
   isManager: boolean;
   isEmployee: boolean;
   isStaff: boolean;
+  isDashboardUser: boolean;
+  roles: AppRole[];
   departmentId: string | null;
   checked: boolean;
   loading: boolean;
@@ -44,16 +47,14 @@ export function useMyRoles(): MyRoles {
     return () => { cancelled = true; };
   }, [user, loading]);
 
-  const isAdmin = payload?.isAdmin ?? false;
-  const isHr = payload?.isHr ?? false;
-  const isManager = payload?.isManager ?? false;
-  const isEmployee = payload?.isEmployee ?? false;
   return {
-    isAdmin,
-    isHr,
-    isManager,
-    isEmployee,
-    isStaff: isAdmin || isHr || isManager || isEmployee,
+    isAdmin: payload?.isAdmin ?? false,
+    isHr: payload?.isHr ?? false,
+    isManager: payload?.isManager ?? false,
+    isEmployee: payload?.isEmployee ?? false,
+    isStaff: payload?.isStaff ?? false,
+    isDashboardUser: payload?.isDashboardUser ?? false,
+    roles: payload?.roles ?? [],
     departmentId: payload?.departmentId ?? null,
     checked,
     loading,

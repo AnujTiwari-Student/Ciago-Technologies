@@ -43,8 +43,33 @@ export const listEmploymentTypes = createServerFn({ method: "GET" }).handler(asy
 async function assertAdminOrHr(_db: any, userId: string) {
   const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
-  const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
+  const count = await adminDb.userRole.count({
+    where: { userId, role: { in: ["admin", "hr"] } },
+  });
   if (count === 0) throw new Error("Forbidden");
+}
+
+async function shouldScopeToDepartment(userId: string): Promise<string | null> {
+  const adminDb = getAdminDb();
+  const roles = await adminDb.userRole.findMany({
+    where: { userId },
+    select: { role: true, departmentId: true },
+  });
+
+  const roleSet = new Set(roles.map((r) => r.role));
+
+  // Admin and system roles see everything
+  if (roleSet.has("admin") || roleSet.has("system_engineer") || roleSet.has("developer")) {
+    return null;
+  }
+
+  // HR and manager roles are department-scoped
+  if (roleSet.has("hr") || roleSet.has("manager")) {
+    const departmentId = roles.find((r) => r.departmentId)?.departmentId;
+    return departmentId ?? null;
+  }
+
+  return null;
 }
 
 export const listAllJobPostings = createServerFn({ method: "GET" })
@@ -52,7 +77,11 @@ export const listAllJobPostings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertAdminOrHr(context.db, context.userId);
     const adminDb = getAdminDb();
+
+    const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
+
     const rows = await adminDb.jobPosting.findMany({
+      where: scopedDepartmentId ? { departmentId: scopedDepartmentId } : {},
       orderBy: { createdAt: "desc" },
     });
     return rows as unknown as JobPosting[];

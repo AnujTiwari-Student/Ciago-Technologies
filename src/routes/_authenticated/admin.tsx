@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { fallback, zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -92,7 +92,7 @@ import {
   type JobPosting,
 } from "@/lib/jobPostings.functions";
 import { useLookups } from "@/hooks/use-lookups";
-import { requireRoles, requireDashboardEnabled } from "./-guard";
+import { requireDashboardAccess } from "./-guard";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
@@ -105,9 +105,8 @@ export const Route = createFileRoute("/_authenticated/admin")({
     }),
   ),
   beforeLoad: async () => {
-    const { userId, roles } = await requireRoles("/admin");
-    if (!roles.has("admin")) throw redirect({ to: "/forbidden" });
-    return { currentUserId: userId };
+    const { userId, appRoles, departmentId } = await requireDashboardAccess("/admin");
+    return { currentUserId: userId, appRoles, departmentId };
   },
   head: () => ({
     meta: [

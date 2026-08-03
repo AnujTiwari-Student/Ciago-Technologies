@@ -180,11 +180,11 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const { authButtonEnabled } = RootRoute.useRouteContext();
   const { user } = useAuth();
-  const { isAdmin } = useMyRoles();
+  const { isAdmin, isDashboardUser } = useMyRoles();
 
-  const items: NavItem[] = isAdmin ? adminNavItems : publicNavItems;
-  const homeHref = isAdmin ? "/admin" : "/";
-  const isStaff = isAdmin;
+  const items: NavItem[] = isDashboardUser ? adminNavItems : publicNavItems;
+  const homeHref = isDashboardUser ? "/admin" : "/";
+  const isStaff = isDashboardUser;
 
   return (
     <header className="glass-nav sticky top-0 z-50 w-full">

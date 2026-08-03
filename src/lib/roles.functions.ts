@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAdminDb } from "@/lib/db/admin";
+import type { AppRole } from "@prisma/client";
+import { canAccessDashboard } from "@/lib/dashboard-access";
 
 export type MyRoleRow = {
   role: string;
@@ -13,6 +15,8 @@ export type MyRolesPayload = {
   isManager: boolean;
   isEmployee: boolean;
   isStaff: boolean;
+  isDashboardUser: boolean;
+  roles: AppRole[];
   departmentId: string | null;
 };
 
@@ -28,22 +32,28 @@ export type MyEmployeeAccessPayload = {
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyRolesPayload> => {
-    // Use adminDb to bypass RLS — user's own role must always be readable
     const adminDb = getAdminDb();
     const rows = await adminDb.userRole.findMany({
       where: { userId: context.userId },
       select: { role: true, departmentId: true },
     });
 
-    const roles = new Set(rows.map((r) => r.role));
-    const isAdmin = roles.has("admin");
+    const roles = rows.map((r) => r.role);
+    const roleSet = new Set(roles);
+    const isAdmin = roleSet.has("admin");
+    const isHr = isAdmin || roleSet.has("hr");
+    const isManager = roleSet.has("manager");
+    const isEmployee = roleSet.has("employee");
     const departmentId = rows.find((r) => r.departmentId)?.departmentId ?? null;
+
     return {
       isAdmin,
-      isHr: isAdmin,
-      isManager: false,
-      isEmployee: false,
-      isStaff: isAdmin,
+      isHr,
+      isManager,
+      isEmployee,
+      isStaff: isAdmin || isHr || isManager || isEmployee,
+      isDashboardUser: canAccessDashboard(roles),
+      roles,
       departmentId,
     };
   });
@@ -69,15 +79,15 @@ export const getMyEmployeeAccess = createServerFn({ method: "GET" })
       }),
     ]);
 
-    const roles = new Set(roleRows.map((r) => r.role));
-    const isAdmin = roles.has("admin");
+    const roleSet = new Set(roleRows.map((r) => r.role));
+    const isAdmin = roleSet.has("admin");
 
     return {
       userId: context.userId,
       isAdmin,
-      isHr: isAdmin,
-      isManager: false,
-      isEmployee: false,
+      isHr: isAdmin || roleSet.has("hr"),
+      isManager: roleSet.has("manager"),
+      isEmployee: roleSet.has("employee"),
       hasPreDojOnboarding: onboardingRows.length > 0,
     };
   });
