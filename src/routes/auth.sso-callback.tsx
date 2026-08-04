@@ -1,119 +1,67 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { FLAGS } from "@/lib/feature-flags";
-import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
+import { useUser } from "@clerk/tanstack-react-start";
 import { resolveMyPortal } from "@/lib/portal.functions";
 import { ensureClerkMapping } from "@/integrations/clerk/ensure-mapping.server";
-import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
-import { useClerk, useUser } from "@clerk/tanstack-react-start";
 
 export const Route = createFileRoute("/auth/sso-callback")({
-  beforeLoad: async () => {
-    await enforceSsoCallbackAccess();
-  },
   component: SsoCallbackPage,
 });
 
-export async function enforceSsoCallbackAccess(): Promise<void> {
-  if (!FLAGS.USE_CLERK_AUTH) {
-    throw redirect({ to: "/auth" });
-  }
-  const enabled = await isClerkAuthEnabledFn();
-  if (!enabled) {
-    throw redirect({ to: "/forbidden", search: { reason: "clerk_auth_disabled" } });
-  }
-}
-
-declare global {
-  interface Window {
-    __clerkAuthToken?: string;
-    __clerkReady?: boolean;
-  }
-}
-
-async function waitForClerkToken(timeoutMs = 5000): Promise<string | null> {
-  if (typeof window === "undefined") return null;
-  if (window.__clerkAuthToken) return window.__clerkAuthToken;
-  if (window.__clerkReady) return null;
-
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const interval = setInterval(() => {
-      if (window.__clerkAuthToken) {
-        clearInterval(interval);
-        resolve(window.__clerkAuthToken);
-      } else if (window.__clerkReady || Date.now() - start > timeoutMs) {
-        clearInterval(interval);
-        resolve(null);
-      }
-    }, 50);
-  });
-}
-
 function SsoCallbackPage() {
-  const navigate = useNavigate();
-  const clerk = useClerk();
-  const { user: clerkUser, isLoaded } = useUser();
-  const [redirecting, setRedirecting] = useState(false);
-  const [attemptedRedirect, setAttemptedRedirect] = useState(false);
+  const { user, isLoaded, isSignedIn } = useUser();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (redirecting || attemptedRedirect) return;
+    if (done) return;
     if (!isLoaded) return;
 
-    const finishSignIn = async () => {
-      setAttemptedRedirect(true);
-      setRedirecting(true);
-      try {
-        const token = await waitForClerkToken();
-        if (!token) {
-          throw new Error("Clerk session token is not ready yet");
+    if (!isSignedIn || !user) {
+      // Clerk loaded but no session — user not authenticated
+      // Wait a bit longer in case session is still being established
+      const timeout = setTimeout(() => {
+        if (!done) {
+          window.location.href = "/auth";
         }
-
-        const mapping = await ensureClerkMapping();
-        if (!mapping.ok) {
-          throw new Error(`Failed to ensure user mapping: ${mapping.reason}`);
-        }
-
-        const dest = await resolveMyPortal({ data: { portal: "candidate", requested: "/" } });
-        toast.success("Signed in successfully.");
-        navigate({ to: dest });
-      } catch (err) {
-        console.error("[sso-callback] Failed to complete OAuth callback:", err);
-        toast.error("Authentication incomplete. Please try again.");
-        navigate({ to: "/auth" });
-      }
-    };
-
-    if (clerkUser || clerk.session) {
-      void finishSignIn();
-      return;
+      }, 5000);
+      return () => clearTimeout(timeout);
     }
 
-    const giveUpTimer = setTimeout(() => {
-      if (!attemptedRedirect && isLoaded && !clerkUser && !clerk.session) {
-        console.error("[sso-callback] No Clerk session after OAuth redirect");
-        toast.error("Authentication incomplete. Please try again.");
-        navigate({ to: "/auth" });
-      }
-    }, 5000);
+    // User is signed in — finish the flow
+    setDone(true);
 
-    return () => clearTimeout(giveUpTimer);
-  }, [clerkUser, isLoaded, clerk.session, navigate, redirecting, attemptedRedirect]);
+    (async () => {
+      try {
+        await ensureClerkMapping();
+        const dest = await resolveMyPortal({ data: { portal: "candidate", requested: "/" } });
+        window.location.href = dest;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Authentication failed";
+        setError(msg);
+        setTimeout(() => {
+          window.location.href = "/auth";
+        }, 3000);
+      }
+    })();
+  }, [isLoaded, isSignedIn, user, done]);
 
   return (
-    <>
-      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4">
-        <p className="text-sm text-muted-foreground">
-          {!isLoaded
-            ? "Completing sign-in…"
-            : redirecting
-              ? "Redirecting…"
-              : "Verifying authentication…"}
-        </p>
-      </main>
-      <Toaster />
-    </>
+    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4">
+      {error ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-center">
+          <p className="text-sm font-semibold text-destructive">Authentication Error</p>
+          <p className="mt-2 text-xs text-destructive/80">{error}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Redirecting to login...</p>
+        </div>
+      ) : (
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent" />
+          <p className="mt-4 text-sm text-muted-foreground">
+            Completing sign-in...
+          </p>
+        </div>
+      )}
+    </main>
   );
 }

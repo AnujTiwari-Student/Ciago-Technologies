@@ -364,6 +364,238 @@ export class FrappeClient {
       }
     );
   }
+
+  // ============================================================
+  // JOB OPENING MANAGEMENT METHODS
+  // ============================================================
+
+  /**
+   * Create a new Job Opening in Frappe HR
+   *
+   * @param payload Job Opening creation payload
+   * @returns Created Job Opening record with name
+   */
+  async createJobOpening(payload: any): Promise<{ name: string }> {
+    const response = await this.request<FrappeAPIResponse<{ name: string }>>(
+      "/api/resource/Job Opening",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Get a Job Opening by name (ID)
+   *
+   * @param name Job Opening name/ID
+   * @returns Job Opening record or null if not found
+   */
+  async getJobOpening(name: string): Promise<any | null> {
+    try {
+      const response = await this.request<FrappeAPIResponse<any>>(
+        `/api/resource/Job Opening/${encodeURIComponent(name)}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (error instanceof FrappeError && error.statusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Update a Job Opening
+   *
+   * @param name Job Opening name/ID
+   * @param payload Fields to update (partial update)
+   * @returns Updated Job Opening record
+   */
+  async updateJobOpening(name: string, payload: any): Promise<any> {
+    const response = await this.request<FrappeAPIResponse<any>>(
+      `/api/resource/Job Opening/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * List all Job Openings (paginated)
+   *
+   * @param limit Max results (default: 20)
+   * @param offset Starting offset (default: 0)
+   * @returns List of Job Openings (partial data)
+   */
+  async listJobOpenings(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Job Opening?limit_start=${offset}&limit_page_length=${limit}`
+    );
+
+    return response.data;
+  }
+
+  // ============================================================
+  // JOB APPLICANT MANAGEMENT METHODS
+  // ============================================================
+
+  /**
+   * Create a new Job Applicant in Frappe HR
+   *
+   * @param payload Job Applicant creation payload
+   * @returns Created Job Applicant record with name
+   */
+  async createJobApplicant(payload: any): Promise<{ name: string }> {
+    const response = await this.request<FrappeAPIResponse<{ name: string }>>(
+      "/api/resource/Job Applicant",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Get a Job Applicant by name (ID)
+   *
+   * @param name Job Applicant name/ID
+   * @returns Job Applicant record or null if not found
+   */
+  async getJobApplicant(name: string): Promise<any | null> {
+    try {
+      const response = await this.request<FrappeAPIResponse<any>>(
+        `/api/resource/Job Applicant/${encodeURIComponent(name)}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (error instanceof FrappeError && error.statusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Update a Job Applicant
+   *
+   * @param name Job Applicant name/ID
+   * @param payload Fields to update (partial update)
+   * @returns Updated Job Applicant record
+   */
+  async updateJobApplicant(name: string, payload: any): Promise<any> {
+    const response = await this.request<FrappeAPIResponse<any>>(
+      `/api/resource/Job Applicant/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * List all Job Applicants (paginated)
+   *
+   * @param limit Max results (default: 20)
+   * @param offset Starting offset (default: 0)
+   * @returns List of Job Applicants (partial data)
+   */
+  async listJobApplicants(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Job Applicant?limit_start=${offset}&limit_page_length=${limit}`
+    );
+
+    return response.data;
+  }
+
+  // ============================================================
+  // MASTER DATA METHODS
+  // ============================================================
+
+  /**
+   * List all Designations
+   * @param limit Max results (0 = no limit)
+   * @param offset Starting offset
+   */
+  async listDesignations(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const limitParam = limit === 0 ? 999999 : limit;
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Designation?limit_start=${offset}&limit_page_length=${limitParam}`
+    );
+    return response.data;
+  }
+
+  /**
+   * List all Departments
+   * @param limit Max results (0 = no limit)
+   * @param offset Starting offset
+   */
+  async listDepartments(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const limitParam = limit === 0 ? 999999 : limit;
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Department?limit_start=${offset}&limit_page_length=${limitParam}`
+    );
+    return response.data;
+  }
+
+  /**
+   * List all Employment Types
+   * @param limit Max results (0 = no limit)
+   * @param offset Starting offset
+   */
+  async listEmploymentTypes(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const limitParam = limit === 0 ? 999999 : limit;
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Employment Type?limit_start=${offset}&limit_page_length=${limitParam}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new Designation
+   */
+  async createDesignation(name: string, description?: string): Promise<{ name: string }> {
+    const response = await this.request<FrappeAPIResponse<{ name: string }>>(
+      `/api/resource/Designation`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          designation_name: name,
+          description: description || `Auto-created from job posting sync`,
+        }),
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new Department
+   */
+  async createDepartment(name: string, company: string): Promise<{ name: string }> {
+    const response = await this.request<FrappeAPIResponse<{ name: string }>>(
+      `/api/resource/Department`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          department_name: name,
+          company: company,
+          is_group: 0,
+        }),
+      }
+    );
+    return response.data;
+  }
 }
 
 /**

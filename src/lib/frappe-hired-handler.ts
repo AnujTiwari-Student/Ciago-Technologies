@@ -94,6 +94,13 @@ export interface FrappeOnboardingData {
   email: string;
   roleTitle: string;
 
+  // Personal Details
+  gender: string | null;
+  dateOfBirth: string | null; // YYYY-MM-DD format
+  maritalStatus: string | null;
+  bloodGroup: string | null;
+  salutation: string | null;
+
   // Employment
   department: string | null;
   employmentType: string | null;
@@ -112,6 +119,7 @@ export interface FrappeOnboardingData {
   contactNumber: string | null;
   workEmail: string | null;
   address: string | null;
+  permanentAddress: string | null;
 
   // Emergency contact
   emergencyContact: {
@@ -203,11 +211,20 @@ export interface FrappeHiredResult {
 export function extractFrappeOnboardingData(
   sources: FrappeOnboardingDataSources
 ): FrappeOnboardingData {
+  const formState = sources.onboardingRecord?.formState || {};
+
   return {
     // Identity
     fullName: sources.application.fullName,
     email: sources.application.email,
     roleTitle: sources.onboardingRecord?.roleTitle || sources.application.roleTitle,
+
+    // Personal Details (from formState)
+    gender: (formState.gender as string) || null,
+    dateOfBirth: (formState.date_of_birth as string) || null,
+    maritalStatus: (formState.marital_status as string) || null,
+    bloodGroup: (formState.blood_group as string) || null,
+    salutation: (formState.salutation as string) || null,
 
     // Employment
     department:
@@ -239,11 +256,12 @@ export function extractFrappeOnboardingData(
       : null,
     salaryCurrency: sources.employee?.salaryCurrency || "INR",
 
-    // Contact
-    personalEmail: sources.employee?.personalEmail || sources.application.email,
-    contactNumber: sources.employee?.contactNumber || null,
+    // Contact (from formState and employee)
+    personalEmail: (formState.personal_email as string) || sources.employee?.personalEmail || sources.application.email,
+    contactNumber: (formState.personal_phone as string) || sources.employee?.contactNumber || null,
     workEmail: sources.employee?.workEmail || null,
-    address: sources.employee?.address || null,
+    address: (formState.current_address as string) || sources.employee?.address || null,
+    permanentAddress: (formState.permanent_address as string) || null,
 
     // Emergency contact
     emergencyContact: sources.onboardingRecord?.emergencyContact
@@ -302,6 +320,23 @@ async function enrichFrappeEmployee(
     updatePayload.middle_name = middleName;
   }
 
+  // Personal details
+  if (onboardingData.salutation) {
+    updatePayload.salutation = onboardingData.salutation;
+  }
+  if (onboardingData.gender) {
+    updatePayload.gender = onboardingData.gender;
+  }
+  if (onboardingData.dateOfBirth) {
+    updatePayload.date_of_birth = onboardingData.dateOfBirth;
+  }
+  if (onboardingData.maritalStatus) {
+    updatePayload.marital_status = onboardingData.maritalStatus;
+  }
+  if (onboardingData.bloodGroup) {
+    updatePayload.blood_group = onboardingData.bloodGroup;
+  }
+
   // Contact details
   if (onboardingData.workEmail) {
     updatePayload.company_email = onboardingData.workEmail;
@@ -314,6 +349,9 @@ async function enrichFrappeEmployee(
   }
   if (onboardingData.address) {
     updatePayload.current_address = onboardingData.address;
+  }
+  if (onboardingData.permanentAddress) {
+    updatePayload.permanent_address = onboardingData.permanentAddress;
   }
 
   // Job details - date_of_joining is critical
@@ -332,6 +370,12 @@ async function enrichFrappeEmployee(
     if (onboardingData.emergencyContact.relationship) {
       updatePayload.relation = onboardingData.emergencyContact.relationship;
     }
+  }
+
+  // Custom fields
+  updatePayload.custom_employment_status = "Hired";
+  if (onboardingData.email) {
+    updatePayload.custom_email = onboardingData.email;
   }
 
   // Link fields - Phase 2: Skip if not set (requires on-demand creation in future)

@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-function waitForClerkToken(timeoutMs = 3000): Promise<string | null> {
+function waitForClerkToken(timeoutMs = 5000): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
   const token = window.__clerkAuthToken;
   if (token) return Promise.resolve(token);
@@ -25,7 +25,7 @@ function waitForClerkToken(timeoutMs = 3000): Promise<string | null> {
         clearInterval(interval);
         resolve(null);
       }
-    }, 50);
+    }, 100);
   });
 }
 

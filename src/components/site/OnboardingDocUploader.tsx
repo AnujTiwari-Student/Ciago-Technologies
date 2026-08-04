@@ -60,7 +60,8 @@ export function OnboardingDocUploader({ onboardingId, userId, docKey, document }
     onError: (e: any) => toast.error(e?.message || "Could not remove document"),
   });
 
-  const locked = document && (document.status === "approved" || document.status === "rejected");
+  // Only lock approved documents - allow re-upload for rejected/changes_requested
+  const locked = document && document.status === "approved";
 
   async function handlePick(file: File) {
     if (file.size > MAX_BYTES) {
@@ -77,7 +78,12 @@ export function OnboardingDocUploader({ onboardingId, userId, docKey, document }
       const safeExt = (ext || "bin").toLowerCase().slice(0, 6);
       const path = `${userId}/${onboardingId}/${docKey}-${Date.now()}.${safeExt}`;
       const buf = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
       await uploadFn({
         data: { bucket: "onboarding-docs", path, base64, contentType: file.type },
       });

@@ -9,16 +9,12 @@
  * Usage: npx tsx scripts/seed-reference-data.ts
  */
 
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
 
 const DEPARTMENTS = [
   { code: "ENG", name: "Engineering", description: "Product Engineering & Platform" },
@@ -36,48 +32,61 @@ const DEPARTMENTS = [
 ];
 
 const EMPLOYMENT_TYPES = [
-  { code: "FULL_TIME", label: "Full-Time", sortOrder: 1 },
-  { code: "PART_TIME", label: "Part-Time", sortOrder: 2 },
-  { code: "CONTRACT", label: "Contract", sortOrder: 3 },
-  { code: "INTERN", label: "Internship", sortOrder: 4 },
-  { code: "PROBATION", label: "Probation", sortOrder: 5 },
+  { code: "full_time", label: "Full-time", sortOrder: 1 },
+  { code: "part_time", label: "Part-time", sortOrder: 2 },
+  { code: "internship", label: "Internship", sortOrder: 3 },
+  { code: "apprenticeship", label: "Apprenticeship", sortOrder: 4 },
+  { code: "contractor", label: "Contractor", sortOrder: 5 },
 ];
 
 const STATUS_OPTIONS = [
-  { kind: "application", code: "APPLIED", label: "Applied", sortOrder: 1 },
-  { kind: "application", code: "SCREENING", label: "Screening", sortOrder: 2 },
-  { kind: "application", code: "INTERVIEWING", label: "Interviewing", sortOrder: 3 },
-  { kind: "application", code: "OFFERED", label: "Offered", sortOrder: 4 },
-  { kind: "application", code: "HIRED", label: "Hired", sortOrder: 5 },
-  { kind: "application", code: "REJECTED", label: "Rejected", sortOrder: 6 },
+  { kind: "job_posting", code: "draft", label: "Draft", sortOrder: 10 },
+  { kind: "job_posting", code: "published", label: "Published", sortOrder: 20 },
+  { kind: "job_posting", code: "internal_only", label: "Internal only", sortOrder: 30 },
+  { kind: "job_posting", code: "closed", label: "Closed", sortOrder: 40 },
+  { kind: "job_posting", code: "archived", label: "Archived", sortOrder: 50 },
+  { kind: "application", code: "applied", label: "Applied", sortOrder: 10 },
+  { kind: "application", code: "screening", label: "Screening", sortOrder: 20 },
+  { kind: "application", code: "interviewing", label: "Interviewing", sortOrder: 30 },
+  { kind: "application", code: "offered", label: "Offered", sortOrder: 40 },
+  { kind: "application", code: "hired", label: "Hired", sortOrder: 50 },
+  { kind: "application", code: "rejected", label: "Rejected", sortOrder: 60 },
+  { kind: "user_account", code: "active", label: "Active", sortOrder: 10 },
+  { kind: "user_account", code: "inactive", label: "Inactive", sortOrder: 20 },
+  { kind: "user_account", code: "suspended", label: "Suspended", sortOrder: 30 },
 ];
 
 async function main() {
   console.log("🌱 Seeding reference data...\n");
 
-  // Clear existing data
   console.log("📦 Clearing existing reference data...");
   await pool.query("TRUNCATE TABLE departments, employment_types, status_options CASCADE");
   console.log("✓ Cleared\n");
 
-  // Seed departments
   console.log("📦 Seeding departments...");
   for (const dept of DEPARTMENTS) {
-    await prisma.department.create({ data: dept });
+    await pool.query(
+      `INSERT INTO departments (code, name, description) VALUES ($1, $2, $3)`,
+      [dept.code, dept.name, dept.description]
+    );
     console.log(`  ✓ ${dept.name}`);
   }
 
-  // Seed employment types
   console.log("\n📦 Seeding employment types...");
   for (const empType of EMPLOYMENT_TYPES) {
-    await prisma.employmentType.create({ data: empType });
+    await pool.query(
+      `INSERT INTO employment_types (code, label, sort_order) VALUES ($1, $2, $3)`,
+      [empType.code, empType.label, empType.sortOrder]
+    );
     console.log(`  ✓ ${empType.label}`);
   }
 
-  // Seed status options
   console.log("\n📦 Seeding status options...");
   for (const status of STATUS_OPTIONS) {
-    await prisma.statusOption.create({ data: status });
+    await pool.query(
+      `INSERT INTO status_options (kind, code, label, sort_order) VALUES ($1, $2, $3, $4)`,
+      [status.kind, status.code, status.label, status.sortOrder]
+    );
     console.log(`  ✓ ${status.label}`);
   }
 
@@ -95,5 +104,4 @@ main()
   })
   .finally(async () => {
     await pool.end();
-    await prisma.$disconnect();
   });

@@ -175,6 +175,23 @@ function getFrappeCompanyName(): string {
 }
 
 /**
+ * Map internal lowercase status to Frappe Title Case custom_employment_status.
+ * Frappe's Select field validates exact case match.
+ */
+const STATUS_TO_FRAPPE: Record<string, string> = {
+  applied: "Applied",
+  screening: "In Progress",
+  interviewing: "In Progress",
+  offered: "Offered",
+  hired: "Hired",
+  rejected: "Rejected",
+};
+
+export function toFrappeEmploymentStatus(status: string): string {
+  return STATUS_TO_FRAPPE[status] || status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/**
  * Single canonical function to provision Frappe employee at APPLIED state
  *
  * IDEMPOTENCY GUARANTEES:
@@ -431,6 +448,8 @@ export async function provisionFrappeEmployee(
       company: companyName,
       personal_email: application.email,
       company_email: application.email,
+      custom_employment_status: toFrappeEmploymentStatus(application.status),
+      custom_email: application.email,
     });
 
     console.log(`${logPrefix} Employee created in Frappe`, {

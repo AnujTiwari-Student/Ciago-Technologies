@@ -10,9 +10,15 @@ const inputSchema = z.object({
   roleTitle: z.string().trim().min(1).max(200),
   fullName: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(200),
+  phoneNumber: z.string().trim().max(50).optional().or(z.literal("")),
+  country: z.string().trim().max(100).optional().or(z.literal("")),
+  coverLetter: z.string().trim().max(10000).optional().or(z.literal("")),
   portfolioUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
   resumeStoragePath: z.string().trim().max(500).optional().or(z.literal("")),
   resumeLink: z.string().trim().url().max(500).optional().or(z.literal("")),
+  expectedSalaryCurrency: z.string().trim().max(10).optional().or(z.literal("")),
+  expectedSalaryMin: z.string().trim().max(20).optional().or(z.literal("")),
+  expectedSalaryMax: z.string().trim().max(20).optional().or(z.literal("")),
   turnstileToken: z.string().max(4096).optional().or(z.literal("")),
   hp: z.string().max(200).optional().or(z.literal("")),
 });
@@ -62,9 +68,15 @@ export const submitApplication = createServerFn({ method: "POST" })
         roleTitle: data.roleTitle,
         fullName: data.fullName,
         email: data.email,
+        phoneNumber: data.phoneNumber || null,
+        country: data.country || null,
+        coverLetter: data.coverLetter || null,
         portfolioUrl: data.portfolioUrl || null,
         resumeStoragePath: data.resumeStoragePath || null,
         resumeLink: data.resumeLink || null,
+        expectedSalaryCurrency: data.expectedSalaryCurrency || "INR",
+        expectedSalaryMin: data.expectedSalaryMin ? BigInt(data.expectedSalaryMin) : null,
+        expectedSalaryMax: data.expectedSalaryMax ? BigInt(data.expectedSalaryMax) : null,
         status: "applied",
       },
     });
@@ -110,6 +122,43 @@ export const submitApplication = createServerFn({ method: "POST" })
       }
     } else {
       console.warn("[applications] RESEND_API_KEY not set — skipping notification email.");
+    }
+
+    // Trigger Frappe HR provisioning (non-blocking)
+    try {
+      const { isFrappeEmployeeSyncEnabled } = await import("@/lib/feature-flags.server");
+      const frappeEnabled = await isFrappeEmployeeSyncEnabled();
+      if (frappeEnabled) {
+        const { handleFrappeApplicationApplied } = await import("@/lib/frappe-applied-handler");
+        const { createFrappeClient } = await import("@/integrations/frappe/client");
+        const client = createFrappeClient();
+        handleFrappeApplicationApplied({
+          db: adminDb,
+          client,
+          applicationId: inserted.id,
+          correlationId: `new-application-${inserted.id}`,
+        }).catch((e) => {
+          console.error("[apply-frappe] provisioning failed", { applicationId: inserted.id, error: e.message });
+        });
+      }
+    } catch (e) {
+      console.error("[apply-frappe] trigger failed", e instanceof Error ? e.message : e);
+    }
+
+    // Trigger Frappe Job Applicant sync (non-blocking, Stage 2)
+    try {
+      const { isFrappeEmployeeSyncEnabled } = await import("@/lib/feature-flags.server");
+      const frappeEnabled = await isFrappeEmployeeSyncEnabled();
+      if (frappeEnabled) {
+        const { syncJobApplicationToFrappe } = await import("@/lib/frappe-applicant-sync");
+        const { createFrappeClient } = await import("@/integrations/frappe/client");
+        const client = createFrappeClient();
+        syncJobApplicationToFrappe(adminDb, client, inserted.id).catch((e) => {
+          console.error("[apply-frappe-applicant] sync failed", { applicationId: inserted.id, error: e.message });
+        });
+      }
+    } catch (e) {
+      console.error("[apply-frappe-applicant] trigger failed", e instanceof Error ? e.message : e);
     }
 
     return { ok: true, applicationId: inserted.id, emailSent };

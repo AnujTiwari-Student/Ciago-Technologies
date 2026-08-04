@@ -196,20 +196,7 @@ export async function isOrangeHRMEmployeeSyncEnabled(target?: FlagTargetContext)
  *           3) Default false
  */
 export async function isFrappeEmployeeSyncEnabled(target?: FlagTargetContext): Promise<boolean> {
-  // Allow environment variable override for development validation
-  // This is critical for testing before ConfigCat flag is registered
-  const envOverride = process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED;
-  if (envOverride === "true") {
-    return true;
-  }
-  if (envOverride === "false") {
-    return false;
-  }
-
-  // Fall back to ConfigCat
-  return isFlagOn(
-    "frappe_employee_sync_enabled",
-    target,
-    DEFAULT_CAPABILITIES.frappe_employee_sync_enabled,
-  );
+  // Frappe sync is ALWAYS ENABLED across all environments (dev, staging, production)
+  // Frappe is now the primary HR system — no feature flag needed
+  return true;
 }

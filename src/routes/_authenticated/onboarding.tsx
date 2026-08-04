@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { CheckCircle2, FileSignature, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { CheckCircle2, FileSignature, MessageSquareWarning, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
@@ -87,6 +87,8 @@ function OnboardingPage() {
   const { data: offer, isLoading } = useQuery({
     queryKey: ["my-onboarding"],
     queryFn: () => fetchOffer(),
+    staleTime: 0, // Always consider data stale so it refetches
+    refetchOnMount: "always", // Always refetch when component mounts
   });
 
   const [step, setStep] = useState(1);
@@ -107,6 +109,9 @@ function OnboardingPage() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [bloodGroup, setBloodGroup] = useState("");
   const [nationality, setNationality] = useState("Indian");
+  const [gender, setGender] = useState("");
+  const [maritalStatus, setMaritalStatus] = useState("");
+  const [salutation, setSalutation] = useState("");
 
   // Banking details
   const [bankName, setBankName] = useState("");
@@ -130,11 +135,18 @@ function OnboardingPage() {
   useEffect(() => {
     if (!offer?.onboarding || hydrated) return;
     const rec = offer.onboarding;
-    if (rec.status === "submitted") setStep(4);
-    else if (rec.current_step && rec.current_step >= 1 && rec.current_step <= 3) {
+    // If changes requested or rejected, go to step 2 (documents) so they can re-upload
+    if (rec.verification_status === "changes_requested" || rec.verification_status === "rejected") {
+      setStep(2);
+    } else if (rec.status === "submitted") {
+      setStep(4);
+    } else if (rec.current_step && rec.current_step >= 1 && rec.current_step <= 3) {
       setStep(rec.current_step);
-    } else if (rec.emergency_contact) setStep(3);
-    else if (rec.status === "accepted") setStep(2);
+    } else if (rec.emergency_contact) {
+      setStep(3);
+    } else if (rec.status === "accepted") {
+      setStep(2);
+    }
 
     // Restore emergency contact and addresses from form_state
     const fs = (rec.form_state ?? {}) as Record<string, unknown>;
@@ -166,6 +178,9 @@ function OnboardingPage() {
     setDateOfBirth((fs.date_of_birth as string) ?? "");
     setBloodGroup((fs.blood_group as string) ?? "");
     setNationality((fs.nationality as string) ?? "Indian");
+    setGender((fs.gender as string) ?? "");
+    setMaritalStatus((fs.marital_status as string) ?? "");
+    setSalutation((fs.salutation as string) ?? "");
 
     // Restore banking details
     setBankName((fs.bank_name as string) ?? "");
@@ -228,6 +243,9 @@ function OnboardingPage() {
             date_of_birth: dateOfBirth,
             blood_group: bloodGroup,
             nationality: nationality,
+            gender: gender,
+            marital_status: maritalStatus,
+            salutation: salutation,
             bank_name: bankName,
             account_number: accountNumber,
             ifsc_code: ifscCode,
@@ -264,6 +282,9 @@ function OnboardingPage() {
     dateOfBirth,
     bloodGroup,
     nationality,
+    gender,
+    maritalStatus,
+    salutation,
     bankName,
     accountNumber,
     ifscCode,
@@ -335,8 +356,19 @@ function OnboardingPage() {
   });
 
   const compensation = useMemo(() => {
-    return offer?.onboarding?.compensation_inr ?? 0;
-  }, [offer?.onboarding?.compensation_inr]);
+    // If onboarding record exists with compensation, use it
+    if (offer?.onboarding?.compensation_inr) {
+      return offer.onboarding.compensation_inr;
+    }
+    // Otherwise calculate from job posting salary range
+    if (offer?.salary_max_inr && offer?.salary_min_inr) {
+      return Math.round((offer.salary_min_inr + offer.salary_max_inr) / 2);
+    }
+    if (offer?.salary_min_inr) {
+      return offer.salary_min_inr;
+    }
+    return 0;
+  }, [offer?.onboarding?.compensation_inr, offer?.salary_min_inr, offer?.salary_max_inr]);
 
   // Doc bookkeeping for Step 2 gating.
   const docRequirements = offer?.doc_requirements ?? [];
@@ -361,6 +393,8 @@ function OnboardingPage() {
     personalEmail.trim().length >= 5 &&
     personalPhone.trim().length >= 10 &&
     dateOfBirth.trim().length > 0 &&
+    gender.trim().length > 0 &&
+    maritalStatus.trim().length > 0 &&
     bankName.trim().length >= 2 &&
     accountNumber.trim().length >= 8 &&
     ifscCode.trim().length === 11 &&
@@ -439,7 +473,9 @@ function OnboardingPage() {
               </Button>
             </CardContent>
           </Card>
-        ) : offer.onboarding?.status === "submitted" ? (
+        ) : offer.onboarding?.status === "submitted" &&
+           offer.onboarding?.verification_status !== "changes_requested" &&
+           offer.onboarding?.verification_status !== "rejected" ? (
           <Card className="mt-10 border-emerald-500/40 bg-emerald-500/5">
             <CardContent className="flex flex-col items-center p-10 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
@@ -461,6 +497,47 @@ function OnboardingPage() {
           </Card>
         ) : (
           <>
+            {/* Show alert for verification status requiring action */}
+            {offer.onboarding?.verification_status === "changes_requested" && (
+              <Card className="mt-6 border-amber-500/40 bg-amber-500/5">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <MessageSquareWarning className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-900 dark:text-amber-200">Changes Requested</h3>
+                      <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                        HR has requested changes to your onboarding documents. Please review the feedback below and re-upload the necessary documents.
+                      </p>
+                      {offer.onboarding.rejection_feedback && (
+                        <p className="mt-2 text-sm text-amber-900 dark:text-amber-100 font-medium">
+                          Feedback: {offer.onboarding.rejection_feedback}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {offer.onboarding?.verification_status === "rejected" && (
+              <Card className="mt-6 border-rose-500/40 bg-rose-500/5">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <XCircle className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-rose-900 dark:text-rose-200">Onboarding Rejected</h3>
+                      <p className="mt-1 text-sm text-rose-800 dark:text-rose-300">
+                        Your onboarding submission has been rejected. Please review the feedback below, update your documents, and re-submit.
+                      </p>
+                      {offer.onboarding.rejection_feedback && (
+                        <p className="mt-2 text-sm text-rose-900 dark:text-rose-100 font-medium">
+                          Feedback: {offer.onboarding.rejection_feedback}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Stepper step={step} />
             <Card className="mt-6">
               <CardContent className="p-6 sm:p-8">
@@ -480,14 +557,6 @@ function OnboardingPage() {
                     <div className="grid gap-4 rounded-xl border border-border bg-muted/30 p-5 sm:grid-cols-2">
                       <Field label="Position" value={offer.role_title} />
                       <Field label="Department" value={offer.department ?? "—"} />
-                      <Field
-                        label="Start Date"
-                        value={new Date(Date.now() + 21 * 86400000).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      />
                       <Field label="Compensation (Annual CTC)" value={inr.format(compensation)} />
                     </div>
                     <div className="prose prose-sm max-w-none text-sm text-muted-foreground dark:prose-invert">
@@ -548,6 +617,17 @@ function OnboardingPage() {
                       <p className="mt-1 text-sm text-muted-foreground">
                         Every field is saved automatically — come back any time to finish.
                       </p>
+                      {(offer.onboarding.verification_status === "changes_requested" ||
+                        offer.onboarding.verification_status === "rejected") && (
+                        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                            ⚠️ Action Required
+                          </p>
+                          <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                            HR has requested changes. Please review the feedback on each document below and re-upload the corrected files.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Dynamic document uploads based on the job posting's required_onboarding_docs */}
@@ -726,8 +806,88 @@ function OnboardingPage() {
                     </section>
 
                     <section className="space-y-4">
-                      <h3 className="text-sm font-semibold">Personal contact details</h3>
+                      <h3 className="text-sm font-semibold">Personal details</h3>
                       <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="salutation">Salutation (optional)</Label>
+                          <Select value={salutation} onValueChange={(v) => setSalutation(v)}>
+                            <SelectTrigger id="salutation">
+                              <SelectValue placeholder="Select salutation" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Mr">Mr</SelectItem>
+                              <SelectItem value="Ms">Ms</SelectItem>
+                              <SelectItem value="Mrs">Mrs</SelectItem>
+                              <SelectItem value="Dr">Dr</SelectItem>
+                              <SelectItem value="Prof">Prof</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="gender">Gender</Label>
+                          <Select value={gender} onValueChange={(v) => setGender(v)}>
+                            <SelectTrigger id="gender">
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Male">Male</SelectItem>
+                              <SelectItem value="Female">Female</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="dob">Date of birth</Label>
+                          <Input
+                            id="dob"
+                            type="date"
+                            value={dateOfBirth}
+                            onChange={(e) => setDateOfBirth(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="marital-status">Marital status</Label>
+                          <Select value={maritalStatus} onValueChange={(v) => setMaritalStatus(v)}>
+                            <SelectTrigger id="marital-status">
+                              <SelectValue placeholder="Select marital status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Single">Single</SelectItem>
+                              <SelectItem value="Married">Married</SelectItem>
+                              <SelectItem value="Divorced">Divorced</SelectItem>
+                              <SelectItem value="Widowed">Widowed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="blood-group">Blood group</Label>
+                          <Select value={bloodGroup} onValueChange={(v) => setBloodGroup(v)}>
+                            <SelectTrigger id="blood-group">
+                              <SelectValue placeholder="Select blood group" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="A+">A+</SelectItem>
+                              <SelectItem value="A-">A-</SelectItem>
+                              <SelectItem value="B+">B+</SelectItem>
+                              <SelectItem value="B-">B-</SelectItem>
+                              <SelectItem value="O+">O+</SelectItem>
+                              <SelectItem value="O-">O-</SelectItem>
+                              <SelectItem value="AB+">AB+</SelectItem>
+                              <SelectItem value="AB-">AB-</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="nationality">Nationality</Label>
+                          <Input
+                            id="nationality"
+                            value={nationality}
+                            onChange={(e) => setNationality(e.target.value)}
+                            placeholder="Indian"
+                            required
+                          />
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="personal-email">Personal email</Label>
                           <Input
@@ -758,35 +918,6 @@ function OnboardingPage() {
                             value={alternatePhone}
                             onChange={(e) => setAlternatePhone(e.target.value)}
                             placeholder="+91 …"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="dob">Date of birth</Label>
-                          <Input
-                            id="dob"
-                            type="date"
-                            value={dateOfBirth}
-                            onChange={(e) => setDateOfBirth(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="blood-group">Blood group (optional)</Label>
-                          <Input
-                            id="blood-group"
-                            value={bloodGroup}
-                            onChange={(e) => setBloodGroup(e.target.value)}
-                            placeholder="A+, B+, O-, AB+…"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="nationality">Nationality</Label>
-                          <Input
-                            id="nationality"
-                            value={nationality}
-                            onChange={(e) => setNationality(e.target.value)}
-                            placeholder="Indian"
-                            required
                           />
                         </div>
                       </div>

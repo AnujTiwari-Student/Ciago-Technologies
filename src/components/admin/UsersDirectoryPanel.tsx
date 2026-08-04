@@ -5,25 +5,11 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import {
-  Search,
-  Upload,
-  ShieldCheck,
-  ShieldAlert,
-  ShieldX,
-  Lock,
-  FileText,
-  Loader2,
-  User as UserIcon,
-} from "lucide-react";
+import { Search } from "lucide-react";
 
-import { uploadFile } from "@/lib/upload.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -31,35 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 
 import {
   listDirectory,
-  getUserDetail,
-  upsertEmployee,
-  setUserRole,
-  upsertIdentityDoc,
-  verifyIdentityDoc,
-  listAssignables,
+  updateBgCheckStatus,
   DEPT_TYPES,
-  EMPLOYMENT_TYPES,
-  WORK_MODELS,
-  PROBATION_STATUSES,
   BG_CHECK_STATUSES,
-  DOC_VERIFY_STATUSES,
-  ID_DOC_TYPES,
   type DirectoryRow,
-  type AppRole,
 } from "@/lib/users.functions";
 import { useMyRoles } from "@/hooks/use-my-roles";
 
@@ -135,6 +100,50 @@ function KpiCard({
   );
 }
 
+function BgCheckSelect({ row }: { row: DirectoryRow }) {
+  const qc = useQueryClient();
+  const updateBgFn = useServerFn(updateBgCheckStatus);
+
+  const mutation = useMutation({
+    mutationFn: (status: string) =>
+      updateBgFn({ data: { user_id: row.user_id, status } }),
+    onSuccess: () => {
+      toast.success("Background check status updated");
+      qc.invalidateQueries({ queryKey: ["directory"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Update failed"),
+  });
+
+  return (
+    <Select
+      value={row.background_check_status}
+      onValueChange={(v) => mutation.mutate(v)}
+      disabled={mutation.isPending}
+    >
+      <SelectTrigger
+        className={`h-7 w-[130px] text-xs border ${
+          row.background_check_status === "cleared"
+            ? "text-emerald-600 border-emerald-600/30"
+            : row.background_check_status === "flagged"
+              ? "text-rose-600 border-rose-600/30"
+              : row.background_check_status === "in_progress"
+                ? "text-blue-600 border-blue-600/30"
+                : "text-muted-foreground border-muted-foreground/30"
+        }`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {BG_CHECK_STATUSES.map((s) => (
+          <SelectItem key={s} value={s}>
+            {humanize(s)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function UsersDirectoryPanel() {
   const listFn = useServerFn(listDirectory);
   const {
@@ -149,7 +158,6 @@ export function UsersDirectoryPanel() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [deptFilter, setDeptFilter] = useState<string>("all");
-  const [openUser, setOpenUser] = useState<DirectoryRow | null>(null);
 
   // Actor role: determine if user is admin or HR to shape UI
   const { isAdmin: actorIsAdmin, isHr: actorIsHr, checked: rolesChecked } = useMyRoles();
@@ -249,6 +257,10 @@ export function UsersDirectoryPanel() {
                     <Skeleton key={i} className="h-16" />
                   ))}
                 </div>
+              ) : error ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-destructive">Error loading users: {(error as Error).message}</p>
+                </div>
               ) : rows.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
                   {query || roleFilter !== "all" || deptFilter !== "all"
@@ -264,9 +276,8 @@ export function UsersDirectoryPanel() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Role</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Dept</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Designation</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Docs</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Docs Status</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">BG Check</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -284,33 +295,31 @@ export function UsersDirectoryPanel() {
                             </Badge>
                           </td>
                           <td className="py-3 px-2 text-muted-foreground">
-                            {r.department ? DEPT_LABEL[r.department] ?? r.department : "—"}
+                            {r.department ? DEPT_LABEL[r.department] ?? humanize(r.department) : "—"}
                           </td>
                           <td className="py-3 px-2 text-muted-foreground">{r.designation || "—"}</td>
                           <td className="py-3 px-2">
-                            <DocStatusBadge
-                              approvedCount={r.docs_approved_count}
-                              totalCount={r.docs_total_count}
-                            />
+                            <div className="flex items-center gap-2">
+                              <DocStatusBadge
+                                approvedCount={r.docs_approved_count}
+                                totalCount={r.docs_total_count}
+                              />
+                              <Badge
+                                variant="outline"
+                                className={
+                                  r.doc_verification_status === "verified"
+                                    ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                                    : r.doc_verification_status === "rejected"
+                                      ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
+                                      : "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                                }
+                              >
+                                {humanize(r.doc_verification_status)}
+                              </Badge>
+                            </div>
                           </td>
                           <td className="py-3 px-2">
-                            <Badge
-                              variant="outline"
-                              className={
-                                r.background_check_status === "cleared"
-                                  ? "text-emerald-600 border-emerald-600/30"
-                                  : r.background_check_status === "flagged"
-                                    ? "text-rose-600 border-rose-600/30"
-                                    : "text-amber-600 border-amber-600/30"
-                              }
-                            >
-                              {humanize(r.background_check_status)}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-2">
-                            <Button size="sm" variant="ghost" onClick={() => setOpenUser(r)}>
-                              Edit
-                            </Button>
+                            <BgCheckSelect row={r} />
                           </td>
                         </tr>
                       ))}
@@ -322,371 +331,6 @@ export function UsersDirectoryPanel() {
           </Card>
         </>
       )}
-
-      {openUser && (
-        <UserDetailSheet
-          user={openUser}
-          onClose={() => setOpenUser(null)}
-          actorIsAdmin={actorIsAdmin}
-        />
-      )}
     </div>
-  );
-}
-
-function UserDetailSheet({
-  user,
-  onClose,
-  actorIsAdmin,
-}: {
-  user: DirectoryRow;
-  onClose: () => void;
-  actorIsAdmin: boolean;
-}) {
-  const qc = useQueryClient();
-  const fetchDetail = useServerFn(getUserDetail);
-  const upsertEmp = useServerFn(upsertEmployee);
-  const setRole = useServerFn(setUserRole);
-  const upsertDoc = useServerFn(upsertIdentityDoc);
-  const verifyDoc = useServerFn(verifyIdentityDoc);
-  const fetchAssignables = useServerFn(listAssignables);
-
-  const { data: detail, isLoading } = useQuery({
-    queryKey: ["user-detail", user.user_id],
-    queryFn: () => fetchDetail({ data: { user_id: user.user_id } }),
-  });
-
-  const { data: assignables } = useQuery({
-    queryKey: ["assignables"],
-    queryFn: () => fetchAssignables(),
-  });
-
-  const [activeTab, setActiveTab] = useState<"identity" | "organization">("identity");
-
-  // Identity tab state
-  const [fullName, setFullName] = useState("");
-  const [workEmail, setWorkEmail] = useState("");
-  const [personalEmail, setPersonalEmail] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
-  const [address, setAddress] = useState("");
-  const [bgCheckStatus, setBgCheckStatus] = useState("");
-  const [docVerifyStatus, setDocVerifyStatus] = useState("");
-  const [notes, setNotes] = useState("");
-
-  // Organization tab state
-  const [department, setDepartment] = useState("");
-  const [designation, setDesignation] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [doj, setDoj] = useState("");
-  const [employmentType, setEmploymentType] = useState("");
-  const [workModel, setWorkModel] = useState("");
-  const [workLocation, setWorkLocation] = useState("");
-  const [baseSalary, setBaseSalary] = useState("");
-  const [reportingManagerId, setReportingManagerId] = useState("");
-  const [reportingHrId, setReportingHrId] = useState("");
-  const [probationStatus, setProbationStatus] = useState("");
-  const [probationMonths, setProbationMonths] = useState("");
-
-  const [role, setRoleState] = useState<AppRole>("user");
-
-  // Initialize from detail
-  useState(() => {
-    if (!detail) return;
-    setFullName(detail.profile?.full_name ?? "");
-    setWorkEmail(detail.employee?.workEmail ?? "");
-    setPersonalEmail(detail.employee?.personalEmail ?? "");
-    setContactNumber(detail.employee?.contactNumber ?? "");
-    setAddress(detail.employee?.address ?? "");
-    setBgCheckStatus(detail.employee?.backgroundCheckStatus ?? "");
-    setDocVerifyStatus(detail.employee?.docVerificationStatus ?? "");
-    setNotes(detail.employee?.notes ?? "");
-    setDepartment(detail.employee?.department ?? "");
-    setDesignation(detail.employee?.designation ?? "");
-    setTeamName(detail.employee?.teamName ?? "");
-    setDoj(detail.employee?.doj ?? "");
-    setEmploymentType(detail.employee?.employmentType ?? "");
-    setWorkModel(detail.employee?.workModel ?? "");
-    setWorkLocation(detail.employee?.workLocation ?? "");
-    setBaseSalary(detail.employee?.baseSalary?.toString() ?? "");
-    setReportingManagerId(detail.employee?.reportingManagerId ?? "");
-    setReportingHrId(detail.employee?.reportingHrId ?? "");
-    setProbationStatus(detail.employee?.probationStatus ?? "");
-    setProbationMonths(detail.employee?.probationMonths?.toString() ?? "");
-    setRoleState(detail.roles[0] ?? "user");
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      await upsertEmp({
-        data: {
-          user_id: user.user_id,
-          full_name: fullName.trim() || null,
-          work_email: workEmail.trim() || null,
-          personal_email: personalEmail.trim() || null,
-          contact_number: contactNumber.trim() || null,
-          address: address.trim() || null,
-          department: department || null,
-          designation: designation.trim() || null,
-          team_name: teamName.trim() || null,
-          doj: doj || null,
-          employment_type: employmentType || null,
-          work_model: workModel || null,
-          work_location: workLocation.trim() || null,
-          base_salary: baseSalary ? parseFloat(baseSalary) : null,
-          reporting_manager_id: reportingManagerId || null,
-          reporting_hr_id: reportingHrId || null,
-          probation_months: probationMonths ? parseInt(probationMonths) : null,
-          probation_status: probationStatus || undefined,
-          background_check_status: bgCheckStatus || undefined,
-          doc_verification_status: docVerifyStatus || undefined,
-          notes: notes.trim() || null,
-        },
-      });
-
-      if (role !== (detail?.roles[0] ?? "user")) {
-        await setRole({ data: { user_id: user.user_id, role, department_id: null } });
-      }
-    },
-    onSuccess: () => {
-      toast.success("User updated");
-      qc.invalidateQueries({ queryKey: ["directory"] });
-      qc.invalidateQueries({ queryKey: ["user-detail", user.user_id] });
-    },
-    onError: (e: any) => toast.error(e?.message || "Update failed"),
-  });
-
-  return (
-    <Sheet open onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>User Details</SheetTitle>
-          <SheetDescription>{user.email}</SheetDescription>
-        </SheetHeader>
-
-        {isLoading ? (
-          <div className="mt-6 space-y-4">
-            <Skeleton className="h-10" />
-            <Skeleton className="h-10" />
-            <Skeleton className="h-10" />
-          </div>
-        ) : (
-          <div className="mt-6">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="identity">Identity</TabsTrigger>
-                <TabsTrigger value="organization">Organization</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="identity" className="space-y-4 mt-4">
-                <div>
-                  <Label>Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Work Email</Label>
-                  <Input value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Personal Email</Label>
-                  <Input value={personalEmail} onChange={(e) => setPersonalEmail(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Contact Number</Label>
-                  <Input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Address</Label>
-                  <Textarea value={address} onChange={(e) => setAddress(e.target.value)} className="mt-1" rows={3} />
-                </div>
-                <div>
-                  <Label>Background Check Status</Label>
-                  <Select value={bgCheckStatus} onValueChange={setBgCheckStatus}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BG_CHECK_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {humanize(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Document Verification Status</Label>
-                  <Select value={docVerifyStatus} onValueChange={setDocVerifyStatus}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DOC_VERIFY_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {humanize(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Role</Label>
-                  <Select value={role} onValueChange={(v) => setRoleState(v as AppRole)}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Notes</Label>
-                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1" rows={4} />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="organization" className="space-y-4 mt-4">
-                <div>
-                  <Label>Department</Label>
-                  <Select value={department} onValueChange={setDepartment}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {DEPT_TYPES.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {DEPT_LABEL[d]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Designation</Label>
-                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Team Name</Label>
-                  <Input value={teamName} onChange={(e) => setTeamName(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Date of Joining</Label>
-                  <Input type="date" value={doj} onChange={(e) => setDoj(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Employment Type</Label>
-                  <Select value={employmentType} onValueChange={setEmploymentType}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {EMPLOYMENT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {humanize(t)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Work Model</Label>
-                  <Select value={workModel} onValueChange={setWorkModel}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {WORK_MODELS.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {humanize(m)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Work Location</Label>
-                  <Input value={workLocation} onChange={(e) => setWorkLocation(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Base Salary</Label>
-                  <Input value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Reporting Manager</Label>
-                  <Select value={reportingManagerId} onValueChange={setReportingManagerId}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {assignables?.managers.map((m) => (
-                        <SelectItem key={m.user_id} value={m.user_id}>
-                          {m.full_name ?? m.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Reporting HR</Label>
-                  <Select value={reportingHrId} onValueChange={setReportingHrId}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {assignables?.hrs.map((h) => (
-                        <SelectItem key={h.user_id} value={h.user_id}>
-                          {h.full_name ?? h.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Probation Status</Label>
-                  <Select value={probationStatus} onValueChange={setProbationStatus}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROBATION_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {humanize(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Probation Months</Label>
-                  <Input value={probationMonths} onChange={(e) => setProbationMonths(e.target.value)} className="mt-1" />
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            <div className="mt-6 flex gap-3">
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  "Save changes"
-                )}
-              </Button>
-              <Button variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
   );
 }

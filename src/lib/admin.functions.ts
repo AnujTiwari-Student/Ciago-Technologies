@@ -250,6 +250,43 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       data: { status: data.status },
     });
 
+    // Update Frappe custom_employment_status if employee exists
+    if (prior && prior.status !== data.status) {
+      try {
+        const application = await adminDb.jobApplication.findUnique({
+          where: { id: data.id },
+          select: { frappeEmployeeName: true },
+        });
+
+        if (application?.frappeEmployeeName) {
+          const { isFrappeEmployeeSyncEnabled } = await import("@/lib/feature-flags.server");
+          const frappeEnabled = await isFrappeEmployeeSyncEnabled();
+
+          if (frappeEnabled) {
+            const { createFrappeClient } = await import("@/integrations/frappe/client");
+            const client = createFrappeClient();
+
+            // Update custom_employment_status to match new application status
+            const { toFrappeEmploymentStatus } = await import("@/lib/frappe-provisioning");
+            const frappeStatus = toFrappeEmploymentStatus(data.status);
+            await client.updateEmployee(application.frappeEmployeeName, {
+              custom_employment_status: frappeStatus,
+            });
+
+            console.log(`[frappe-status-sync] Updated custom_employment_status to ${frappeStatus}`, {
+              employeeName: application.frappeEmployeeName,
+            });
+          }
+        }
+      } catch (syncError) {
+        console.error("[frappe-status-sync] Failed to update custom_employment_status", {
+          applicationId: data.id,
+          error: syncError instanceof Error ? syncError.message : String(syncError),
+        });
+        // Don't throw - status update in our DB already succeeded
+      }
+    }
+
     // Send notifications and audit log IMMEDIATELY after status update
     // This ensures user gets notified even if employee provisioning fails
     if (prior && prior.status !== data.status) {

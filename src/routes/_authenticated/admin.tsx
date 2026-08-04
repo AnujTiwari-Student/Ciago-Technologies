@@ -87,6 +87,7 @@ import {
   listOnboardingQueue,
   getOnboardingDetail,
   reviewOnboardingDocument,
+  updateOnboardingVerificationStatus,
   type OnboardingQueueRow,
   type OnboardingDetail,
 } from "@/lib/hr.functions";
@@ -632,6 +633,7 @@ function ApplicationsPanel() {
 type PostingFormState = {
   id?: string;
   title: string;
+  designation: string;
   department: string;
   location: string;
   is_remote: boolean;
@@ -642,11 +644,14 @@ type PostingFormState = {
   tags: string; // comma-separated in form
   salary_min_inr: string;
   salary_max_inr: string;
+  publish_salary_range: boolean;
+  closes_on: string;
   status: "draft" | "published" | "internal_only" | "closed" | "archived";
 };
 
 const emptyPosting: PostingFormState = {
   title: "",
+  designation: "",
   department: "Engineering",
   location: "Remote · Global",
   is_remote: true,
@@ -657,6 +662,8 @@ const emptyPosting: PostingFormState = {
   tags: "",
   salary_min_inr: "",
   salary_max_inr: "",
+  publish_salary_range: false,
+  closes_on: "",
   status: "draft",
 };
 
@@ -701,6 +708,7 @@ function JobPostingsPanel() {
     setForm({
       id: p.id,
       title: p.title,
+      designation: p.designation ?? "",
       department: p.department,
       location: p.location,
       is_remote: p.is_remote,
@@ -711,6 +719,8 @@ function JobPostingsPanel() {
       tags: p.tags.join(", "),
       salary_min_inr: p.salary_min_inr?.toString() ?? "",
       salary_max_inr: p.salary_max_inr?.toString() ?? "",
+      publish_salary_range: p.publish_salary_range,
+      closes_on: p.closes_on ?? "",
       status: p.status,
     });
     setOpen(true);
@@ -721,6 +731,7 @@ function JobPostingsPanel() {
     const payload = {
       id: form.id,
       title: form.title.trim(),
+      designation: form.designation.trim() || null,
       department: form.department.trim(),
       location: form.location.trim(),
       is_remote: form.is_remote,
@@ -737,6 +748,8 @@ function JobPostingsPanel() {
         .filter(Boolean),
       salary_min_inr: form.salary_min_inr ? Number(form.salary_min_inr) : null,
       salary_max_inr: form.salary_max_inr ? Number(form.salary_max_inr) : null,
+      publish_salary_range: form.publish_salary_range,
+      closes_on: form.closes_on || null,
       status: form.status,
     };
     upsert.mutate(payload);
@@ -774,13 +787,26 @@ function JobPostingsPanel() {
             </DialogHeader>
             <form onSubmit={submit} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="p-title">Title</Label>
+                <Label htmlFor="p-title">Job Title</Label>
                 <Input
                   id="p-title"
                   required
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="Senior Backend Engineer"
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="p-designation">Designation (for Frappe)</Label>
+                <Input
+                  id="p-designation"
+                  value={form.designation}
+                  onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                  placeholder="Software Engineer"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used in Frappe HR. Leave blank to use Job Title.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
@@ -875,25 +901,47 @@ function JobPostingsPanel() {
                   onChange={(e) => setForm({ ...form, tags: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="p-smin">Salary min (₹)</Label>
-                  <Input
-                    id="p-smin"
-                    type="number"
-                    min="0"
-                    value={form.salary_min_inr}
-                    onChange={(e) => setForm({ ...form, salary_min_inr: e.target.value })}
-                  />
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="p-smin">Salary min (₹/month)</Label>
+                    <Input
+                      id="p-smin"
+                      type="number"
+                      min="0"
+                      value={form.salary_min_inr}
+                      onChange={(e) => setForm({ ...form, salary_min_inr: e.target.value })}
+                      placeholder="500000"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="p-smax">Salary max (₹/month)</Label>
+                    <Input
+                      id="p-smax"
+                      type="number"
+                      min="0"
+                      value={form.salary_max_inr}
+                      onChange={(e) => setForm({ ...form, salary_max_inr: e.target.value })}
+                      placeholder="1200000"
+                    />
+                  </div>
                 </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={form.publish_salary_range}
+                    onCheckedChange={(v) => setForm({ ...form, publish_salary_range: v })}
+                  />
+                  Publish salary range publicly
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label htmlFor="p-smax">Salary max (₹)</Label>
+                  <Label htmlFor="p-closes">Closes on (optional)</Label>
                   <Input
-                    id="p-smax"
-                    type="number"
-                    min="0"
-                    value={form.salary_max_inr}
-                    onChange={(e) => setForm({ ...form, salary_max_inr: e.target.value })}
+                    id="p-closes"
+                    type="date"
+                    value={form.closes_on}
+                    onChange={(e) => setForm({ ...form, closes_on: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -1710,14 +1758,16 @@ function DocumentVerificationPanel() {
     queryFn: () => fetchQueue(),
   });
 
-  const [filter, setFilter] = useState<"all" | "submitted" | "approved">("submitted");
+  const [filter, setFilter] = useState<"all" | "submitted" | "approved" | "rejected" | "changes_requested">("submitted");
   const [selectedRecord, setSelectedRecord] = useState<OnboardingQueueRow | null>(null);
 
   const filtered = useMemo(() => {
     if (!data) return [];
     if (filter === "all") return data;
-    if (filter === "submitted") return data.filter((r) => r.status === "submitted");
+    if (filter === "submitted") return data.filter((r) => r.status === "submitted" && (r.verification_status === "pending" || r.verification_status === "not_submitted"));
     if (filter === "approved") return data.filter((r) => r.verification_status === "approved");
+    if (filter === "rejected") return data.filter((r) => r.verification_status === "rejected");
+    if (filter === "changes_requested") return data.filter((r) => r.verification_status === "changes_requested");
     return data;
   }, [data, filter]);
 
@@ -1748,7 +1798,7 @@ function DocumentVerificationPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={filter === "all" ? "default" : "outline"}
             size="sm"
@@ -1761,14 +1811,31 @@ function DocumentVerificationPanel() {
             size="sm"
             onClick={() => setFilter("submitted")}
           >
-            Pending ({data.filter((r) => r.status === "submitted").length})
+            Pending ({data.filter((r) => r.status === "submitted" && (r.verification_status === "pending" || r.verification_status === "not_submitted")).length})
           </Button>
           <Button
             variant={filter === "approved" ? "default" : "outline"}
             size="sm"
             onClick={() => setFilter("approved")}
+            className="border-emerald-600/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
           >
             Approved ({data.filter((r) => r.verification_status === "approved").length})
+          </Button>
+          <Button
+            variant={filter === "changes_requested" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("changes_requested")}
+            className="border-amber-600/50 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+          >
+            Changes Requested ({data.filter((r) => r.verification_status === "changes_requested").length})
+          </Button>
+          <Button
+            variant={filter === "rejected" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("rejected")}
+            className="border-rose-600/50 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+          >
+            Rejected ({data.filter((r) => r.verification_status === "rejected").length})
           </Button>
         </div>
       </div>
@@ -1846,6 +1913,7 @@ function DocumentDetailDialog({
   const qc = useQueryClient();
   const fetchDetail = useServerFn(getOnboardingDetail);
   const reviewDoc = useServerFn(reviewOnboardingDocument);
+  const updateStatus = useServerFn(updateOnboardingVerificationStatus);
 
   const { data, isLoading } = useQuery<OnboardingDetail>({
     queryKey: ["onboarding-detail", record.onboarding_id],
@@ -1854,6 +1922,8 @@ function DocumentDetailDialog({
 
   const [reviewingDoc, setReviewingDoc] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [overallStatus, setOverallStatus] = useState<string>("");
+  const [overallFeedback, setOverallFeedback] = useState("");
 
   const reviewMutation = useMutation({
     mutationFn: (vars: { document_id: string; status: "approved" | "changes_requested" | "rejected"; feedback?: string }) =>
@@ -1868,9 +1938,22 @@ function DocumentDetailDialog({
     onError: (e: any) => toast.error(e?.message || "Review failed"),
   });
 
+  const statusMutation = useMutation({
+    mutationFn: (vars: { onboarding_id: string; verification_status: "pending" | "approved" | "changes_requested" | "rejected"; rejection_feedback?: string }) =>
+      updateStatus({ data: vars }),
+    onSuccess: () => {
+      toast.success("Overall status updated");
+      qc.invalidateQueries({ queryKey: ["onboarding-detail", record.onboarding_id] });
+      qc.invalidateQueries({ queryKey: ["onboarding-queue"] });
+      setOverallStatus("");
+      setOverallFeedback("");
+    },
+    onError: (e: any) => toast.error(e?.message || "Status update failed"),
+  });
+
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Document Review - {record.candidate_name}</DialogTitle>
           <DialogDescription>
@@ -1893,7 +1976,19 @@ function DocumentDetailDialog({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Verification:</span>
-                <Badge variant="outline">{data.onboarding.verification_status}</Badge>
+                <Badge variant="outline"
+                  className={
+                    data.onboarding.verification_status === "approved"
+                      ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                      : data.onboarding.verification_status === "rejected"
+                      ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
+                      : data.onboarding.verification_status === "changes_requested"
+                      ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                      : ""
+                  }
+                >
+                  {data.onboarding.verification_status}
+                </Badge>
               </div>
               {data.onboarding.submitted_at && (
                 <div className="flex justify-between">
@@ -1905,8 +2000,68 @@ function DocumentDetailDialog({
 
             <Separator />
 
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <h3 className="text-sm font-semibold">Set Overall Verification Status</h3>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="overall-status">Status</Label>
+                  <Select value={overallStatus} onValueChange={setOverallStatus}>
+                    <SelectTrigger id="overall-status">
+                      <SelectValue placeholder="Select overall status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="changes_requested">Changes Requested</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(overallStatus === "rejected" || overallStatus === "changes_requested") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="overall-feedback">Feedback {overallStatus === "rejected" && "(Required)"}</Label>
+                    <Textarea
+                      id="overall-feedback"
+                      value={overallFeedback}
+                      onChange={(e) => setOverallFeedback(e.target.value)}
+                      placeholder="Provide feedback about what needs to be changed..."
+                      rows={3}
+                    />
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={!overallStatus || statusMutation.isPending || (overallStatus === "rejected" && !overallFeedback.trim())}
+                  onClick={() => {
+                    if (overallStatus === "rejected" && !overallFeedback.trim()) {
+                      toast.error("Feedback is required for rejection");
+                      return;
+                    }
+                    statusMutation.mutate({
+                      onboarding_id: data.onboarding.id,
+                      verification_status: overallStatus as any,
+                      rejection_feedback: overallFeedback.trim() || undefined,
+                    });
+                  }}
+                >
+                  {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Update Overall Status
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
             <div>
-              <h3 className="text-sm font-semibold mb-3">Documents ({data.documents.length})</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Documents ({data.documents.length})</h3>
+                {data.documents.some(d => d.is_reupload) && (
+                  <Badge variant="outline" className="bg-sky-500/15 text-sky-600 border-sky-500/30">
+                    🔄 {data.documents.filter(d => d.is_reupload).length} document(s) re-uploaded
+                  </Badge>
+                )}
+              </div>
               {data.documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No documents uploaded yet</p>
               ) : (
@@ -1917,7 +2072,7 @@ function DocumentDetailDialog({
                         <div className="space-y-3">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <FileText className="h-4 w-4 text-muted-foreground" />
                                 <span className="font-medium text-sm">{doc.doc_key}</span>
                                 <Badge
@@ -1932,11 +2087,21 @@ function DocumentDetailDialog({
                                 >
                                   {doc.status}
                                 </Badge>
+                                {doc.is_reupload && (
+                                  <Badge variant="outline" className="bg-sky-500/15 text-sky-600 border-sky-500/30">
+                                    🔄 Re-uploaded (v{doc.version})
+                                  </Badge>
+                                )}
                               </div>
                               {doc.original_filename && (
                                 <p className="text-xs text-muted-foreground mt-1">{doc.original_filename}</p>
                               )}
-                              {doc.feedback && (
+                              {doc.is_reupload && doc.feedback && (
+                                <p className="text-xs text-sky-700 dark:text-sky-400 mt-2 font-medium">
+                                  📝 Previous feedback: {doc.feedback}
+                                </p>
+                              )}
+                              {!doc.is_reupload && doc.feedback && (
                                 <p className="text-xs text-muted-foreground mt-2 italic">
                                   Feedback: {doc.feedback}
                                 </p>
@@ -1981,7 +2146,7 @@ function DocumentDetailDialog({
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="border-amber-600 text-amber-600 hover:bg-amber-50"
+                                  className="border-amber-600 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
                                   onClick={() => {
                                     if (!feedback.trim()) {
                                       toast.error("Feedback is required for requesting changes");
@@ -1996,7 +2161,7 @@ function DocumentDetailDialog({
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="border-rose-600 text-rose-600 hover:bg-rose-50"
+                                  className="border-rose-600 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
                                   onClick={() => {
                                     if (!feedback.trim()) {
                                       toast.error("Feedback is required for rejection");
@@ -2039,29 +2204,6 @@ function DocumentDetailDialog({
                 </div>
               )}
             </div>
-
-            {data.required_docs && data.required_docs.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Required Documents</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {data.required_docs.map((docKey) => {
-                      const uploaded = data.documents.some((d) => d.doc_key === docKey);
-                      return (
-                        <Badge
-                          key={docKey}
-                          variant="outline"
-                          className={uploaded ? "bg-emerald-500/10" : "bg-amber-500/10"}
-                        >
-                          {docKey}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-6">Failed to load details</p>

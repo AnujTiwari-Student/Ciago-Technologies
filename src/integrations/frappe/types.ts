@@ -78,6 +78,10 @@ export type CreateEmployeePayload = {
   emergency_contact_name?: string;
   emergency_phone?: string;
   relation?: string;
+
+  // Custom fields
+  custom_employment_status?: string;
+  custom_email?: string;
 };
 
 /**
@@ -110,6 +114,10 @@ export type UpdateEmployeePayload = {
   // Status change
   status?: "Active" | "Inactive" | "Suspended" | "Left";
   relieving_date?: string; // When status = "Left"
+
+  // Custom fields
+  custom_employment_status?: string;
+  custom_email?: string;
 };
 
 /**

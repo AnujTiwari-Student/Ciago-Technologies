@@ -82,15 +82,21 @@ function MyApplicationsPage() {
     queryKey: ["my-onboarding"],
     queryFn: () => fetchOnboarding(),
     enabled: !isStaff,
+    staleTime: 0, // Always refetch to get latest verification status
+    refetchOnMount: "always",
   });
   // Banner hidden for any elevated role — staff never see candidate onboarding CTAs.
-  // Also hide if onboarding is submitted (awaiting admin verification) or already approved.
+  // Hide "Complete onboarding" banner if:
+  // - Already approved OR has DOJ OR
+  // - Submitted and NOT requiring changes (pending/not_submitted means admin is reviewing)
   const onboardingComplete =
     isStaff ||
     (!!onboarding?.onboarding &&
-      (onboarding.onboarding.status === "submitted" ||
-        onboarding.onboarding.verification_status === "approved" ||
-        !!onboarding.onboarding.doj));
+      (onboarding.onboarding.verification_status === "approved" ||
+        !!onboarding.onboarding.doj ||
+        (onboarding.onboarding.status === "submitted" &&
+          onboarding.onboarding.verification_status !== "changes_requested" &&
+          onboarding.onboarding.verification_status !== "rejected")));
 
   const withdrawMutation = useMutation({
     mutationFn: (id: string) => withdrawFn({ data: { id } }),
@@ -120,7 +126,9 @@ function MyApplicationsPage() {
           </Button>
         </div>
 
-        {!onboardingComplete && data?.some((a) => a.status === "offered" && !a.is_soft_deleted) && (
+        {!onboardingComplete &&
+         data?.some((a) => a.status === "offered" && !a.is_soft_deleted) &&
+         (!onboarding?.onboarding || onboarding.onboarding.status !== "submitted") && (
           <Card className="mt-8 border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-brand/10 to-brand/5">
             <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -148,22 +156,42 @@ function MyApplicationsPage() {
         )}
 
         {!isStaff && onboarding?.onboarding?.status === "submitted" && (
-          <Card className="mt-8 border-brand/40 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent">
+          <Card className={
+            onboarding.onboarding.verification_status === "changes_requested" || onboarding.onboarding.verification_status === "rejected"
+              ? "mt-8 border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent"
+              : "mt-8 border-brand/40 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent"
+          }>
             <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-brand">
-                  Paperwork submitted
+                <p className={
+                  onboarding.onboarding.verification_status === "changes_requested" || onboarding.onboarding.verification_status === "rejected"
+                    ? "text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400"
+                    : "text-xs font-semibold uppercase tracking-widest text-brand"
+                }>
+                  {onboarding.onboarding.verification_status === "changes_requested" || onboarding.onboarding.verification_status === "rejected"
+                    ? "⚠️ Action Required"
+                    : "Paperwork submitted"}
                 </p>
                 <h2 className="mt-1 text-lg font-bold">
-                  {onboarding.onboarding.doj
+                  {onboarding.onboarding.verification_status === "changes_requested"
+                    ? "HR Requested Changes"
+                    : onboarding.onboarding.verification_status === "rejected"
+                    ? "Documents Need Attention"
+                    : onboarding.onboarding.doj
                     ? "Your Date of Joining is set"
                     : "Awaiting your Date of Joining"}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Admin is verifying your documents. Check back for a live countdown and
-                  onboarding status.
+                  {onboarding.onboarding.verification_status === "changes_requested" || onboarding.onboarding.verification_status === "rejected"
+                    ? "Please review the feedback and re-upload your documents."
+                    : "Admin is verifying your documents. Check back for a live countdown and onboarding status."}
                 </p>
               </div>
+              {(onboarding.onboarding.verification_status === "changes_requested" || onboarding.onboarding.verification_status === "rejected") && (
+                <Button asChild className="bg-amber-600 hover:bg-amber-700 text-white">
+                  <Link to="/onboarding">Review & Update</Link>
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}

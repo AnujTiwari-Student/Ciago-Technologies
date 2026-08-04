@@ -31,19 +31,16 @@ export const resolveMyPortal = createServerFn({ method: "POST" })
     });
 
     const roleSet = new Set(roleRows.map((r: any) => r.role));
-    const isStaff = roleSet.has("user") || roleSet.has("admin");
+    const isAdmin = roleSet.has("admin");
+    const isStaff = roleSet.has("user") || isAdmin;
 
-    const { portal, requested } = data;
-    if (portal === "employee") {
-      if (!isStaff) {
-        throw new Error(FORBIDDEN_CORPORATE_ERROR);
-      }
-      if (roleSet.has("admin")) return "/admin";
-      return "/my-applications";
-    }
-    if (isStaff) {
-      throw new Error(STAFF_ON_CANDIDATE_ERROR);
-    }
+    // Route based on roles, not portal parameter
+    // Admin → /admin
+    // Staff/User (including hired/offered) → /my-applications
+    // No role → /my-applications (candidate)
+    if (isAdmin) return "/admin";
+
+    const { requested } = data;
     if (requested === "/") return "/my-applications";
     return requested;
   });

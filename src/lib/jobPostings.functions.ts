@@ -7,6 +7,7 @@ export type JobPosting = {
   id: string;
   job_code: string | null;
   title: string;
+  designation: string | null;
   department: string;
   location: string;
   is_remote: boolean;
@@ -15,9 +16,14 @@ export type JobPosting = {
   description: string;
   requirements: string[];
   tags: string[];
+  currency: string;
+  salary_paid_per: string;
   salary_min_inr: number | null;
   salary_max_inr: number | null;
+  publish_salary_range: boolean;
   status: "draft" | "published" | "internal_only" | "closed" | "archived";
+  closes_on: string | null;
+  frappe_job_opening_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -90,6 +96,7 @@ export const listAllJobPostings = createServerFn({ method: "GET" })
 const upsertSchema = z.object({
   id: z.string().uuid().optional(),
   title: z.string().min(2).max(200),
+  designation: z.string().min(1).max(100).optional().nullable(),
   department: z.string().min(1).max(100),
   location: z.string().min(1).max(120),
   is_remote: z.boolean(),
@@ -100,6 +107,8 @@ const upsertSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20),
   salary_min_inr: z.number().int().nonnegative().nullable(),
   salary_max_inr: z.number().int().nonnegative().nullable(),
+  publish_salary_range: z.boolean().optional().default(false),
+  closes_on: z.string().date().optional().nullable(),
   status: z.enum(["draft", "published", "internal_only", "closed", "archived"]),
 });
 
@@ -114,6 +123,7 @@ export const upsertJobPosting = createServerFn({ method: "POST" })
       where: { id: data.id || "00000000-0000-0000-0000-000000000000" },
       create: {
         title: data.title,
+        designation: data.designation,
         department: data.department,
         location: data.location,
         isRemote: data.is_remote,
@@ -122,13 +132,18 @@ export const upsertJobPosting = createServerFn({ method: "POST" })
         description: data.description,
         requirements: data.requirements,
         tags: data.tags,
+        currency: "INR",
+        salaryPaidPer: "Month",
         salaryMinInr: data.salary_min_inr,
         salaryMaxInr: data.salary_max_inr,
+        publishSalaryRange: data.publish_salary_range ?? false,
+        closesOn: data.closes_on ? new Date(data.closes_on) : null,
         status: data.status as any,
         createdBy: context.userId,
       },
       update: {
         title: data.title,
+        designation: data.designation,
         department: data.department,
         location: data.location,
         isRemote: data.is_remote,
@@ -139,9 +154,28 @@ export const upsertJobPosting = createServerFn({ method: "POST" })
         tags: data.tags,
         salaryMinInr: data.salary_min_inr,
         salaryMaxInr: data.salary_max_inr,
+        publishSalaryRange: data.publish_salary_range ?? false,
+        closesOn: data.closes_on ? new Date(data.closes_on) : null,
         status: data.status as any,
       },
     });
+
+    // Sync to Frappe Job Opening (V2 - Intelligent Matching)
+    try {
+      const { isFrappeEmployeeSyncEnabled } = await import("@/lib/feature-flags.server");
+      const frappeEnabled = await isFrappeEmployeeSyncEnabled();
+
+      if (frappeEnabled) {
+        const { syncJobPostingToFrappe } = await import("@/lib/frappe-job-sync-v2");
+        const { createFrappeClient } = await import("@/integrations/frappe/client");
+        const client = createFrappeClient();
+
+        await syncJobPostingToFrappe(adminDb, client, result.id);
+      }
+    } catch (err) {
+      console.error("[job-posting-frappe-sync] Failed to sync to Frappe:", err);
+      // Don't throw — posting saved successfully, Frappe sync is secondary
+    }
 
     await adminDb.auditLog.create({
       data: {

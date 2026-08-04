@@ -18,6 +18,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   Dialog,
@@ -203,7 +211,13 @@ function Careers() {
   const [resumeUrl, setResumeUrl] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [country, setCountry] = useState("");
+  const [coverLetter, setCoverLetter] = useState("");
   const [portfolio, setPortfolio] = useState("");
+  const [expectedSalaryCurrency, setExpectedSalaryCurrency] = useState("INR");
+  const [expectedSalaryMin, setExpectedSalaryMin] = useState("");
+  const [expectedSalaryMax, setExpectedSalaryMax] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [hp, setHp] = useState("");
 
@@ -243,7 +257,13 @@ function Careers() {
     }
     setResumeFile(null);
     setResumeUrl("");
+    setPhoneNumber("");
+    setCountry("");
+    setCoverLetter("");
     setPortfolio("");
+    setExpectedSalaryCurrency("INR");
+    setExpectedSalaryMin("");
+    setExpectedSalaryMax("");
     setApplying(role);
     trackEvent("apply_start", { role_id: role.id, role_title: role.title });
   }
@@ -273,7 +293,12 @@ function Careers() {
         const safeName = resumeFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         storagePath = `${authUserId}/${Date.now()}-${safeName}`;
         const buf = await resumeFile.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const bytes = new Uint8Array(buf);
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
         await upload({
           data: { bucket: "resumes", path: storagePath, base64, contentType: resumeFile.type || undefined },
         });
@@ -285,9 +310,15 @@ function Careers() {
           roleTitle: submittedFor!.title,
           fullName: name.trim(),
           email: email.trim(),
+          phoneNumber: phoneNumber.trim() || "",
+          country: country.trim() || "",
+          coverLetter: coverLetter.trim() || "",
           portfolioUrl: portfolio.trim() || "",
           resumeStoragePath: storagePath || "",
           resumeLink: resumeUrl.trim() || "",
+          expectedSalaryCurrency: expectedSalaryCurrency || "INR",
+          expectedSalaryMin: expectedSalaryMin.trim() || "",
+          expectedSalaryMax: expectedSalaryMax.trim() || "",
           turnstileToken,
           hp,
         },
@@ -725,6 +756,45 @@ function Careers() {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="a-phone">
+                Phone number <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Input
+                id="a-phone"
+                name="phone"
+                type="tel"
+                placeholder="+1 234 567 8900"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="a-country">
+                Country <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Input
+                id="a-country"
+                name="country"
+                placeholder="India"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="a-cover-letter">
+                Cover letter <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Textarea
+                id="a-cover-letter"
+                name="cover_letter"
+                rows={4}
+                placeholder="Tell us why you're excited about this role..."
+                value={coverLetter}
+                onChange={(e) => setCoverLetter(e.target.value)}
+                className="resize-none"
+              />
+            </div>
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold">
@@ -767,7 +837,9 @@ function Careers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="a-portfolio">Portfolio / GitHub</Label>
+              <Label htmlFor="a-portfolio">
+                Portfolio / GitHub <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
               <Input
                 id="a-portfolio"
                 name="portfolio"
@@ -776,6 +848,62 @@ function Careers() {
                 value={portfolio}
                 onChange={(e) => setPortfolio(e.target.value)}
               />
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-semibold">
+                Salary expectations{" "}
+                <span className="text-muted-foreground">(optional)</span>
+              </p>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="a-salary-currency" className="text-xs text-muted-foreground">
+                    Currency
+                  </Label>
+                  <Select value={expectedSalaryCurrency} onValueChange={setExpectedSalaryCurrency}>
+                    <SelectTrigger id="a-salary-currency">
+                      <SelectValue placeholder="Select currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                      <SelectItem value="USD">USD - US Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                      <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
+                      <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                      <SelectItem value="SGD">SGD - Singapore Dollar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="a-salary-min" className="text-xs text-muted-foreground">
+                      Minimum (annual)
+                    </Label>
+                    <Input
+                      id="a-salary-min"
+                      name="salary_min"
+                      type="number"
+                      placeholder="500000"
+                      value={expectedSalaryMin}
+                      onChange={(e) => setExpectedSalaryMin(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="a-salary-max" className="text-xs text-muted-foreground">
+                      Maximum (annual)
+                    </Label>
+                    <Input
+                      id="a-salary-max"
+                      name="salary_max"
+                      type="number"
+                      placeholder="800000"
+                      value={expectedSalaryMax}
+                      onChange={(e) => setExpectedSalaryMax(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Honeypot — hidden from users, visible to naive bots */}

@@ -69,6 +69,8 @@ export type OnboardingOffer = {
   required_docs: string[];
   doc_requirements: DocRequirement[];
   documents: OnboardingDocument[];
+  salary_min_inr: number | null;
+  salary_max_inr: number | null;
 };
 
 export const ONBOARDING_DOC_LABELS: Record<string, string> = {
@@ -96,7 +98,7 @@ function toOnboardingRecord(r: any): OnboardingRecord {
     role_title: r.roleTitle,
     department: r.department,
     start_date: r.startDate,
-    compensation_inr: r.compensationInr,
+    compensation_inr: r.compensationInr != null ? Number(r.compensationInr) : null,
     offer_accepted_at: r.offerAcceptedAt?.toISOString() ?? null,
     offer_declined_at: r.offerDeclinedAt?.toISOString() ?? null,
     emergency_contact: r.emergencyContact as OnboardingRecord["emergency_contact"],
@@ -146,7 +148,7 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
     const adminDb = getAdminDb();
     const posting = await adminDb.jobPosting.findUnique({
       where: { id: app.roleId },
-      select: { jobCode: true, department: true, requiredOnboardingDocs: true, employmentType: true, trackType: true },
+      select: { jobCode: true, department: true, requiredOnboardingDocs: true, employmentType: true, trackType: true, salaryMinInr: true, salaryMaxInr: true },
     });
 
     const rec = await adminDb.onboardingRecord.findUnique({
@@ -186,6 +188,8 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
       required_docs: docRequirements.filter((d) => d.mandatory).map((d) => d.key),
       doc_requirements: docRequirements,
       documents,
+      salary_min_inr: posting?.salaryMinInr != null ? Number(posting.salaryMinInr) : null,
+      salary_max_inr: posting?.salaryMaxInr != null ? Number(posting.salaryMaxInr) : null,
     };
   });
 
@@ -211,8 +215,9 @@ export const acceptOffer = createServerFn({ method: "POST" })
     });
 
     // Use midpoint of salary range, or min if max not set
+    // BigInt arithmetic: cannot use Math.round with BigInt
     const compensationInr = posting?.salaryMaxInr && posting?.salaryMinInr
-      ? Math.round((posting.salaryMinInr + posting.salaryMaxInr) / 2)
+      ? (posting.salaryMinInr + posting.salaryMaxInr) / BigInt(2)
       : posting?.salaryMinInr ?? null;
 
     const rec = await adminDb.onboardingRecord.upsert({

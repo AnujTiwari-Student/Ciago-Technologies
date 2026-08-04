@@ -48,6 +48,8 @@ export type OnboardingDocDetail = {
   created_at: string;
   updated_at: string;
   signed_url: string | null;
+  version: number;
+  is_reupload: boolean; // true if this is a newer version after changes requested/rejected
 };
 
 export type OnboardingDetail = {
@@ -200,7 +202,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
       : null;
 
     const docs = await adminDb.onboardingDocument.findMany({
-      where: { onboardingId: data.onboarding_id },
+      where: { onboardingId: data.onboarding_id, supersededAt: null },
       orderBy: { createdAt: "asc" },
     });
 
@@ -216,6 +218,12 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
       } catch {
         signed = null;
       }
+
+      // Check if this is a re-upload (version > 1 AND status changed from changes_requested/rejected to pending)
+      const isReupload = (d.version ?? 1) > 1 &&
+                        d.status === "pending" &&
+                        d.reviewedAt !== null; // has been reviewed before
+
       documents.push({
         id: d.id,
         doc_key: d.docKey,
@@ -228,6 +236,8 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
         created_at: d.createdAt.toISOString(),
         updated_at: d.updatedAt.toISOString(),
         signed_url: signed,
+        version: d.version ?? 1,
+        is_reupload: isReupload,
       });
     }
 
@@ -392,6 +402,17 @@ export const reviewOnboardingDocument = createServerFn({ method: "POST" })
       },
     });
 
+    // If document is rejected or changes_requested, update overall verification_status too
+    // This ensures user can edit even on subsequent rounds of changes
+    if (data.status === "changes_requested" || data.status === "rejected") {
+      await adminDb.onboardingRecord.update({
+        where: { id: doc.onboardingId },
+        data: {
+          verificationStatus: "changes_requested",
+        },
+      });
+    }
+
     const rec = await adminDb.onboardingRecord.findUnique({
       where: { id: doc.onboardingId },
       select: { id: true, applicationId: true, roleTitle: true, userId: true },
@@ -420,36 +441,191 @@ export const reviewOnboardingDocument = createServerFn({ method: "POST" })
       },
     });
 
-    const content = docStatusEmail(
-      app?.fullName ?? "",
-      rec?.roleTitle ?? "your role",
-      docLabel(doc.docKey),
-      data.status,
-      data.feedback ?? null,
-    );
+    // Send notifications ONLY for changes_requested or rejected documents
+    // This way users know which specific documents need attention
+    if (data.status === "changes_requested" || data.status === "rejected") {
+      const content = docStatusEmail(
+        app?.fullName ?? "",
+        rec?.roleTitle ?? "your role",
+        docLabel(doc.docKey),
+        data.status,
+        data.feedback ?? null,
+      );
 
-    if (doc.userId) {
+      if (doc.userId) {
+        await adminDb.inAppNotification.create({
+          data: {
+            userId: doc.userId,
+            applicationId: rec?.applicationId ?? null,
+            title: content.inAppTitle,
+            body: content.inAppBody,
+            link: "/onboarding",
+          },
+        });
+      }
+
+      if (app?.email) {
+        try {
+          const { sendResendEmail } = await import("@/lib/notifications.server");
+          await sendResendEmail({
+            to: app.email,
+            subject: data.email_subject?.trim() || content.subject,
+            html: data.email_html?.trim() || content.html,
+          });
+        } catch (e) {
+          console.error("[hr] doc review email failed", e);
+        }
+      }
+    }
+
+    return { ok: true };
+  });
+
+const updateVerificationStatusSchema = z.object({
+  onboarding_id: z.string().uuid(),
+  verification_status: z.enum(["pending", "approved", "changes_requested", "rejected"]),
+  rejection_feedback: z.string().trim().max(1000).optional(),
+});
+
+export const updateOnboardingVerificationStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: unknown) => updateVerificationStatusSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await assertHrOrAdmin(context.db, context.userId);
+
+    if (data.verification_status === "rejected" && !data.rejection_feedback) {
+      throw new Error("Rejection feedback is required when rejecting onboarding.");
+    }
+
+    const adminDb = getAdminDb();
+
+    const rec = await adminDb.onboardingRecord.findUnique({
+      where: { id: data.onboarding_id },
+      select: {
+        id: true,
+        applicationId: true,
+        userId: true,
+        roleTitle: true,
+        verificationStatus: true
+      },
+    });
+    if (!rec) throw new Error("Onboarding record not found");
+
+    await adminDb.onboardingRecord.update({
+      where: { id: data.onboarding_id },
+      data: {
+        verificationStatus: data.verification_status,
+        verifiedBy: context.userId,
+        verifiedAt: new Date(),
+        rejectionFeedback: data.rejection_feedback ?? null,
+      },
+    });
+
+    const app = await adminDb.jobApplication.findUnique({
+      where: { id: rec.applicationId },
+      select: { email: true, fullName: true },
+    });
+
+    await adminDb.auditLog.create({
+      data: {
+        actorId: context.userId,
+        actorEmail: (context.claims as any)?.email ?? null,
+        action: "ONBOARDING_VERIFICATION_STATUS_UPDATED",
+        targetResource: `onboarding_records/${data.onboarding_id}`,
+        details: {
+          from: rec.verificationStatus,
+          to: data.verification_status,
+          rejection_feedback: data.rejection_feedback ?? null,
+          candidate_email: app?.email ?? null,
+        },
+      },
+    });
+
+    // When approved, auto-start background check
+    if (data.verification_status === "approved" && rec.userId) {
+      await adminDb.employee.upsert({
+        where: { userId: rec.userId },
+        create: {
+          userId: rec.userId,
+          backgroundCheckStatus: "in_progress",
+        },
+        update: {
+          backgroundCheckStatus: "in_progress",
+        },
+      });
+    }
+
+    // Send notification
+    const statusLabel = data.verification_status === "approved"
+      ? "Approved"
+      : data.verification_status === "changes_requested"
+      ? "Changes Requested"
+      : data.verification_status === "rejected"
+      ? "Rejected"
+      : "Under Review";
+
+    if (rec.userId) {
       await adminDb.inAppNotification.create({
         data: {
-          userId: doc.userId,
-          applicationId: rec?.applicationId ?? null,
-          title: content.inAppTitle,
-          body: content.inAppBody,
+          userId: rec.userId,
+          applicationId: rec.applicationId,
+          title: `Onboarding Status: ${statusLabel}`,
+          body: data.rejection_feedback || `Your onboarding verification status has been updated to ${statusLabel.toLowerCase()}.`,
           link: "/onboarding",
         },
       });
     }
 
-    if (app?.email) {
+    if (app?.email && (data.verification_status === "approved" || data.verification_status === "rejected" || data.verification_status === "changes_requested")) {
       try {
         const { sendResendEmail } = await import("@/lib/notifications.server");
+        const subject = data.verification_status === "approved"
+          ? `[${rec.roleTitle}] Onboarding Approved - Welcome to Ciago!`
+          : data.verification_status === "rejected"
+          ? `[${rec.roleTitle}] Onboarding Rejected - Action Required`
+          : `[${rec.roleTitle}] Onboarding Changes Required`;
+
+        const intro = data.verification_status === "approved"
+          ? "Great news! Your onboarding documents have been approved by our HR team."
+          : data.verification_status === "rejected"
+          ? "Our HR team has reviewed your onboarding and unfortunately it has been rejected. Please review the feedback below and re-submit your documents."
+          : "Our HR team has reviewed your onboarding submission and requested some changes. Please review the feedback below and re-upload the necessary documents.";
+
+        const actionText = data.verification_status === "approved"
+          ? "You're all set! Your Date of Joining will be confirmed shortly."
+          : "Please visit your onboarding page to review the specific documents that need attention and re-upload them.";
+
+        const feedbackBlock = data.rejection_feedback
+          ? `<div style="margin:18px 0;padding:14px 16px;background:#f8fafc;border-left:3px solid #0d9488;border-radius:6px;font-size:14px;color:#334155">${data.rejection_feedback.replace(/</g, "&lt;")}</div>`
+          : "";
+
+        const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+          <tr><td style="padding:28px 32px;border-bottom:1px solid #e2e8f0">
+            <div style="font-weight:800;font-size:18px;letter-spacing:-0.01em">Ciago <span style="color:#0d9488">Technologies</span></div>
+          </td></tr>
+          <tr><td style="padding:32px">
+            <p style="margin:0 0 12px;font-size:14px;color:#64748b">Onboarding · ${rec.roleTitle}</p>
+            <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">Verification ${statusLabel}</h1>
+            <p style="margin:0 0 8px;font-size:15px;color:#334155">Hi ${app.fullName?.split(" ")[0] || "there"},</p>
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155">${intro}</p>
+            ${feedbackBlock}
+            ${data.verification_status !== "approved" ? `<p style="margin:18px 0 12px;font-size:15px;line-height:1.6;color:#334155">${actionText}</p>` : ""}
+            <a href="https://ciagotech.com/onboarding" style="display:inline-block;background:#0d9488;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;font-size:14px;margin-top:8px">${data.verification_status === "approved" ? "View Status" : "Review & Re-upload Documents"}</a>
+            <p style="margin:32px 0 0;font-size:13px;color:#64748b">— HR, Ciago Technologies</p>
+          </td></tr>
+        </table></td></tr></table></body></html>`;
+
         await sendResendEmail({
           to: app.email,
-          subject: data.email_subject?.trim() || content.subject,
-          html: data.email_html?.trim() || content.html,
+          subject,
+          html,
+          userId: rec.userId,
+          applicationId: rec.applicationId,
         });
-      } catch (e) {
-        console.error("[hr] doc review email failed", e);
+      } catch (err) {
+        console.error("[verification-status-email] send failed", err);
       }
     }
 

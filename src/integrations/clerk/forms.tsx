@@ -343,10 +343,11 @@ function ClerkSocialButton({
         return;
       }
 
-      // Start OAuth flow
+      // Start OAuth flow — redirect to sso-callback (unguarded route)
+      // which waits for Clerk to establish the session, then navigates.
       const { error } = await signIn.sso({
         strategy: CLERK_STRATEGY[provider],
-        redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
+        redirectUrl: `${window.location.origin}/auth/sso-callback`,
         redirectCallbackUrl: `${window.location.origin}/auth/sso-callback`,
       });
 
@@ -356,7 +357,7 @@ function ClerkSocialButton({
         // No existing Clerk user for this OAuth identity — transfer to sign-up.
         const { error: suError } = await signUp.sso({
           strategy: CLERK_STRATEGY[provider],
-          redirectUrl: `${window.location.origin}/auth?clerk_redirect=1`,
+          redirectUrl: `${window.location.origin}/auth/sso-callback`,
           redirectCallbackUrl: `${window.location.origin}/auth/sso-callback`,
         });
         if (suError) {

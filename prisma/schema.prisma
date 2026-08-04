@@ -201,11 +201,18 @@ model JobApplication {
   orangehrmTerminationReason       OrangeHRMTerminationReason? @map("orangehrm_termination_reason")
   lifecycleVersion                 Int                         @default(1) @map("lifecycle_version")
   frappeEmployeeName               String?                     @map("frappe_employee_name")
-  frappeProvisioningState          FrappeProvisioningState     @default(not_started) @map("frappe_provisioning_state")
   frappeProvisioningAttemptedAt    DateTime?                   @map("frappe_provisioning_attempted_at") @db.Timestamptz(6)
+  frappeProvisioningState          FrappeProvisioningState     @default(not_started) @map("frappe_provisioning_state")
   frappeProvisioningSucceededAt    DateTime?                   @map("frappe_provisioning_succeeded_at") @db.Timestamptz(6)
   frappeRecordStatus               FrappeRecordStatus          @default(ACTIVE) @map("frappe_record_status")
   frappeTerminatedAt               DateTime?                   @map("frappe_terminated_at") @db.Timestamptz(6)
+  country                          String?
+  coverLetter                      String?                     @map("cover_letter")
+  expectedSalaryCurrency           String?                     @default("INR") @map("expected_salary_currency")
+  expectedSalaryMax                BigInt?                     @map("expected_salary_max")
+  expectedSalaryMin                BigInt?                     @map("expected_salary_min")
+  frappeJobApplicantName           String?                     @unique @map("frappe_job_applicant_name")
+  phoneNumber                      String?                     @map("phone_number")
 
   @@index([orangehrmEmployeeId], map: "idx_job_applications_orangehrm_employee_id", where: raw("(orangehrm_employee_id IS NOT NULL)"))
   @@index([orangehrmRecordStatus], map: "idx_job_applications_orangehrm_record_status")
@@ -241,6 +248,12 @@ model JobPosting {
   trackType              JobTrackType     @default(standard) @map("track_type")
   departmentId           String?          @map("department_id") @db.Uuid
   internalOnly           Boolean          @default(false) @map("internal_only")
+  closesOn               DateTime?        @map("closes_on") @db.Date
+  currency               String           @default("INR")
+  designation            String?
+  frappeJobOpeningName   String?          @unique @map("frappe_job_opening_name")
+  publishSalaryRange     Boolean          @default(false) @map("publish_salary_range")
+  salaryPaidPer          String           @default("Month") @map("salary_paid_per")
 
   @@index([status, createdAt(sort: Desc)], map: "job_postings_status_idx")
   @@map("job_postings")
@@ -736,42 +749,6 @@ model users {
   raw_user_meta_data Json?     @default("{}")
 
   @@schema("auth")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model employee_tasks {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  assignee_id       String    @db.Uuid
-  title             String
-  description       String?
-  status            String    @default("to_do")
-  priority          String    @default("medium")
-  due_date          DateTime? @db.Date
-  created_at        DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
-  assigned_by       String?   @db.Uuid
-  project_reference String?
-
-  @@index([assignee_id], map: "idx_employee_tasks_assignee")
-  @@index([status], map: "idx_employee_tasks_status")
-  @@schema("public")
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model project_estimates {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  full_name    String
-  email        String
-  company      String
-  project_type String
-  scale        String
-  timeline     String
-  budget_low   Int
-  budget_high  Int
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-
-  @@schema("public")
 }
 
 enum AppRole {

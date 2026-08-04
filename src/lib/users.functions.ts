@@ -88,49 +88,129 @@ export const listDirectory = createServerFn({ method: "GET" })
     });
 
     const userIds = users.map((u) => u.authUserId);
-    const [profiles, employees, roles] = await Promise.all([
+    const [profiles, employees, roles, onboardingRecords] = await Promise.all([
       adminDb.profile.findMany({ where: { userId: { in: userIds } } }),
       adminDb.employee.findMany({ where: { userId: { in: userIds } } }),
       adminDb.userRole.findMany({ where: { userId: { in: userIds } } }),
+      adminDb.onboardingRecord.findMany({
+        where: { userId: { in: userIds } },
+      }),
     ]);
 
     const profileMap = new Map(profiles.map((p) => [p.userId, p]));
     const empMap = new Map(employees.map((e) => [e.userId, e]));
     const roleMap = new Map(roles.map((r) => [r.userId, r]));
+    const onboardingMap = new Map(onboardingRecords.map((o) => [o.userId, o]));
+
+    // Fetch document counts for all onboarding records
+    const onboardingIds = onboardingRecords.map((o) => o.id);
+    const documents = onboardingIds.length > 0
+      ? await adminDb.onboardingDocument.findMany({
+          where: {
+            onboardingId: { in: onboardingIds },
+            supersededAt: null, // Only current versions (not superseded)
+          },
+          select: {
+            onboardingId: true,
+            status: true,
+          },
+        })
+      : [];
+
+    // Group documents by onboarding ID
+    const docsByOnboarding = documents.reduce((acc, doc) => {
+      if (!acc[doc.onboardingId]) {
+        acc[doc.onboardingId] = { total: 0, approved: 0 };
+      }
+      acc[doc.onboardingId].total++;
+      if (doc.status === "approved") {
+        acc[doc.onboardingId].approved++;
+      }
+      return acc;
+    }, {} as Record<string, { total: number; approved: number }>);
 
     const rows: DirectoryRow[] = users.map((u) => {
       const profile = profileMap.get(u.authUserId);
       const emp = empMap.get(u.authUserId);
       const role = roleMap.get(u.authUserId);
+      const onboarding = onboardingMap.get(u.authUserId);
+
+      // Get doc counts from onboarding
+      const docCounts = onboarding ? docsByOnboarding[onboarding.id] : null;
+
+      // Use onboarding data first, fall back to employee table
+      const department = onboarding?.department ?? emp?.department ?? null;
+      const designation = onboarding?.roleTitle ?? emp?.designation ?? null;
+      const rawDoj = onboarding?.doj ?? emp?.doj ?? null;
+      const doj = rawDoj instanceof Date ? rawDoj.toISOString().split("T")[0] : rawDoj;
+
+      // Doc verification status from onboarding
+      let docVerificationStatus = emp?.docVerificationStatus ?? "pending";
+      if (onboarding?.verificationStatus === "approved") {
+        docVerificationStatus = "verified";
+      } else if (onboarding?.verificationStatus === "rejected") {
+        docVerificationStatus = "rejected";
+      } else if (onboarding?.verificationStatus === "pending" || onboarding?.verificationStatus === "changes_requested") {
+        docVerificationStatus = "pending";
+      }
+
       return {
         user_id: u.authUserId,
         email: u.email,
         full_name: profile?.fullName ?? null,
         role: (role?.role as any) ?? "user",
         is_admin: role?.role === "admin",
-        department: (emp?.department as any) ?? null,
-        designation: emp?.designation ?? null,
+        department: (department as any) ?? null,
+        designation: designation ?? null,
         team_name: emp?.teamName ?? null,
         employment_type: emp?.employmentType ?? null,
         work_model: emp?.workModel ?? null,
         work_location: emp?.workLocation ?? null,
-        base_salary: emp?.baseSalary ?? null,
+        base_salary: emp?.baseSalary != null ? Number(emp.baseSalary) : null,
         salary_currency: emp?.salaryCurrency ?? "INR",
-        doj: emp?.doj ?? null,
+        doj: doj ?? null,
         probation_status: emp?.probationStatus ?? "under_review",
         background_check_status: emp?.backgroundCheckStatus ?? "not_started",
-        doc_verification_status: emp?.docVerificationStatus ?? "pending",
+        doc_verification_status: docVerificationStatus,
         reporting_manager_id: emp?.reportingManagerId ?? null,
         reporting_hr_id: emp?.reportingHrId ?? null,
         job_id: null,
         job_title: null,
-        docs_approved_count: 0,
-        docs_total_count: 0,
+        docs_approved_count: docCounts?.approved ?? 0,
+        docs_total_count: docCounts?.total ?? 0,
         created_at: new Date().toISOString(),
       };
     });
 
     return rows;
+  });
+
+export const updateBgCheckStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: unknown) =>
+    z.object({
+      user_id: z.string().uuid(),
+      status: z.enum(["not_started", "in_progress", "cleared", "flagged"]),
+    }).parse(d)
+  )
+  .handler(async ({ data, context }) => {
+    const actor = await getActorRoles(null, context.userId);
+    if (!actor.isAdmin) throw new Error("Forbidden");
+
+    const adminDb = getAdminDb();
+
+    await adminDb.employee.upsert({
+      where: { userId: data.user_id },
+      create: {
+        userId: data.user_id,
+        backgroundCheckStatus: data.status,
+      },
+      update: {
+        backgroundCheckStatus: data.status,
+      },
+    });
+
+    return { success: true };
   });
 
 export const getUserDetail = createServerFn({ method: "GET" })

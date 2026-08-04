@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate, useSearch, Link, redirect } from "@tansta
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Briefcase, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { FLAGS } from "@/lib/feature-flags";
@@ -20,7 +19,6 @@ import { SiteFooter } from "@/components/site/Footer";
 
 const searchSchema = z.object({
   redirect: z.string().optional(),
-  portal: z.enum(["candidate", "employee"]).optional(),
 });
 
 export const Route = createFileRoute("/auth")({
@@ -124,7 +122,6 @@ function AuthPage() {
   const search = useSearch({ from: "/auth" });
   const { user, loading, signOut } = useAuth();
   const redirectTo = safePath(search.redirect);
-  const [portal, setPortal] = useState<Portal>(search.portal ?? "candidate");
   const [clerkAuthEnabled, setClerkAuthEnabled] = useState(!FLAGS.USE_CLERK_AUTH);
   const [clerkAuthLoading, setClerkAuthLoading] = useState(FLAGS.USE_CLERK_AUTH);
   const disabledSignOutAttemptedRef = useRef(false);
@@ -177,38 +174,14 @@ function AuthPage() {
         </p>
 
         <div className="mt-8 w-full rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <Tabs value={portal} onValueChange={(v) => setPortal(v as Portal)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="candidate" className="gap-2">
-                <Briefcase className="h-4 w-4" /> Candidate
-              </TabsTrigger>
-              <TabsTrigger value="employee" className="gap-2">
-                <ShieldCheck className="h-4 w-4" /> Employee
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="candidate" className="mt-6">
-              <p className="mb-4 text-xs text-muted-foreground">
-                Apply for roles and track your applications.
-              </p>
-              <CandidateForms
-                redirectTo={redirectTo}
-                clerkAuthEnabled={clerkAuthEnabled}
-                clerkAuthLoading={clerkAuthLoading}
-              />
-            </TabsContent>
-
-            <TabsContent value="employee" className="mt-6">
-              <div className="mb-4 rounded-lg border border-brand/30 bg-brand/5 p-3 text-xs text-foreground/80">
-                Restricted to Ciago Technologies staff. Use your corporate email.
-              </div>
-              <EmployeeSignIn
-                redirectTo={redirectTo === "/" ? "/my-applications" : redirectTo}
-                clerkAuthEnabled={clerkAuthEnabled}
-                clerkAuthLoading={clerkAuthLoading}
-              />
-            </TabsContent>
-          </Tabs>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Sign in to access your account
+          </p>
+          <CandidateForms
+            redirectTo={redirectTo}
+            clerkAuthEnabled={clerkAuthEnabled}
+            clerkAuthLoading={clerkAuthLoading}
+          />
 
           <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-widest text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> or continue with{" "}

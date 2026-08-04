@@ -11,8 +11,6 @@
  * Usage: npx tsx scripts/reset-database.ts
  */
 
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as dotenv from "dotenv";
 
@@ -24,8 +22,6 @@ if (!process.env.DATABASE_URL) {
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
 
 // ============================================================================
 // REFERENCE DATA
@@ -47,20 +43,31 @@ const DEPARTMENTS = [
 ];
 
 const EMPLOYMENT_TYPES = [
-  { code: "FULL_TIME", label: "Full-Time", sortOrder: 1 },
-  { code: "PART_TIME", label: "Part-Time", sortOrder: 2 },
-  { code: "CONTRACT", label: "Contract", sortOrder: 3 },
-  { code: "INTERN", label: "Internship", sortOrder: 4 },
-  { code: "PROBATION", label: "Probation", sortOrder: 5 },
+  { code: "full_time", label: "Full-time", sortOrder: 1 },
+  { code: "part_time", label: "Part-time", sortOrder: 2 },
+  { code: "internship", label: "Internship", sortOrder: 3 },
+  { code: "apprenticeship", label: "Apprenticeship", sortOrder: 4 },
+  { code: "contractor", label: "Contractor", sortOrder: 5 },
 ];
 
 const STATUS_OPTIONS = [
-  { kind: "application", code: "APPLIED", label: "Applied", sortOrder: 1 },
-  { kind: "application", code: "SCREENING", label: "Screening", sortOrder: 2 },
-  { kind: "application", code: "INTERVIEWING", label: "Interviewing", sortOrder: 3 },
-  { kind: "application", code: "OFFERED", label: "Offered", sortOrder: 4 },
-  { kind: "application", code: "HIRED", label: "Hired", sortOrder: 5 },
-  { kind: "application", code: "REJECTED", label: "Rejected", sortOrder: 6 },
+  // Job posting statuses
+  { kind: "job_posting", code: "draft", label: "Draft", sortOrder: 10 },
+  { kind: "job_posting", code: "published", label: "Published", sortOrder: 20 },
+  { kind: "job_posting", code: "internal_only", label: "Internal only", sortOrder: 30 },
+  { kind: "job_posting", code: "closed", label: "Closed", sortOrder: 40 },
+  { kind: "job_posting", code: "archived", label: "Archived", sortOrder: 50 },
+  // Application statuses
+  { kind: "application", code: "applied", label: "Applied", sortOrder: 10 },
+  { kind: "application", code: "screening", label: "Screening", sortOrder: 20 },
+  { kind: "application", code: "interviewing", label: "Interviewing", sortOrder: 30 },
+  { kind: "application", code: "offered", label: "Offered", sortOrder: 40 },
+  { kind: "application", code: "hired", label: "Hired", sortOrder: 50 },
+  { kind: "application", code: "rejected", label: "Rejected", sortOrder: 60 },
+  // User account statuses
+  { kind: "user_account", code: "active", label: "Active", sortOrder: 10 },
+  { kind: "user_account", code: "inactive", label: "Inactive", sortOrder: 20 },
+  { kind: "user_account", code: "suspended", label: "Suspended", sortOrder: 30 },
 ];
 
 // ============================================================================
@@ -93,19 +100,33 @@ async function main() {
 
   // Order matters - delete child tables first to avoid FK constraints
   const tablesToTruncate = [
-    // Child tables first
+    // Lifecycle & integration child tables
+    "external_access_revocation_events",
+    "external_access_provisions",
+    "access_role_mappings",
+    "offboarding_tasks",
+    "offboarding_records",
+    "background_verifications",
+    "setup_tokens",
+    "integration_events",
+    // Notifications & audit
     "in_app_notifications",
     "audit_logs",
+    // Service accounts & emails
     "service_account_mappings",
     "emails",
+    // Documents & onboarding
     "identity_documents",
     "onboarding_documents",
     "onboarding_records",
+    // Applications & jobs
     "job_applications",
     "job_postings",
+    // Payroll & time
     "salary_slips",
     "salary_structures",
     "timesheets",
+    // HR actions
     "resignations",
     "leave_requests",
     "interview_slots",
@@ -113,11 +134,14 @@ async function main() {
     "referrals",
     "resource_downloads",
     "rate_limits",
+    // Core user tables
     "employees",
     "profiles",
     "user_roles",
     "clerk_user_map",
-    // Reference tables
+    // Auth schema
+    "auth.users",
+    // Reference tables (will be re-seeded)
     "departments",
     "employment_types",
     "status_options",
@@ -146,21 +170,33 @@ async function main() {
   // Seed Departments
   console.log("📦 Seeding Departments...");
   for (const dept of DEPARTMENTS) {
-    await prisma.department.create({ data: dept });
+    await pool.query(
+      `INSERT INTO departments (code, name, description) VALUES ($1, $2, $3)
+       ON CONFLICT (code) DO UPDATE SET name = $2, description = $3`,
+      [dept.code, dept.name, dept.description]
+    );
   }
   console.log(`✓ Created ${DEPARTMENTS.length} departments\n`);
 
   // Seed Employment Types
   console.log("📦 Seeding Employment Types...");
   for (const empType of EMPLOYMENT_TYPES) {
-    await prisma.employmentType.create({ data: empType });
+    await pool.query(
+      `INSERT INTO employment_types (code, label, sort_order) VALUES ($1, $2, $3)
+       ON CONFLICT (code) DO UPDATE SET label = $2, sort_order = $3`,
+      [empType.code, empType.label, empType.sortOrder]
+    );
   }
   console.log(`✓ Created ${EMPLOYMENT_TYPES.length} employment types\n`);
 
   // Seed Status Options
   console.log("📦 Seeding Status Options...");
   for (const status of STATUS_OPTIONS) {
-    await prisma.statusOption.create({ data: status });
+    await pool.query(
+      `INSERT INTO status_options (kind, code, label, sort_order) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (kind, code) DO UPDATE SET label = $3, sort_order = $4`,
+      [status.kind, status.code, status.label, status.sortOrder]
+    );
   }
   console.log(`✓ Created ${STATUS_OPTIONS.length} status options\n`);
 
@@ -168,11 +204,11 @@ async function main() {
   console.log("  STEP 3: VERIFICATION");
   console.log("═══════════════════════════════════════════════════════════\n");
 
-  const deptCount = await prisma.department.count();
-  const empTypeCount = await prisma.employmentType.count();
-  const statusCount = await prisma.statusOption.count();
-  const userRoleCount = await prisma.userRole.count();
-  const clerkMapCount = await prisma.clerkUserMap.count();
+  const deptCount = (await pool.query("SELECT count(*) FROM departments")).rows[0].count;
+  const empTypeCount = (await pool.query("SELECT count(*) FROM employment_types")).rows[0].count;
+  const statusCount = (await pool.query("SELECT count(*) FROM status_options")).rows[0].count;
+  const userRoleCount = (await pool.query("SELECT count(*) FROM user_roles")).rows[0].count;
+  const clerkMapCount = (await pool.query("SELECT count(*) FROM clerk_user_map")).rows[0].count;
 
   console.log("📊 Database State:");
   console.log(`   Departments: ${deptCount}`);
@@ -213,5 +249,4 @@ main()
   })
   .finally(async () => {
     await pool.end();
-    await prisma.$disconnect();
   });
