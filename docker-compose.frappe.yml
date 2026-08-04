@@ -81,7 +81,9 @@ services:
                bench set-config -gp db_port $$DB_PORT &&
                bench set-config -g redis_cache $$REDIS_CACHE &&
                bench set-config -g redis_queue $$REDIS_QUEUE &&
-               bench set-config -gp socketio_port $$SOCKETIO_PORT"
+               bench set-config -gp socketio_port $$SOCKETIO_PORT &&
+               bench set-config -g developer_mode 1 &&
+               bench set-config -g disable_rate_limiter 1"
     environment:
       DB_HOST: frappe-db
       DB_PORT: "3306"

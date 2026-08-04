@@ -47,9 +47,16 @@ import { listMyApplications } from "@/lib/applications.query";
 import { getMyAuthUserId } from "@/lib/roles.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Copy, Hash, MapPin, Search, Sparkles } from "lucide-react";
+import { ArrowRight, Copy, Hash, MapPin, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { IllusCareers } from "@/components/site/Illustration";
 import { Turnstile } from "@/components/site/Turnstile";
+import {
+  createEmptyEducationalQualification,
+  createEmptyPreviousWorkExperience,
+  EDUCATION_LEVEL_OPTIONS,
+  type EducationalQualificationInput,
+  type PreviousWorkExperienceInput,
+} from "@/lib/job-application-fields";
 
 export const Route = createFileRoute("/careers")({
   head: () => ({
@@ -218,6 +225,12 @@ function Careers() {
   const [expectedSalaryCurrency, setExpectedSalaryCurrency] = useState("INR");
   const [expectedSalaryMin, setExpectedSalaryMin] = useState("");
   const [expectedSalaryMax, setExpectedSalaryMax] = useState("");
+  const [educationalQualifications, setEducationalQualifications] = useState<
+    EducationalQualificationInput[]
+  >([createEmptyEducationalQualification()]);
+  const [previousWorkExperiences, setPreviousWorkExperiences] = useState<
+    PreviousWorkExperienceInput[]
+  >([createEmptyPreviousWorkExperience()]);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [hp, setHp] = useState("");
 
@@ -264,8 +277,46 @@ function Careers() {
     setExpectedSalaryCurrency("INR");
     setExpectedSalaryMin("");
     setExpectedSalaryMax("");
+    setEducationalQualifications([createEmptyEducationalQualification()]);
+    setPreviousWorkExperiences([createEmptyPreviousWorkExperience()]);
     setApplying(role);
     trackEvent("apply_start", { role_id: role.id, role_title: role.title });
+  }
+
+  function updateEducationalQualification(
+    index: number,
+    field: keyof EducationalQualificationInput,
+    value: string,
+  ) {
+    setEducationalQualifications((rows) =>
+      rows.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
+    );
+  }
+
+  function updatePreviousWorkExperience(
+    index: number,
+    field: keyof PreviousWorkExperienceInput,
+    value: string,
+  ) {
+    setPreviousWorkExperiences((rows) =>
+      rows.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
+    );
+  }
+
+  function removeEducationalQualification(index: number) {
+    setEducationalQualifications((rows) =>
+      rows.length === 1
+        ? [createEmptyEducationalQualification()]
+        : rows.filter((_, rowIndex) => rowIndex !== index),
+    );
+  }
+
+  function removePreviousWorkExperience(index: number) {
+    setPreviousWorkExperiences((rows) =>
+      rows.length === 1
+        ? [createEmptyPreviousWorkExperience()]
+        : rows.filter((_, rowIndex) => rowIndex !== index),
+    );
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -300,7 +351,12 @@ function Careers() {
         }
         const base64 = btoa(binary);
         await upload({
-          data: { bucket: "resumes", path: storagePath, base64, contentType: resumeFile.type || undefined },
+          data: {
+            bucket: "resumes",
+            path: storagePath,
+            base64,
+            contentType: resumeFile.type || undefined,
+          },
         });
       }
 
@@ -319,6 +375,8 @@ function Careers() {
           expectedSalaryCurrency: expectedSalaryCurrency || "INR",
           expectedSalaryMin: expectedSalaryMin.trim() || "",
           expectedSalaryMax: expectedSalaryMax.trim() || "",
+          educationalQualifications,
+          previousWorkExperiences,
           turnstileToken,
           hp,
         },
@@ -783,7 +841,7 @@ function Careers() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="a-cover-letter">
-                Cover letter <span className="text-muted-foreground text-xs">(optional)</span>
+                Bio / cover letter <span className="text-muted-foreground text-xs">(optional)</span>
               </Label>
               <Textarea
                 id="a-cover-letter"
@@ -794,6 +852,236 @@ function Careers() {
                 onChange={(e) => setCoverLetter(e.target.value)}
                 className="resize-none"
               />
+            </div>
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Educational qualifications</p>
+                  <p className="text-xs text-muted-foreground">
+                    These details are synced into your Frappe employee profile if you are hired.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEducationalQualifications((rows) => [
+                      ...rows,
+                      createEmptyEducationalQualification(),
+                    ])
+                  }
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add row
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {educationalQualifications.map((row, index) => (
+                  <div
+                    key={`edu-${index}`}
+                    className="grid gap-3 rounded-md border border-border/60 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                        Qualification {index + 1}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEducationalQualification(index)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-edu-school-${index}`}>School / University</Label>
+                        <Input
+                          id={`a-edu-school-${index}`}
+                          value={row.school || ""}
+                          onChange={(e) =>
+                            updateEducationalQualification(index, "school", e.target.value)
+                          }
+                          placeholder="IIT Delhi"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-edu-qualification-${index}`}>Qualification</Label>
+                        <Input
+                          id={`a-edu-qualification-${index}`}
+                          value={row.qualification || ""}
+                          onChange={(e) =>
+                            updateEducationalQualification(index, "qualification", e.target.value)
+                          }
+                          placeholder="B.Tech in Computer Science"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-edu-level-${index}`}>Level</Label>
+                        <Select
+                          value={row.level || undefined}
+                          onValueChange={(value) =>
+                            updateEducationalQualification(index, "level", value)
+                          }
+                        >
+                          <SelectTrigger id={`a-edu-level-${index}`}>
+                            <SelectValue placeholder="Select level" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EDUCATION_LEVEL_OPTIONS.map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {level}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-edu-year-${index}`}>Year of passing</Label>
+                        <Input
+                          id={`a-edu-year-${index}`}
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={row.yearOfPassing || ""}
+                          onChange={(e) =>
+                            updateEducationalQualification(
+                              index,
+                              "yearOfPassing",
+                              e.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+                            )
+                          }
+                          placeholder="2024"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-edu-class-${index}`}>Class / Percentage</Label>
+                        <Input
+                          id={`a-edu-class-${index}`}
+                          value={row.classPercentage || ""}
+                          onChange={(e) =>
+                            updateEducationalQualification(index, "classPercentage", e.target.value)
+                          }
+                          placeholder="72%"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`a-edu-major-${index}`}>Major / Optional subjects</Label>
+                      <Textarea
+                        id={`a-edu-major-${index}`}
+                        value={row.majorOptionalSubjects || ""}
+                        onChange={(e) =>
+                          updateEducationalQualification(
+                            index,
+                            "majorOptionalSubjects",
+                            e.target.value,
+                          )
+                        }
+                        rows={3}
+                        placeholder="Computer Science, Operating Systems, DBMS"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Previous work experience</p>
+                  <p className="text-xs text-muted-foreground">
+                    This syncs to the External Work History section in Frappe after hiring.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPreviousWorkExperiences((rows) => [
+                      ...rows,
+                      createEmptyPreviousWorkExperience(),
+                    ])
+                  }
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add row
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {previousWorkExperiences.map((row, index) => (
+                  <div
+                    key={`work-${index}`}
+                    className="grid gap-3 rounded-md border border-border/60 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                        Experience {index + 1}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePreviousWorkExperience(index)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-work-company-${index}`}>Company</Label>
+                        <Input
+                          id={`a-work-company-${index}`}
+                          value={row.company || ""}
+                          onChange={(e) =>
+                            updatePreviousWorkExperience(index, "company", e.target.value)
+                          }
+                          placeholder="Acme Corp"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-work-designation-${index}`}>Designation</Label>
+                        <Input
+                          id={`a-work-designation-${index}`}
+                          value={row.designation || ""}
+                          onChange={(e) =>
+                            updatePreviousWorkExperience(index, "designation", e.target.value)
+                          }
+                          placeholder="Senior Software Engineer"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`a-work-salary-${index}`}>Salary</Label>
+                        <Input
+                          id={`a-work-salary-${index}`}
+                          value={row.salary || ""}
+                          onChange={(e) =>
+                            updatePreviousWorkExperience(index, "salary", e.target.value)
+                          }
+                          placeholder="1200000 INR"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor={`a-work-address-${index}`}>Address</Label>
+                        <Textarea
+                          id={`a-work-address-${index}`}
+                          rows={2}
+                          value={row.address || ""}
+                          onChange={(e) =>
+                            updatePreviousWorkExperience(index, "address", e.target.value)
+                          }
+                          placeholder="Bengaluru, Karnataka"
+                          className="resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-center justify-between gap-2">
@@ -852,8 +1140,7 @@ function Careers() {
 
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
               <p className="text-sm font-semibold">
-                Salary expectations{" "}
-                <span className="text-muted-foreground">(optional)</span>
+                Salary expectations <span className="text-muted-foreground">(optional)</span>
               </p>
               <div className="space-y-3">
                 <div className="space-y-2">

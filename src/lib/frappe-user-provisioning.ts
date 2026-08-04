@@ -29,12 +29,109 @@ export interface FrappeUserProvisioningResult {
   success: boolean;
   userEmail: string | null;
   action:
-    | "created"          // New User created
-    | "already_exists"   // User already existed
-    | "linked"           // User linked to Employee
-    | "failed";          // Provisioning failed
+    | "created" // New User created
+    | "already_exists" // User already existed
+    | "linked" // User linked to Employee
+    | "failed"; // Provisioning failed
   message: string;
   error?: string;
+}
+
+function generateTempPassword(): string {
+  const crypto = require("crypto") as typeof import("crypto");
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const special = "@#$!";
+  let password = "";
+  const bytes = crypto.randomBytes(12);
+  for (let i = 0; i < 10; i++) {
+    password += chars[bytes[i]! % chars.length];
+  }
+  password += special[bytes[10]! % special.length];
+  password += crypto.randomBytes(2).toString("hex");
+  return password;
+}
+
+async function notifyFrappeAccessReady(args: {
+  applicationId: string;
+  email: string;
+  firstName: string;
+  userId: string;
+  db: PrismaClient;
+  client: FrappeClient;
+  title: string;
+  body: string;
+  logPrefix: string;
+  forceRotateSetupLink?: boolean;
+}) {
+  const frappeBaseUrl = process.env.FRAPPE_BASE_URL || "https://hrms.ciagotech.com";
+
+  // Set a temporary password directly via Admin API
+  // (Frappe's reset_password_key flow is broken in Docker dev environments)
+  const tempPassword = generateTempPassword();
+  await args.client.setUserPassword(args.email, tempPassword);
+  console.log(`${args.logPrefix} Set temporary password for ${args.email}`);
+
+  const loginUrl = `${frappeBaseUrl}/login`;
+
+  await args.db.inAppNotification.create({
+    data: {
+      userId: args.userId,
+      applicationId: args.applicationId,
+      title: args.title,
+      body: args.body,
+      link: "/my-applications",
+    },
+  });
+
+  try {
+    const { sendResendEmail } = await import("@/lib/notifications.server");
+
+    const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+        <tr><td style="padding:28px 32px;border-bottom:1px solid #e2e8f0">
+          <div style="font-weight:800;font-size:18px;letter-spacing:-0.01em">Ciago <span style="color:#0d9488">Technologies</span></div>
+        </td></tr>
+        <tr><td style="padding:32px">
+          <p style="margin:0 0 12px;font-size:14px;color:#64748b">Welcome · HR Portal Access</p>
+          <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">Your HR Portal Account is Ready</h1>
+          <p style="margin:0 0 8px;font-size:15px;color:#334155">Hi ${args.firstName},</p>
+          <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155">${args.body}</p>
+
+          <div style="margin:18px 0;padding:14px 16px;background:#f8fafc;border-left:3px solid #0d9488;border-radius:6px">
+            <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#0f172a">Your login credentials:</p>
+            <table style="width:100%;font-size:14px;color:#334155;line-height:1.8">
+              <tr><td style="font-weight:600;width:120px">Portal URL:</td><td><a href="${loginUrl}" style="color:#0d9488">${frappeBaseUrl}</a></td></tr>
+              <tr><td style="font-weight:600">Email:</td><td>${args.email}</td></tr>
+              <tr><td style="font-weight:600">Password:</td><td style="font-family:monospace;background:#f1f5f9;padding:2px 8px;border-radius:4px">${tempPassword}</td></tr>
+            </table>
+          </div>
+
+          <p style="margin:16px 0 12px">
+            <a href="${loginUrl}" style="display:inline-block;background:#0d9488;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;font-size:14px">Log in to HR Portal</a>
+          </p>
+
+          <div style="margin:24px 0;padding:14px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:6px">
+            <p style="margin:0;font-size:13px;color:#92400e"><strong>Important:</strong> Please change your password after first login. Go to Settings → Change Password once logged in.</p>
+          </div>
+
+          <p style="margin:24px 0 0;font-size:13px;color:#64748b">Welcome to the team!</p>
+          <p style="margin:8px 0 0;font-size:13px;color:#64748b">— HR, Ciago Technologies</p>
+        </td></tr>
+      </table></td></tr></table></body></html>`;
+
+    await sendResendEmail({
+      to: args.email,
+      subject: "Your Frappe HR Portal Credentials - Ciago Technologies",
+      html,
+      userId: args.userId,
+      applicationId: args.applicationId,
+    });
+
+    console.log(`${args.logPrefix} CiagoTech notification sent to ${args.email}`);
+  } catch (emailError) {
+    console.error(`${args.logPrefix} Failed to send CiagoTech notification email:`, emailError);
+  }
 }
 
 /**
@@ -68,7 +165,8 @@ export async function provisionFrappeUser(
   userId: string,
   db: PrismaClient,
   client: FrappeClient,
-  correlationId?: string
+  correlationId?: string,
+  options?: { forceRotateSetupLink?: boolean },
 ): Promise<FrappeUserProvisioningResult> {
   const logPrefix = `[frappe-user:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting Frappe User provisioning for ${email}`);
@@ -100,6 +198,14 @@ export async function provisionFrappeUser(
       if (employee && employee.user_id === email) {
         console.log(`${logPrefix} User already linked to Employee`);
 
+        // Ensure roles are always reconciled, even for existing users.
+        if (frappeRoles.length > 0) {
+          await client.updateUserRoles(email, frappeRoles);
+          console.log(
+            `${logPrefix} Roles reconciled for existing linked user: ${frappeRoleNames.join(", ")}`,
+          );
+        }
+
         await db.auditLog.create({
           data: {
             action: "FRAPPE_USER_ALREADY_EXISTS_AND_LINKED",
@@ -113,16 +219,17 @@ export async function provisionFrappeUser(
           },
         });
 
-        // Notify user that their HR portal access is ready
-        const frappeBaseUrl = process.env.FRAPPE_BASE_URL || "https://hrms.ciagotech.com";
-        await db.inAppNotification.create({
-          data: {
-            userId,
-            applicationId,
-            title: "HR Portal Access Available",
-            body: `Your Frappe HR account is already set up. You can login at ${frappeBaseUrl}`,
-            link: "/my-applications",
-          },
+        await notifyFrappeAccessReady({
+          applicationId,
+          email,
+          firstName,
+          userId,
+          db,
+          client,
+          title: "HR Portal Access Available",
+          body: "Your Frappe HR account is already set up. Use the link below to sign in or refresh your password setup.",
+          logPrefix,
+          forceRotateSetupLink: options?.forceRotateSetupLink === true,
         });
 
         return {
@@ -137,6 +244,13 @@ export async function provisionFrappeUser(
       console.log(`${logPrefix} Linking existing User to Employee`);
       await client.linkUserToEmployee(employeeName, email);
 
+      if (frappeRoles.length > 0) {
+        await client.updateUserRoles(email, frappeRoles);
+        console.log(
+          `${logPrefix} Roles reconciled for existing user after link: ${frappeRoleNames.join(", ")}`,
+        );
+      }
+
       await db.auditLog.create({
         data: {
           action: "FRAPPE_USER_LINKED_TO_EMPLOYEE",
@@ -150,16 +264,17 @@ export async function provisionFrappeUser(
         },
       });
 
-      // Notify user that their account was linked
-      const frappeBaseUrl = process.env.FRAPPE_BASE_URL || "https://hrms.ciagotech.com";
-      await db.inAppNotification.create({
-        data: {
-          userId,
-          applicationId,
-          title: "HR Portal Account Linked",
-          body: `Your existing Frappe HR account has been linked to your employee record. Access at ${frappeBaseUrl}`,
-          link: "/my-applications",
-        },
+      await notifyFrappeAccessReady({
+        applicationId,
+        email,
+        firstName,
+        userId,
+        db,
+        client,
+        title: "HR Portal Account Linked",
+        body: "Your existing Frappe HR account has been linked to your employee record. Use the secure link below to access your portal.",
+        logPrefix,
+        forceRotateSetupLink: options?.forceRotateSetupLink === true,
       });
 
       return {
@@ -194,6 +309,10 @@ export async function provisionFrappeUser(
       console.log(`${logPrefix} Roles assigned: ${frappeRoleNames.join(", ")}`);
     }
 
+    // Step 6b: Assign Module Profile (restricts sidebar modules by default)
+    await client.setUserModuleProfile(email, "Employee Profile");
+    console.log(`${logPrefix} Module Profile set to: Employee Profile`);
+
     // Step 7: Audit log
     await db.auditLog.create({
       data: {
@@ -211,70 +330,18 @@ export async function provisionFrappeUser(
       },
     });
 
-    // Step 8: Send CiagoTech notification about Frappe account creation
-    const frappeBaseUrl = process.env.FRAPPE_BASE_URL || "https://hrms.ciagotech.com";
-
-    // Create in-app notification
-    await db.inAppNotification.create({
-      data: {
-        userId,
-        applicationId,
-        title: "HR Portal Access Created",
-        body: `Your Frappe HR account has been created. Check your email (${email}) for login instructions from Frappe.`,
-        link: "/my-applications",
-      },
+    await notifyFrappeAccessReady({
+      applicationId,
+      email,
+      firstName,
+      userId,
+      db,
+      client,
+      title: "HR Portal Access Created",
+      body: "Congratulations on joining Ciago Technologies! Your Frappe HR portal account has been created.",
+      logPrefix,
+      forceRotateSetupLink: false, // Reuse the key just generated by send_welcome_email
     });
-
-    // Send email notification
-    try {
-      const { sendResendEmail } = await import("@/lib/notifications.server");
-
-      const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
-        <tr><td style="padding:28px 32px;border-bottom:1px solid #e2e8f0">
-          <div style="font-weight:800;font-size:18px;letter-spacing:-0.01em">Ciago <span style="color:#0d9488">Technologies</span></div>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <p style="margin:0 0 12px;font-size:14px;color:#64748b">Welcome · HR Portal Access</p>
-          <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">Your HR Portal Account is Ready</h1>
-          <p style="margin:0 0 8px;font-size:15px;color:#334155">Hi ${firstName},</p>
-          <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155">Congratulations on joining Ciago Technologies! Your Frappe HR portal account has been created.</p>
-
-          <div style="margin:18px 0;padding:14px 16px;background:#f8fafc;border-left:3px solid #0d9488;border-radius:6px">
-            <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#0f172a">What happens next:</p>
-            <ol style="margin:8px 0 0 0;padding-left:20px;font-size:14px;color:#334155;line-height:1.6">
-              <li style="margin-bottom:6px">You'll receive a separate email from Frappe HR with a secure invitation link</li>
-              <li style="margin-bottom:6px">Click the link in that email to set your password</li>
-              <li style="margin-bottom:6px">Access your HR portal at: <strong>${frappeBaseUrl}</strong></li>
-            </ol>
-          </div>
-
-          <p style="margin:18px 0 12px;font-size:15px;line-height:1.6;color:#334155">The Frappe invitation email will be sent to: <strong>${email}</strong></p>
-          <p style="margin:0 0 12px;font-size:14px;color:#64748b">If you don't receive the Frappe invitation within 10 minutes, please check your spam folder or contact HR.</p>
-
-          <div style="margin:24px 0;padding:14px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:6px">
-            <p style="margin:0;font-size:13px;color:#92400e"><strong>Important:</strong> The password reset link from Frappe is single-use and expires in 24 hours. Make sure to complete setup within this time.</p>
-          </div>
-
-          <p style="margin:24px 0 0;font-size:13px;color:#64748b">Welcome to the team!</p>
-          <p style="margin:8px 0 0;font-size:13px;color:#64748b">— HR, Ciago Technologies</p>
-        </td></tr>
-      </table></td></tr></table></body></html>`;
-
-      await sendResendEmail({
-        to: email,
-        subject: "Your Frappe HR Portal Account - Set Your Password",
-        html,
-        userId,
-        applicationId,
-      });
-
-      console.log(`${logPrefix} CiagoTech notification sent to ${email}`);
-    } catch (emailError) {
-      console.error(`${logPrefix} Failed to send CiagoTech notification email:`, emailError);
-      // Non-blocking - user provisioning already succeeded
-    }
 
     return {
       success: true,

@@ -23,7 +23,7 @@ export class FrappeError extends Error {
     message: string,
     public statusCode?: number,
     public excType?: string,
-    public originalResponse?: FrappeErrorResponse
+    public originalResponse?: FrappeErrorResponse,
   ) {
     super(message);
     this.name = "FrappeError";
@@ -51,15 +51,12 @@ export class FrappeClient {
   /**
    * Make authenticated request to Frappe API
    */
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     const headers = {
       "Content-Type": "application/json",
-      "Authorization": this.getAuthHeader(),
+      Authorization: this.getAuthHeader(),
       ...options.headers,
     };
 
@@ -78,10 +75,7 @@ export class FrappeClient {
       } catch {
         // Response is not JSON
         if (!response.ok) {
-          throw new FrappeError(
-            `Frappe API error: ${response.status} ${text}`,
-            response.status
-          );
+          throw new FrappeError(`Frappe API error: ${response.status} ${text}`, response.status);
         }
         throw new FrappeError(`Invalid JSON response from Frappe: ${text}`, response.status);
       }
@@ -89,20 +83,16 @@ export class FrappeClient {
       // Check for Frappe error response
       if (data.exception || data.exc_type) {
         const errorResponse = data as FrappeErrorResponse;
-        const errorMessage = errorResponse._error_message || errorResponse.exception || "Unknown Frappe error";
+        const errorMessage =
+          errorResponse._error_message || errorResponse.exception || "Unknown Frappe error";
 
-        throw new FrappeError(
-          errorMessage,
-          response.status,
-          errorResponse.exc_type,
-          errorResponse
-        );
+        throw new FrappeError(errorMessage, response.status, errorResponse.exc_type, errorResponse);
       }
 
       if (!response.ok) {
         throw new FrappeError(
           `Frappe API error: ${response.status} ${JSON.stringify(data)}`,
-          response.status
+          response.status,
         );
       }
 
@@ -116,7 +106,7 @@ export class FrappeClient {
       throw new FrappeError(
         `Frappe API request failed: ${error instanceof Error ? error.message : String(error)}`,
         undefined,
-        "NetworkError"
+        "NetworkError",
       );
     }
   }
@@ -127,7 +117,7 @@ export class FrappeClient {
    */
   async testAuth(): Promise<string> {
     const response = await this.request<{ message: string }>(
-      "/api/method/frappe.auth.get_logged_user"
+      "/api/method/frappe.auth.get_logged_user",
     );
     return response.message;
   }
@@ -144,7 +134,7 @@ export class FrappeClient {
       {
         method: "POST",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -159,7 +149,7 @@ export class FrappeClient {
   async getEmployee(name: string): Promise<FrappeEmployee | null> {
     try {
       const response = await this.request<FrappeAPIResponse<FrappeEmployee>>(
-        `/api/resource/Employee/${encodeURIComponent(name)}`
+        `/api/resource/Employee/${encodeURIComponent(name)}`,
       );
 
       return response.data;
@@ -178,16 +168,13 @@ export class FrappeClient {
    * @param payload Fields to update (partial update)
    * @returns Updated employee record
    */
-  async updateEmployee(
-    name: string,
-    payload: UpdateEmployeePayload
-  ): Promise<FrappeEmployee> {
+  async updateEmployee(name: string, payload: UpdateEmployeePayload): Promise<FrappeEmployee> {
     const response = await this.request<FrappeAPIResponse<FrappeEmployee>>(
       `/api/resource/Employee/${encodeURIComponent(name)}`,
       {
         method: "PUT",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -216,7 +203,7 @@ export class FrappeClient {
    */
   async listEmployees(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const response = await this.request<FrappeListResponse<FrappeEmployee>>(
-      `/api/resource/Employee?limit_start=${offset}&limit_page_length=${limit}`
+      `/api/resource/Employee?limit_start=${offset}&limit_page_length=${limit}`,
     );
 
     return response.data;
@@ -233,18 +220,15 @@ export class FrappeClient {
     try {
       // Search in both personal_email and company_email fields
       const personalEmailResults = await this.request<FrappeListResponse<FrappeEmployee>>(
-        `/api/resource/Employee?filters=[["personal_email","=","${encodeURIComponent(email)}"]]`
+        `/api/resource/Employee?filters=[["personal_email","=","${encodeURIComponent(email)}"]]`,
       );
 
       const companyEmailResults = await this.request<FrappeListResponse<FrappeEmployee>>(
-        `/api/resource/Employee?filters=[["company_email","=","${encodeURIComponent(email)}"]]`
+        `/api/resource/Employee?filters=[["company_email","=","${encodeURIComponent(email)}"]]`,
       );
 
       // Combine and deduplicate by name
-      const combined = [
-        ...personalEmailResults.data,
-        ...companyEmailResults.data,
-      ];
+      const combined = [...personalEmailResults.data, ...companyEmailResults.data];
 
       const uniqueNames = new Set<string>();
       const unique: FrappeEmployee[] = [];
@@ -280,7 +264,7 @@ export class FrappeClient {
   async getUser(email: string): Promise<FrappeUser | null> {
     try {
       const response = await this.request<FrappeAPIResponse<FrappeUser>>(
-        `/api/resource/User/${encodeURIComponent(email)}`
+        `/api/resource/User/${encodeURIComponent(email)}`,
       );
       return response.data;
     } catch (error) {
@@ -301,18 +285,16 @@ export class FrappeClient {
    * @returns Created user record
    */
   async createUser(payload: CreateUserPayload): Promise<FrappeUser> {
-    const response = await this.request<FrappeAPIResponse<FrappeUser>>(
-      "/api/resource/User",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          ...payload,
-          user_type: payload.user_type || "System User",
-          enabled: payload.enabled !== undefined ? payload.enabled : 1,
-          send_welcome_email: payload.send_welcome_email !== undefined ? payload.send_welcome_email : 1,
-        }),
-      }
-    );
+    const response = await this.request<FrappeAPIResponse<FrappeUser>>("/api/resource/User", {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
+        user_type: payload.user_type || "System User",
+        enabled: payload.enabled !== undefined ? payload.enabled : 1,
+        send_welcome_email:
+          payload.send_welcome_email !== undefined ? payload.send_welcome_email : 1,
+      }),
+    });
 
     return response.data;
   }
@@ -344,8 +326,74 @@ export class FrappeClient {
         body: JSON.stringify({
           roles: roles.map((r) => ({ role: r.role, doctype: "Has Role" })),
         }),
-      }
+      },
     );
+  }
+
+  /**
+   * Set a user's Module Profile (controls sidebar module visibility)
+   */
+  async setUserModuleProfile(email: string, profileName: string): Promise<void> {
+    await this.request<FrappeAPIResponse<FrappeUser>>(
+      `/api/resource/User/${encodeURIComponent(email)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          module_profile: profileName,
+        }),
+      },
+    );
+  }
+
+  /**
+   * Trigger Frappe password setup/reset flow for a user.
+   * Frappe generates reset_password_key and (if SMTP configured) sends its own email.
+   */
+  async triggerPasswordReset(email: string): Promise<void> {
+    await this.request<{ message?: string }>(
+      "/api/method/frappe.core.doctype.user.user.reset_password",
+      {
+        method: "POST",
+        body: JSON.stringify({ user: email }),
+      },
+    );
+  }
+
+  /**
+   * Set a user's password directly via the Admin API.
+   *
+   * Frappe's reset_password_key flow is broken in Docker dev environments
+   * (keys are rejected with 410 even when freshly generated).
+   * This bypasses that entirely by setting the password as Administrator.
+   */
+  async setUserPassword(email: string, newPassword: string): Promise<void> {
+    await this.request<any>("/api/method/frappe.client.set_value", {
+      method: "POST",
+      body: JSON.stringify({
+        doctype: "User",
+        name: email,
+        fieldname: "new_password",
+        value: newPassword,
+      }),
+    });
+  }
+
+  /**
+   * Generate a password setup link for user onboarding.
+   *
+   * STRATEGY: Since Frappe's reset_password_key validation is broken in Docker
+   * environments (returns 410 "Invalid Link" for freshly generated keys), we:
+   * 1. Set a temporary password directly via Admin API
+   * 2. Return the Frappe login URL so the user can log in and change it
+   *
+   * The caller (notifyFrappeAccessReady) will include the temp password in the
+   * email notification sent to the user.
+   */
+  async generatePasswordSetupLink(
+    email: string,
+    _options?: { forceRotate?: boolean },
+  ): Promise<string> {
+    return `${this.baseUrl}/login`;
   }
 
   /**
@@ -361,7 +409,7 @@ export class FrappeClient {
         body: JSON.stringify({
           enabled: 0,
         }),
-      }
+      },
     );
   }
 
@@ -381,7 +429,7 @@ export class FrappeClient {
       {
         method: "POST",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -396,7 +444,7 @@ export class FrappeClient {
   async getJobOpening(name: string): Promise<any | null> {
     try {
       const response = await this.request<FrappeAPIResponse<any>>(
-        `/api/resource/Job Opening/${encodeURIComponent(name)}`
+        `/api/resource/Job Opening/${encodeURIComponent(name)}`,
       );
 
       return response.data;
@@ -421,7 +469,7 @@ export class FrappeClient {
       {
         method: "PUT",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -436,7 +484,7 @@ export class FrappeClient {
    */
   async listJobOpenings(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const response = await this.request<FrappeListResponse<{ name: string }>>(
-      `/api/resource/Job Opening?limit_start=${offset}&limit_page_length=${limit}`
+      `/api/resource/Job Opening?limit_start=${offset}&limit_page_length=${limit}`,
     );
 
     return response.data;
@@ -458,7 +506,7 @@ export class FrappeClient {
       {
         method: "POST",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -473,7 +521,7 @@ export class FrappeClient {
   async getJobApplicant(name: string): Promise<any | null> {
     try {
       const response = await this.request<FrappeAPIResponse<any>>(
-        `/api/resource/Job Applicant/${encodeURIComponent(name)}`
+        `/api/resource/Job Applicant/${encodeURIComponent(name)}`,
       );
 
       return response.data;
@@ -498,7 +546,7 @@ export class FrappeClient {
       {
         method: "PUT",
         body: JSON.stringify(payload),
-      }
+      },
     );
 
     return response.data;
@@ -513,7 +561,7 @@ export class FrappeClient {
    */
   async listJobApplicants(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const response = await this.request<FrappeListResponse<{ name: string }>>(
-      `/api/resource/Job Applicant?limit_start=${offset}&limit_page_length=${limit}`
+      `/api/resource/Job Applicant?limit_start=${offset}&limit_page_length=${limit}`,
     );
 
     return response.data;
@@ -531,7 +579,7 @@ export class FrappeClient {
   async listDesignations(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const limitParam = limit === 0 ? 999999 : limit;
     const response = await this.request<FrappeListResponse<{ name: string }>>(
-      `/api/resource/Designation?limit_start=${offset}&limit_page_length=${limitParam}`
+      `/api/resource/Designation?limit_start=${offset}&limit_page_length=${limitParam}`,
     );
     return response.data;
   }
@@ -544,7 +592,7 @@ export class FrappeClient {
   async listDepartments(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const limitParam = limit === 0 ? 999999 : limit;
     const response = await this.request<FrappeListResponse<{ name: string }>>(
-      `/api/resource/Department?limit_start=${offset}&limit_page_length=${limitParam}`
+      `/api/resource/Department?limit_start=${offset}&limit_page_length=${limitParam}`,
     );
     return response.data;
   }
@@ -557,7 +605,20 @@ export class FrappeClient {
   async listEmploymentTypes(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
     const limitParam = limit === 0 ? 999999 : limit;
     const response = await this.request<FrappeListResponse<{ name: string }>>(
-      `/api/resource/Employment Type?limit_start=${offset}&limit_page_length=${limitParam}`
+      `/api/resource/Employment Type?limit_start=${offset}&limit_page_length=${limitParam}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * List all Branches
+   * @param limit Max results (0 = no limit)
+   * @param offset Starting offset
+   */
+  async listBranches(limit = 20, offset = 0): Promise<Array<{ name: string }>> {
+    const limitParam = limit === 0 ? 999999 : limit;
+    const response = await this.request<FrappeListResponse<{ name: string }>>(
+      `/api/resource/Branch?limit_start=${offset}&limit_page_length=${limitParam}`,
     );
     return response.data;
   }
@@ -569,12 +630,12 @@ export class FrappeClient {
     const response = await this.request<FrappeAPIResponse<{ name: string }>>(
       `/api/resource/Designation`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           designation_name: name,
           description: description || `Auto-created from job posting sync`,
         }),
-      }
+      },
     );
     return response.data;
   }
@@ -586,13 +647,29 @@ export class FrappeClient {
     const response = await this.request<FrappeAPIResponse<{ name: string }>>(
       `/api/resource/Department`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           department_name: name,
           company: company,
           is_group: 0,
         }),
-      }
+      },
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new Branch.
+   */
+  async createBranch(name: string): Promise<{ name: string }> {
+    const response = await this.request<FrappeAPIResponse<{ name: string }>>(
+      `/api/resource/Branch`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          branch: name,
+        }),
+      },
     );
     return response.data;
   }
@@ -608,7 +685,7 @@ export function createFrappeClient(): FrappeClient {
 
   if (!baseUrl || !apiKey || !apiSecret) {
     throw new Error(
-      "Missing Frappe credentials. Required: FRAPPE_BASE_URL, FRAPPE_API_KEY, FRAPPE_API_SECRET"
+      "Missing Frappe credentials. Required: FRAPPE_BASE_URL, FRAPPE_API_KEY, FRAPPE_API_SECRET",
     );
   }
 

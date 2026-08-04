@@ -28,6 +28,11 @@ export type FrappeEmployee = {
   company_email?: string;
   cell_number?: string;
   prefered_contact_email?: string;
+  bank_name?: string;
+  bank_ac_no?: string;
+  ifsc_code?: string;
+  micr_code?: string;
+  iban?: string;
 
   // Optional company details (Link fields)
   department?: string; // Link to Department
@@ -92,15 +97,59 @@ export type UpdateEmployeePayload = {
   first_name?: string;
   middle_name?: string;
   last_name?: string;
+  salutation?: string;
+  gender?: string;
+  date_of_birth?: string;
+  marital_status?: string;
+  blood_group?: string;
   personal_email?: string;
   company_email?: string;
+  prefered_contact_email?: "Company Email" | "Personal Email" | "User ID";
   cell_number?: string;
   date_of_joining?: string;
   current_address?: string;
   permanent_address?: string;
-  emergency_contact_name?: string;
-  emergency_phone?: string;
+  person_to_be_contacted?: string;
+  emergency_phone_number?: string;
   relation?: string;
+  ctc?: number;
+  salary_currency?: string;
+  salary_mode?: "Bank" | "Cash" | "Cheque";
+  bank_name?: string;
+  bank_ac_no?: string;
+  ifsc_code?: string;
+  micr_code?: string;
+  iban?: string;
+  pan_number?: string;
+  provident_fund_account?: string;
+  bio?: string;
+  education?: Array<{
+    school_univ?: string;
+    qualification?: string;
+    level?: string;
+    year_of_passing?: number;
+    class_per?: string;
+    maj_opt_subj?: string;
+  }>;
+  external_work_history?: Array<{
+    company_name?: string;
+    designation?: string;
+    salary?: string;
+    address?: string;
+  }>;
+  internal_work_history?: Array<{
+    branch?: string;
+    department?: string;
+    designation?: string;
+    from_date?: string;
+    to_date?: string;
+  }>;
+  job_applicant?: string;
+  scheduled_confirmation_date?: string;
+  final_confirmation_date?: string;
+  payroll_cost_center?: string;
+  reports_to?: string;
+  grade?: string;
 
   // Link fields (require existing records)
   designation?: string;
@@ -159,6 +208,9 @@ export type FrappeUser = {
   user_type: "System User" | "Website User";
   roles?: Array<{ role: string; parent: string }>;
   send_welcome_email?: number; // 1 = send, 0 = don't send
+  reset_password_key?: string;
+  last_reset_password_key_generated_on?: string;
+  module_profile?: string;
   creation?: string;
   modified?: string;
 };

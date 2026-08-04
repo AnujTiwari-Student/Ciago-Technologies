@@ -29,12 +29,20 @@
 
 import { PrismaClient } from "@prisma/client";
 import type { FrappeClient } from "@/integrations/frappe/client";
+import type { UpdateEmployeePayload } from "@/integrations/frappe/types";
 import {
   provisionFrappeEmployee,
   classifyFrappeError,
   isFrappeRetryable,
   type FrappeProvisioningResult,
 } from "./frappe-provisioning";
+import { syncJobApplicationToFrappe } from "./frappe-applicant-sync";
+import { matchDepartment, matchDesignation, matchEmploymentType } from "./frappe-field-matcher";
+import { getFrappeMasterData } from "./frappe-master-cache";
+import type {
+  EducationalQualificationInput,
+  PreviousWorkExperienceInput,
+} from "./job-application-fields";
 import { provisionFrappeUser } from "./frappe-user-provisioning";
 
 /**
@@ -50,7 +58,7 @@ async function provisionUserAfterEnrichment(
   db: PrismaClient,
   client: FrappeClient,
   correlationId: string | undefined,
-  logPrefix: string
+  logPrefix: string,
 ): Promise<void> {
   try {
     console.log(`${logPrefix} Provisioning Frappe User for ${email}`);
@@ -68,18 +76,22 @@ async function provisionUserAfterEnrichment(
       userId,
       db,
       client,
-      correlationId
+      correlationId,
     );
 
     if (userResult.success) {
-      console.log(`${logPrefix} Frappe User provisioned: ${userResult.action} - ${userResult.message}`);
+      console.log(
+        `${logPrefix} Frappe User provisioned: ${userResult.action} - ${userResult.message}`,
+      );
     } else {
-      console.warn(`${logPrefix} Frappe User provisioning failed (non-blocking): ${userResult.error}`);
+      console.warn(
+        `${logPrefix} Frappe User provisioning failed (non-blocking): ${userResult.error}`,
+      );
     }
   } catch (error) {
     console.warn(
       `${logPrefix} Frappe User provisioning threw (non-blocking):`,
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -102,17 +114,30 @@ export interface FrappeOnboardingData {
   salutation: string | null;
 
   // Employment
+  company: string;
+  designation: string | null;
   department: string | null;
   employmentType: string | null;
   joiningDate: string | null; // YYYY-MM-DD format
   startDate: string | null;
   workLocation: string | null;
   workModel: string | null;
+  jobApplicantName: string | null;
+  offerDate: string | null;
+  confirmationDate: string | null;
 
   // Compensation
   compensationInr: number | null;
   baseSalary: number | null;
   salaryCurrency: string;
+  salaryMode: "Bank" | "Cash" | "Cheque" | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  ifscCode: string | null;
+  micrCode: string | null;
+  iban: string | null;
+  panNumber: string | null;
+  providentFundAccount: string | null;
 
   // Contact
   personalEmail: string | null;
@@ -120,6 +145,10 @@ export interface FrappeOnboardingData {
   workEmail: string | null;
   address: string | null;
   permanentAddress: string | null;
+  preferredContactEmail: "Company Email" | "Personal Email" | "User ID" | null;
+  bio: string | null;
+  educationalQualifications: EducationalQualificationInput[];
+  previousWorkExperiences: PreviousWorkExperienceInput[];
 
   // Emergency contact
   emergencyContact: {
@@ -129,7 +158,7 @@ export interface FrappeOnboardingData {
   } | null;
 
   // Organizational
-  reportingManagerId: string | null;
+  reportingManagerEmployeeName: string | null;
   reportingHrId: string | null;
   teamName: string | null;
   notes: string | null;
@@ -146,6 +175,12 @@ export interface FrappeOnboardingDataSources {
     email: string;
     roleTitle: string;
     status: string;
+    coverLetter: string | null;
+    offeredAt: Date | null;
+    hiredAt: Date | null;
+    frappeJobApplicantName: string | null;
+    educationalQualifications: EducationalQualificationInput[];
+    previousWorkExperiences: PreviousWorkExperienceInput[];
   };
 
   onboardingRecord: {
@@ -172,6 +207,7 @@ export interface FrappeOnboardingDataSources {
     baseSalary: bigint | null;
     salaryCurrency: string;
     reportingManagerId: string | null;
+    reportingManagerEmployeeName: string | null;
     reportingHrId: string | null;
     teamName: string | null;
     notes: string | null;
@@ -187,6 +223,13 @@ export interface FrappeOnboardingDataSources {
   } | null;
 }
 
+type EmergencyContactRecord = {
+  name?: string;
+  relationship?: string;
+  relation?: string;
+  phone?: string;
+};
+
 /**
  * Result of HIRED enrichment operation
  */
@@ -194,12 +237,12 @@ export interface FrappeHiredResult {
   success: boolean;
   employeeName: string | null;
   action:
-    | "updated"             // Existing employee updated with full data
-    | "reconciled"          // Found existing employee via reconciliation
-    | "provisioned"         // No employee found, centralized provisioning invoked
-    | "already_complete"    // Already processed (idempotency)
+    | "updated" // Existing employee updated with full data
+    | "reconciled" // Found existing employee via reconciliation
+    | "provisioned" // No employee found, centralized provisioning invoked
+    | "already_complete" // Already processed (idempotency)
     | "needs_manual_review" // Ambiguous state, manual intervention required
-    | "failed";             // Operation failed
+    | "failed"; // Operation failed
   message: string;
   error?: string;
 }
@@ -209,9 +252,18 @@ export interface FrappeHiredResult {
  * Priority: Employee > OnboardingRecord > JobApplication > JobPosting
  */
 export function extractFrappeOnboardingData(
-  sources: FrappeOnboardingDataSources
+  sources: FrappeOnboardingDataSources,
 ): FrappeOnboardingData {
   const formState = sources.onboardingRecord?.formState || {};
+  const emergencyContact = sources.onboardingRecord
+    ?.emergencyContact as EmergencyContactRecord | null;
+  const compensationInr = sources.onboardingRecord?.compensationInr
+    ? Number(sources.onboardingRecord.compensationInr)
+    : null;
+  const baseSalary = sources.employee?.baseSalary ? Number(sources.employee.baseSalary) : null;
+  const salaryMode =
+    (formState.salary_mode as "Bank" | "Cash" | "Cheque" | undefined) ||
+    (formState.account_number || formState.ifsc_code ? "Bank" : null);
 
   return {
     // Identity
@@ -227,53 +279,78 @@ export function extractFrappeOnboardingData(
     salutation: (formState.salutation as string) || null,
 
     // Employment
+    company: process.env.FRAPPE_COMPANY_NAME || "Ciago Technologies",
+    designation: sources.employee?.designation || sources.application.roleTitle,
     department:
       sources.employee?.department ||
       sources.onboardingRecord?.department ||
       sources.jobPosting?.department ||
       null,
-    employmentType:
-      sources.employee?.employmentType || sources.jobPosting?.employmentType || null,
+    employmentType: sources.employee?.employmentType || sources.jobPosting?.employmentType || null,
     joiningDate:
-      sources.onboardingRecord?.doj?.toISOString().split('T')[0] ||
-      sources.employee?.doj?.toISOString().split('T')[0] ||
-      sources.onboardingRecord?.startDate?.toISOString().split('T')[0] ||
+      sources.onboardingRecord?.doj?.toISOString().split("T")[0] ||
+      sources.employee?.doj?.toISOString().split("T")[0] ||
+      sources.onboardingRecord?.startDate?.toISOString().split("T")[0] ||
       null,
-    startDate: sources.onboardingRecord?.startDate?.toISOString().split('T')[0] || null,
-    workLocation:
-      sources.employee?.workLocation || sources.jobPosting?.location || null,
+    startDate: sources.onboardingRecord?.startDate?.toISOString().split("T")[0] || null,
+    workLocation: sources.employee?.workLocation || sources.jobPosting?.location || null,
     workModel:
-      sources.employee?.workModel ||
-      (sources.jobPosting?.isRemote ? "remote" : "office") ||
-      null,
+      sources.employee?.workModel || (sources.jobPosting?.isRemote ? "remote" : "office") || null,
+    jobApplicantName: sources.application.frappeJobApplicantName,
+    offerDate: sources.application.offeredAt?.toISOString().split("T")[0] || null,
+    confirmationDate: sources.application.hiredAt?.toISOString().split("T")[0] || null,
 
     // Compensation
-    compensationInr: sources.onboardingRecord?.compensationInr
-      ? Number(sources.onboardingRecord.compensationInr)
-      : null,
-    baseSalary: sources.employee?.baseSalary
-      ? Number(sources.employee.baseSalary)
-      : null,
+    compensationInr,
+    baseSalary,
     salaryCurrency: sources.employee?.salaryCurrency || "INR",
+    salaryMode,
+    bankName: (formState.bank_name as string) || null,
+    bankAccountNumber:
+      (formState.bank_ac_no as string) || (formState.account_number as string) || null,
+    ifscCode: (formState.ifsc_code as string) || null,
+    micrCode: (formState.micr_code as string) || null,
+    iban: (formState.iban as string) || null,
+    panNumber: (formState.pan_number as string) || null,
+    providentFundAccount: (formState.provident_fund_account as string) || null,
 
     // Contact (from formState and employee)
-    personalEmail: (formState.personal_email as string) || sources.employee?.personalEmail || sources.application.email,
+    personalEmail:
+      (formState.personal_email as string) ||
+      sources.employee?.personalEmail ||
+      sources.application.email,
     contactNumber: (formState.personal_phone as string) || sources.employee?.contactNumber || null,
-    workEmail: sources.employee?.workEmail || null,
+    workEmail: sources.employee?.workEmail || sources.application.email,
     address: (formState.current_address as string) || sources.employee?.address || null,
     permanentAddress: (formState.permanent_address as string) || null,
+    preferredContactEmail: sources.employee?.workEmail
+      ? "Company Email"
+      : (formState.personal_email as string) || sources.employee?.personalEmail
+        ? "Personal Email"
+        : "User ID",
+    bio:
+      (formState.bio as string) ||
+      (formState.cover_letter as string) ||
+      sources.application.coverLetter ||
+      null,
+    educationalQualifications: Array.isArray(sources.application.educationalQualifications)
+      ? sources.application.educationalQualifications
+      : [],
+    previousWorkExperiences: Array.isArray(sources.application.previousWorkExperiences)
+      ? sources.application.previousWorkExperiences
+      : [],
 
     // Emergency contact
-    emergencyContact: sources.onboardingRecord?.emergencyContact
+    emergencyContact: emergencyContact
       ? {
-          name: (sources.onboardingRecord.emergencyContact as any).name,
-          relationship: (sources.onboardingRecord.emergencyContact as any).relationship,
-          phone: (sources.onboardingRecord.emergencyContact as any).phone,
+          name: emergencyContact.name,
+          relationship: emergencyContact.relationship || emergencyContact.relation,
+          phone: emergencyContact.phone,
         }
       : null,
 
     // Organizational
-    reportingManagerId: sources.employee?.reportingManagerId || null,
+    reportingManagerEmployeeName: sources.employee?.reportingManagerEmployeeName || null,
     reportingHrId: sources.employee?.reportingHrId || null,
     teamName: sources.employee?.teamName || null,
     notes: sources.employee?.notes || null,
@@ -300,7 +377,7 @@ async function enrichFrappeEmployee(
   employeeName: string,
   onboardingData: FrappeOnboardingData,
   client: FrappeClient,
-  logPrefix: string
+  logPrefix: string,
 ): Promise<void> {
   console.log(`${logPrefix} Enriching Frappe employee ${employeeName} with onboarding data`);
 
@@ -310,10 +387,14 @@ async function enrichFrappeEmployee(
   const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
   const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : undefined;
 
+  const masterData = await getFrappeMasterData(client);
+  const autoCreateRecords = process.env.AUTO_CREATE_RECORDS !== "false";
+
   // Build update payload
-  const updatePayload: Record<string, any> = {
+  const updatePayload: UpdateEmployeePayload = {
     first_name: firstName,
     last_name: lastName,
+    company: onboardingData.company,
   };
 
   if (middleName) {
@@ -344,6 +425,9 @@ async function enrichFrappeEmployee(
   if (onboardingData.personalEmail) {
     updatePayload.personal_email = onboardingData.personalEmail;
   }
+  if (onboardingData.preferredContactEmail) {
+    updatePayload.prefered_contact_email = onboardingData.preferredContactEmail;
+  }
   if (onboardingData.contactNumber) {
     updatePayload.cell_number = onboardingData.contactNumber;
   }
@@ -362,14 +446,80 @@ async function enrichFrappeEmployee(
   // Emergency contact
   if (onboardingData.emergencyContact) {
     if (onboardingData.emergencyContact.name) {
-      updatePayload.emergency_contact_name = onboardingData.emergencyContact.name;
+      updatePayload.person_to_be_contacted = onboardingData.emergencyContact.name;
     }
     if (onboardingData.emergencyContact.phone) {
-      updatePayload.emergency_phone = onboardingData.emergencyContact.phone;
+      updatePayload.emergency_phone_number = onboardingData.emergencyContact.phone;
     }
     if (onboardingData.emergencyContact.relationship) {
       updatePayload.relation = onboardingData.emergencyContact.relationship;
     }
+  }
+
+  // Salary & joining details
+  const ctc = onboardingData.compensationInr ?? onboardingData.baseSalary;
+  if (ctc !== null) {
+    updatePayload.ctc = ctc;
+  }
+  if (onboardingData.salaryCurrency) {
+    updatePayload.salary_currency = onboardingData.salaryCurrency;
+  }
+  if (onboardingData.salaryMode) {
+    updatePayload.salary_mode = onboardingData.salaryMode;
+  }
+  if (onboardingData.bankName) {
+    updatePayload.bank_name = onboardingData.bankName;
+  }
+  if (onboardingData.bankAccountNumber) {
+    updatePayload.bank_ac_no = onboardingData.bankAccountNumber;
+  }
+  if (onboardingData.ifscCode) {
+    updatePayload.ifsc_code = onboardingData.ifscCode;
+  }
+  if (onboardingData.micrCode) {
+    updatePayload.micr_code = onboardingData.micrCode;
+  }
+  if (onboardingData.iban) {
+    updatePayload.iban = onboardingData.iban;
+  }
+  if (onboardingData.panNumber) {
+    updatePayload.pan_number = onboardingData.panNumber;
+  }
+  if (onboardingData.providentFundAccount) {
+    updatePayload.provident_fund_account = onboardingData.providentFundAccount;
+  }
+  if (onboardingData.bio) {
+    updatePayload.bio = onboardingData.bio;
+  }
+  if (onboardingData.educationalQualifications.length > 0) {
+    updatePayload.education = onboardingData.educationalQualifications.map((row) => ({
+      school_univ: row.school || undefined,
+      qualification: row.qualification || undefined,
+      level: row.level || undefined,
+      year_of_passing: row.yearOfPassing ? Number(row.yearOfPassing) : undefined,
+      class_per: row.classPercentage || undefined,
+      maj_opt_subj: row.majorOptionalSubjects || undefined,
+    }));
+  }
+  if (onboardingData.previousWorkExperiences.length > 0) {
+    updatePayload.external_work_history = onboardingData.previousWorkExperiences.map((row) => ({
+      company_name: row.company || undefined,
+      designation: row.designation || undefined,
+      salary: row.salary || undefined,
+      address: row.address || undefined,
+    }));
+  }
+  if (onboardingData.jobApplicantName) {
+    updatePayload.job_applicant = onboardingData.jobApplicantName;
+  }
+  if (onboardingData.offerDate) {
+    updatePayload.scheduled_confirmation_date = onboardingData.offerDate;
+  }
+  if (onboardingData.confirmationDate) {
+    updatePayload.final_confirmation_date = onboardingData.confirmationDate;
+  }
+  if (onboardingData.reportingManagerEmployeeName) {
+    updatePayload.reports_to = onboardingData.reportingManagerEmployeeName;
   }
 
   // Custom fields
@@ -378,12 +528,57 @@ async function enrichFrappeEmployee(
     updatePayload.custom_email = onboardingData.email;
   }
 
-  // Link fields - Phase 2: Skip if not set (requires on-demand creation in future)
-  // TODO Phase 2.1: Implement Link field resolution/creation
-  // - designation (from roleTitle)
-  // - department (from department)
-  // - employment_type (from employmentType)
-  // - branch (from workLocation)
+  // Link fields
+  if (onboardingData.designation?.trim()) {
+    const result = await matchDesignation(
+      onboardingData.designation,
+      masterData.designations,
+      client,
+      autoCreateRecords,
+      logPrefix,
+    );
+    if (result.mappedValue) {
+      updatePayload.designation = result.mappedValue;
+    }
+  }
+
+  if (onboardingData.department?.trim()) {
+    const result = await matchDepartment(
+      onboardingData.department,
+      masterData.departments,
+      client,
+      onboardingData.company,
+      autoCreateRecords,
+      logPrefix,
+    );
+    if (result.mappedValue) {
+      updatePayload.department = result.mappedValue;
+    }
+  }
+
+  if (onboardingData.employmentType?.trim()) {
+    const result = matchEmploymentType(
+      onboardingData.employmentType,
+      masterData.employmentTypes,
+      logPrefix,
+    );
+    if (result.mappedValue) {
+      updatePayload.employment_type = result.mappedValue;
+    }
+  }
+
+  if (onboardingData.workLocation?.trim()) {
+    const branches = await client.listBranches(0);
+    const existingBranch = branches.find(
+      (branch) => branch.name.toLowerCase() === onboardingData.workLocation!.trim().toLowerCase(),
+    );
+    if (existingBranch) {
+      updatePayload.branch = existingBranch.name;
+    } else if (autoCreateRecords) {
+      const created = await client.createBranch(onboardingData.workLocation.trim());
+      updatePayload.branch = created.name;
+    }
+  }
 
   try {
     await client.updateEmployee(employeeName, updatePayload);
@@ -428,7 +623,7 @@ export async function upsertFrappeEmployeeAtHired(
   onboardingData: FrappeOnboardingData,
   db: PrismaClient,
   client: FrappeClient,
-  correlationId?: string
+  correlationId?: string,
 ): Promise<FrappeHiredResult> {
   const logPrefix = `[frappe-hired:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting HIRED upsert/enrichment`, { correlationId });
@@ -444,6 +639,7 @@ export async function upsertFrappeEmployeeAtHired(
         email: true,
         status: true,
         frappeEmployeeName: true,
+        frappeJobApplicantName: true,
         frappeProvisioningState: true,
         frappeRecordStatus: true,
         lifecycleVersion: true,
@@ -457,7 +653,7 @@ export async function upsertFrappeEmployeeAtHired(
     // CRITICAL: Verify status is still HIRED (race protection)
     if (application.status !== "hired") {
       console.warn(
-        `${logPrefix} Application status is ${application.status}, not hired - aborting upsert`
+        `${logPrefix} Application status is ${application.status}, not hired - aborting upsert`,
       );
 
       await db.auditLog.create({
@@ -488,18 +684,22 @@ export async function upsertFrappeEmployeeAtHired(
       provisioningState: application.frappeProvisioningState,
     });
 
+    if (!onboardingData.jobApplicantName) {
+      const applicantSync = await syncJobApplicationToFrappe(db, client, applicationId);
+      if (applicantSync.success && applicantSync.applicantName) {
+        onboardingData.jobApplicantName = applicantSync.applicantName;
+      }
+    }
+
     // Step 2: Check if already fully processed (idempotency)
-    if (
-      application.frappeEmployeeName &&
-      application.frappeProvisioningState === "succeeded"
-    ) {
+    if (application.frappeEmployeeName && application.frappeProvisioningState === "succeeded") {
       // Verify employee still exists in Frappe
       try {
         const existing = await client.getEmployee(application.frappeEmployeeName);
 
         if (existing) {
           console.log(
-            `${logPrefix} Already processed - employee ${application.frappeEmployeeName} exists and is mapped`
+            `${logPrefix} Already processed - employee ${application.frappeEmployeeName} exists and is mapped`,
           );
 
           // Idempotent enrichment: re-apply onboarding data (safe operation)
@@ -507,7 +707,7 @@ export async function upsertFrappeEmployeeAtHired(
             application.frappeEmployeeName,
             onboardingData,
             client,
-            logPrefix
+            logPrefix,
           );
 
           // Non-blocking: provision Frappe User (idempotent - safe on repeat)
@@ -520,7 +720,7 @@ export async function upsertFrappeEmployeeAtHired(
             db,
             client,
             correlationId,
-            logPrefix
+            logPrefix,
           );
 
           return {
@@ -533,7 +733,7 @@ export async function upsertFrappeEmployeeAtHired(
 
         // Employee deleted externally - continue to reconciliation
         console.warn(
-          `${logPrefix} Employee ${application.frappeEmployeeName} was deleted from Frappe`
+          `${logPrefix} Employee ${application.frappeEmployeeName} was deleted from Frappe`,
         );
       } catch (error) {
         console.error(`${logPrefix} Failed to verify existing employee:`, error);
@@ -544,7 +744,7 @@ export async function upsertFrappeEmployeeAtHired(
     // Step 3: Reconcile from job_applications.frappe_employee_name
     if (application.frappeEmployeeName) {
       console.log(
-        `${logPrefix} Reconciling existing employee name ${application.frappeEmployeeName} from job_applications`
+        `${logPrefix} Reconciling existing employee name ${application.frappeEmployeeName} from job_applications`,
       );
 
       try {
@@ -552,12 +752,7 @@ export async function upsertFrappeEmployeeAtHired(
 
         if (existing) {
           // Enrich with onboarding data
-          await enrichFrappeEmployee(
-            existing.name,
-            onboardingData,
-            client,
-            logPrefix
-          );
+          await enrichFrappeEmployee(existing.name, onboardingData, client, logPrefix);
 
           // Update provisioning state
           await db.jobApplication.updateMany({
@@ -582,7 +777,7 @@ export async function upsertFrappeEmployeeAtHired(
             db,
             client,
             correlationId,
-            logPrefix
+            logPrefix,
           );
 
           await db.auditLog.create({
@@ -609,7 +804,7 @@ export async function upsertFrappeEmployeeAtHired(
         }
 
         console.warn(
-          `${logPrefix} Employee ${application.frappeEmployeeName} not found in Frappe - attempting employees table reconciliation`
+          `${logPrefix} Employee ${application.frappeEmployeeName} not found in Frappe - attempting employees table reconciliation`,
         );
       } catch (error) {
         console.error(`${logPrefix} Reconciliation from job_applications failed:`, error);
@@ -629,13 +824,13 @@ export async function upsertFrappeEmployeeAtHired(
 
     if (employee?.frappeEmployeeName) {
       console.log(
-        `${logPrefix} Found existing mapping in employees table: ${employee.frappeEmployeeName}`
+        `${logPrefix} Found existing mapping in employees table: ${employee.frappeEmployeeName}`,
       );
 
       // Check if employee was terminated
       if (employee.frappeRecordStatus === "TERMINATED" || employee.frappeRecordStatus === "LEFT") {
         console.warn(
-          `${logPrefix} Employee ${employee.frappeEmployeeName} is ${employee.frappeRecordStatus} - cannot reuse for rehire`
+          `${logPrefix} Employee ${employee.frappeEmployeeName} is ${employee.frappeRecordStatus} - cannot reuse for rehire`,
         );
 
         await db.auditLog.create({
@@ -645,8 +840,7 @@ export async function upsertFrappeEmployeeAtHired(
             details: {
               employeeName: employee.frappeEmployeeName,
               recordStatus: employee.frappeRecordStatus,
-              reason:
-                "Cannot reuse terminated employee for rehire - requires explicit rehire flow",
+              reason: "Cannot reuse terminated employee for rehire - requires explicit rehire flow",
               correlationId,
             },
           },
@@ -674,12 +868,7 @@ export async function upsertFrappeEmployeeAtHired(
             });
 
             // Enrich with onboarding data
-            await enrichFrappeEmployee(
-              existing.name,
-              onboardingData,
-              client,
-              logPrefix
-            );
+            await enrichFrappeEmployee(existing.name, onboardingData, client, logPrefix);
 
             // Non-blocking: provision Frappe User after enrichment
             await provisionUserAfterEnrichment(
@@ -691,7 +880,7 @@ export async function upsertFrappeEmployeeAtHired(
               db,
               client,
               correlationId,
-              logPrefix
+              logPrefix,
             );
 
             await db.auditLog.create({
@@ -708,7 +897,7 @@ export async function upsertFrappeEmployeeAtHired(
             });
 
             console.log(
-              `${logPrefix} Reconciled from employees table and enriched ${existing.name}`
+              `${logPrefix} Reconciled from employees table and enriched ${existing.name}`,
             );
 
             return {
@@ -719,24 +908,21 @@ export async function upsertFrappeEmployeeAtHired(
             };
           }
         } catch (error) {
-          console.error(
-            `${logPrefix} Failed to reconcile from employees table:`,
-            error
-          );
+          console.error(`${logPrefix} Failed to reconcile from employees table:`, error);
         }
       }
     }
 
     // Step 5: No mapping exists - invoke centralized provisioning
     console.log(
-      `${logPrefix} No existing mapping found - invoking centralized provisioning for HIRED fallback`
+      `${logPrefix} No existing mapping found - invoking centralized provisioning for HIRED fallback`,
     );
 
     const provisioningResult = await provisionFrappeEmployee(
       applicationId,
       db,
       client,
-      correlationId || `hired-fallback-${applicationId}`
+      correlationId || `hired-fallback-${applicationId}`,
     );
 
     if (!provisioningResult.success) {
@@ -752,7 +938,7 @@ export async function upsertFrappeEmployeeAtHired(
     }
 
     console.log(
-      `${logPrefix} Centralized provisioning succeeded: ${provisioningResult.employeeName}`
+      `${logPrefix} Centralized provisioning succeeded: ${provisioningResult.employeeName}`,
     );
 
     // Enrich newly provisioned employee with onboarding data
@@ -761,7 +947,7 @@ export async function upsertFrappeEmployeeAtHired(
         provisioningResult.employeeName,
         onboardingData,
         client,
-        logPrefix
+        logPrefix,
       );
 
       // Non-blocking: provision Frappe User after enrichment
@@ -774,7 +960,7 @@ export async function upsertFrappeEmployeeAtHired(
         db,
         client,
         correlationId,
-        logPrefix
+        logPrefix,
       );
 
       await db.auditLog.create({

@@ -189,6 +189,8 @@ model JobApplication {
   resumeStoragePath                String?                     @map("resume_storage_path")
   resumeLink                       String?                     @map("resume_link")
   status                           String                      @default("applied")
+  offeredAt                        DateTime?                   @map("offered_at") @db.Timestamptz(6)
+  hiredAt                          DateTime?                   @map("hired_at") @db.Timestamptz(6)
   createdAt                        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt                        DateTime?                   @map("deleted_at") @db.Timestamptz(6)
   isSoftDeleted                    Boolean                     @default(false) @map("is_soft_deleted")
@@ -211,6 +213,8 @@ model JobApplication {
   expectedSalaryCurrency           String?                     @default("INR") @map("expected_salary_currency")
   expectedSalaryMax                BigInt?                     @map("expected_salary_max")
   expectedSalaryMin                BigInt?                     @map("expected_salary_min")
+  educationalQualifications        Json?                       @map("educational_qualifications")
+  previousWorkExperiences          Json?                       @map("previous_work_experiences")
   frappeJobApplicantName           String?                     @unique @map("frappe_job_applicant_name")
   phoneNumber                      String?                     @map("phone_number")
 

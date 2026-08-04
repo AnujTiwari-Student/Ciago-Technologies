@@ -12,7 +12,7 @@
 //
 // All operations use the admin Prisma client (bypasses RLS).
 
-import type { PrismaClient } from "@prisma/client";
+import type { AppRole, PrismaClient } from "@prisma/client";
 
 export type ClerkIdentity = {
   clerkUserId: string;
@@ -42,8 +42,10 @@ function isUniqueViolation(error: unknown): boolean {
   const maybe = error as { code?: string; message?: string };
   // Postgres unique violation error code
   if (maybe.code === "23505") return true;
-  if (typeof maybe.message === "string" && /duplicate key value/i.test(maybe.message))
-    return true;
+  // Prisma unique violation error code
+  if (maybe.code === "P2002") return true;
+  if (typeof maybe.message === "string" && /unique constraint/i.test(maybe.message)) return true;
+  if (typeof maybe.message === "string" && /duplicate key value/i.test(maybe.message)) return true;
   return false;
 }
 
@@ -79,32 +81,34 @@ export async function provisionClerkUser(
     if (identity.emailVerified) {
       const byEmail = await adminDb.clerkUserMap.findFirst({
         where: { email },
-        select: { authUserId: true },
+        select: { authUserId: true, clerkUserId: true },
       });
 
       if (byEmail) {
-        // Link this Clerk user id to the existing auth.users row
+        // Reuse the mapped auth_user_id and move mapping to this Clerk user id when needed.
         try {
-          await adminDb.clerkUserMap.upsert({
-            where: { clerkUserId: identity.clerkUserId },
-            create: {
-              clerkUserId: identity.clerkUserId,
-              authUserId: byEmail.authUserId,
-              email,
-              primaryEmailVerified: true,
-            },
-            update: {
-              email,
-              primaryEmailVerified: true,
-            },
-          });
+          if (byEmail.clerkUserId === identity.clerkUserId) {
+            await adminDb.clerkUserMap.update({
+              where: { clerkUserId: identity.clerkUserId },
+              data: { email, primaryEmailVerified: true },
+            });
+          } else {
+            await adminDb.clerkUserMap.update({
+              where: { authUserId: byEmail.authUserId },
+              data: {
+                clerkUserId: identity.clerkUserId,
+                email,
+                primaryEmailVerified: true,
+              },
+            });
+          }
           return ok(byEmail.authUserId, false, true);
         } catch (err) {
           if (!isUniqueViolation(err)) {
             const message = err instanceof Error ? err.message : String(err);
             return { kind: "link_failed", message };
           }
-          // Concurrent insert won - re-read
+          // Concurrent write won - re-read by current Clerk user id.
           const tieBreak = await adminDb.clerkUserMap.findUnique({
             where: { clerkUserId: identity.clerkUserId },
             select: { authUserId: true },
@@ -149,21 +153,37 @@ export async function provisionClerkUser(
           newAuthUserId = result[0].id;
         }
 
-        // Create or update clerk_user_map entry
-        await tx.clerkUserMap.upsert({
-          where: { clerkUserId: identity.clerkUserId },
-          create: {
-            clerkUserId: identity.clerkUserId,
-            authUserId: newAuthUserId,
-            email,
-            primaryEmailVerified: Boolean(identity.emailVerified),
-          },
-          update: {
-            authUserId: newAuthUserId,
-            email,
-            primaryEmailVerified: Boolean(identity.emailVerified),
-          },
+        // Create or update clerk_user_map entry while preserving auth_user_id uniqueness.
+        const existingByAuth = await tx.clerkUserMap.findUnique({
+          where: { authUserId: newAuthUserId },
+          select: { clerkUserId: true },
         });
+
+        if (existingByAuth) {
+          await tx.clerkUserMap.update({
+            where: { authUserId: newAuthUserId },
+            data: {
+              clerkUserId: identity.clerkUserId,
+              email,
+              primaryEmailVerified: Boolean(identity.emailVerified),
+            },
+          });
+        } else {
+          await tx.clerkUserMap.upsert({
+            where: { clerkUserId: identity.clerkUserId },
+            create: {
+              clerkUserId: identity.clerkUserId,
+              authUserId: newAuthUserId,
+              email,
+              primaryEmailVerified: Boolean(identity.emailVerified),
+            },
+            update: {
+              authUserId: newAuthUserId,
+              email,
+              primaryEmailVerified: Boolean(identity.emailVerified),
+            },
+          });
+        }
 
         // Create default user role if none exists
         const existingRole = await tx.userRole.findFirst({
@@ -174,7 +194,7 @@ export async function provisionClerkUser(
           await tx.userRole.create({
             data: {
               userId: newAuthUserId,
-              role: "user" as any,
+              role: "user" as AppRole,
             },
           });
         }

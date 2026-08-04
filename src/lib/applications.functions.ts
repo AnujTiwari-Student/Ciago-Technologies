@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAdminDb } from "@/lib/db/admin";
+import {
+  educationalQualificationsSchema,
+  normalizeEducationalQualifications,
+  normalizePreviousWorkExperiences,
+  previousWorkExperiencesSchema,
+} from "@/lib/job-application-fields";
 import { enforceRateLimit, getClientIp, getClientHost } from "@/lib/rateLimit.server";
 import { verifyTurnstile } from "@/lib/turnstile.server";
 
@@ -19,6 +25,8 @@ const inputSchema = z.object({
   expectedSalaryCurrency: z.string().trim().max(10).optional().or(z.literal("")),
   expectedSalaryMin: z.string().trim().max(20).optional().or(z.literal("")),
   expectedSalaryMax: z.string().trim().max(20).optional().or(z.literal("")),
+  educationalQualifications: educationalQualificationsSchema,
+  previousWorkExperiences: previousWorkExperiencesSchema,
   turnstileToken: z.string().max(4096).optional().or(z.literal("")),
   hp: z.string().max(200).optional().or(z.literal("")),
 });
@@ -47,6 +55,10 @@ export const submitApplication = createServerFn({ method: "POST" })
     }
 
     const adminDb = getAdminDb();
+    const educationalQualifications = normalizeEducationalQualifications(
+      data.educationalQualifications,
+    );
+    const previousWorkExperiences = normalizePreviousWorkExperiences(data.previousWorkExperiences);
 
     // 90-day cooldown check + insert (replaces apply_for_role RPC)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
@@ -77,6 +89,10 @@ export const submitApplication = createServerFn({ method: "POST" })
         expectedSalaryCurrency: data.expectedSalaryCurrency || "INR",
         expectedSalaryMin: data.expectedSalaryMin ? BigInt(data.expectedSalaryMin) : null,
         expectedSalaryMax: data.expectedSalaryMax ? BigInt(data.expectedSalaryMax) : null,
+        educationalQualifications:
+          educationalQualifications.length > 0 ? educationalQualifications : null,
+        previousWorkExperiences:
+          previousWorkExperiences.length > 0 ? previousWorkExperiences : null,
         status: "applied",
       },
     });
@@ -85,7 +101,11 @@ export const submitApplication = createServerFn({ method: "POST" })
     if (data.resumeStoragePath) {
       const { getStorage } = await import("@/lib/storage");
       const storage = getStorage();
-      const result = await storage.createSignedUrl("resumes", data.resumeStoragePath, 60 * 60 * 24 * 7);
+      const result = await storage.createSignedUrl(
+        "resumes",
+        data.resumeStoragePath,
+        60 * 60 * 24 * 7,
+      );
       if (result.signedUrl) resumeAccessUrl = result.signedUrl;
     }
 
@@ -138,7 +158,10 @@ export const submitApplication = createServerFn({ method: "POST" })
           applicationId: inserted.id,
           correlationId: `new-application-${inserted.id}`,
         }).catch((e) => {
-          console.error("[apply-frappe] provisioning failed", { applicationId: inserted.id, error: e.message });
+          console.error("[apply-frappe] provisioning failed", {
+            applicationId: inserted.id,
+            error: e.message,
+          });
         });
       }
     } catch (e) {
@@ -154,7 +177,10 @@ export const submitApplication = createServerFn({ method: "POST" })
         const { createFrappeClient } = await import("@/integrations/frappe/client");
         const client = createFrappeClient();
         syncJobApplicationToFrappe(adminDb, client, inserted.id).catch((e) => {
-          console.error("[apply-frappe-applicant] sync failed", { applicationId: inserted.id, error: e.message });
+          console.error("[apply-frappe-applicant] sync failed", {
+            applicationId: inserted.id,
+            error: e.message,
+          });
         });
       }
     } catch (e) {

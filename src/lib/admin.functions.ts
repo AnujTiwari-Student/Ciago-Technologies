@@ -164,7 +164,11 @@ export const listAllApplications = createServerFn({ method: "GET" })
       const storage = getStorage();
       await Promise.all(
         withPaths.map(async (r) => {
-          const result = await storage.createSignedUrl("resumes", r.resume_storage_path!, 60 * 60 * 24 * 7);
+          const result = await storage.createSignedUrl(
+            "resumes",
+            r.resume_storage_path!,
+            60 * 60 * 24 * 7,
+          );
           if (result.signedUrl) r.resume_link = result.signedUrl;
         }),
       );
@@ -186,7 +190,17 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
 
     const prior = await adminDb.jobApplication.findUnique({
       where: { id: data.id },
-      select: { id: true, userId: true, email: true, fullName: true, roleTitle: true, status: true, roleId: true },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        fullName: true,
+        roleTitle: true,
+        status: true,
+        roleId: true,
+        offeredAt: true,
+        hiredAt: true,
+      },
     });
 
     if (data.status === "hired" && prior) {
@@ -247,7 +261,11 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
     // Update application status
     await adminDb.jobApplication.update({
       where: { id: data.id },
-      data: { status: data.status },
+      data: {
+        status: data.status,
+        ...(data.status === "offered" && !prior?.offeredAt ? { offeredAt: new Date() } : {}),
+        ...(data.status === "hired" && !prior?.hiredAt ? { hiredAt: new Date() } : {}),
+      },
     });
 
     // Update Frappe custom_employment_status if employee exists
@@ -273,9 +291,12 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
               custom_employment_status: frappeStatus,
             });
 
-            console.log(`[frappe-status-sync] Updated custom_employment_status to ${frappeStatus}`, {
-              employeeName: application.frappeEmployeeName,
-            });
+            console.log(
+              `[frappe-status-sync] Updated custom_employment_status to ${frappeStatus}`,
+              {
+                employeeName: application.frappeEmployeeName,
+              },
+            );
           }
         }
       } catch (syncError) {
@@ -331,13 +352,36 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       }).catch((e) => {
         console.error("[status-email] send failed", e);
       });
+
+      try {
+        const { isFrappeEmployeeSyncEnabled } = await import("@/lib/feature-flags.server");
+        const frappeEnabled = await isFrappeEmployeeSyncEnabled();
+        if (frappeEnabled) {
+          const { syncJobApplicationToFrappe } = await import("@/lib/frappe-applicant-sync");
+          const { createFrappeClient } = await import("@/integrations/frappe/client");
+          const client = createFrappeClient();
+          syncJobApplicationToFrappe(adminDb, client, prior.id).catch((e) => {
+            console.error("[status-frappe-applicant] sync failed", {
+              applicationId: prior.id,
+              status: data.status,
+              error: e.message,
+            });
+          });
+        }
+      } catch (e) {
+        console.error(
+          "[status-frappe-applicant] trigger failed",
+          e instanceof Error ? e.message : e,
+        );
+      }
     }
 
     // Phase 2/3: If applied, create durable integration events (non-blocking processing)
     if (data.status === "applied" && prior && prior.status !== "applied") {
       // CRITICAL: Create integration events synchronously to ensure provisioning intent is recorded
       // Processing happens asynchronously, but event creation must succeed
-      const { createIntegrationEvent, generateIdempotencyKey } = await import("@/lib/integration-events");
+      const { createIntegrationEvent, generateIdempotencyKey } =
+        await import("@/lib/integration-events");
 
       // OrangeHRM provisioning (existing)
       try {
@@ -348,7 +392,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         const idempotencyKey = generateIdempotencyKey(
           "orangehrm_employee_provision",
           "job_application",
-          data.id
+          data.id,
         );
 
         const eventResult = await createIntegrationEvent(adminDb, {
@@ -405,7 +449,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         const idempotencyKey = generateIdempotencyKey(
           "frappe_employee_provision",
           "job_application",
-          data.id
+          data.id,
         );
 
         const eventResult = await createIntegrationEvent(adminDb, {
@@ -467,9 +511,10 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       });
 
       const { DEPT_TYPES } = await import("@/lib/users.functions");
-      const validDept = posting?.department && DEPT_TYPES.includes(posting.department as any)
-        ? (posting.department as any)
-        : null;
+      const validDept =
+        posting?.department && DEPT_TYPES.includes(posting.department as any)
+          ? (posting.department as any)
+          : null;
 
       // Phase 3: OrangeHRM employee upsert/enrichment at HIRED (existing)
       // Employee was created at APPLIED state (Phase 2)
@@ -519,7 +564,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
           });
         } else {
           console.warn(
-            "[hire-flow] OrangeHRM employee ID not yet available (provisioning may be in progress)"
+            "[hire-flow] OrangeHRM employee ID not yet available (provisioning may be in progress)",
           );
         }
       } catch (lookupError) {
@@ -534,7 +579,8 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
 
       try {
         const { createFrappeClient } = await import("@/integrations/frappe/client");
-        const { handleFrappeApplicationHired } = await import("@/lib/frappe-hired-handler-orchestration");
+        const { handleFrappeApplicationHired } =
+          await import("@/lib/frappe-hired-handler-orchestration");
 
         const client = createFrappeClient();
 
@@ -572,7 +618,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
           });
         } else {
           console.log(
-            "[hire-flow] Frappe employee name not yet available (provisioning may be in progress or flag OFF)"
+            "[hire-flow] Frappe employee name not yet available (provisioning may be in progress or flag OFF)",
           );
         }
       } catch (lookupError) {
@@ -621,7 +667,6 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         // HR can manually fix the employee record later
       }
     }
-
 
     return { ok: true };
   });
@@ -674,9 +719,7 @@ export const listAllUsers = createServerFn({ method: "GET" })
     const roles = await adminDb.userRole.findMany({
       select: { userId: true, role: true },
     });
-    const adminSet = new Set(
-      roles.filter((r) => r.role === "admin").map((r) => r.userId),
-    );
+    const adminSet = new Set(roles.filter((r) => r.role === "admin").map((r) => r.userId));
 
     const profiles = await adminDb.profile.findMany({
       select: { userId: true, fullName: true },
@@ -862,130 +905,142 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
  */
 export const getDashboardMetrics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<{
-    totalApplications: number;
-    applicationsByDepartment: Array<{ department: string; count: number }>;
-    pendingApplications: number;
-    totalPostings: number;
-    postingsByDepartment: Array<{ department: string; count: number }>;
-    activePostings: number;
-    totalHired: number;
-    hiredByDepartment: Array<{ department: string; count: number }>;
-  }> => {
-    await assertHrOrAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+  .handler(
+    async ({
+      context,
+    }): Promise<{
+      totalApplications: number;
+      applicationsByDepartment: Array<{ department: string; count: number }>;
+      pendingApplications: number;
+      totalPostings: number;
+      postingsByDepartment: Array<{ department: string; count: number }>;
+      activePostings: number;
+      totalHired: number;
+      hiredByDepartment: Array<{ department: string; count: number }>;
+    }> => {
+      await assertHrOrAdmin(context.db, context.userId);
+      const adminDb = getAdminDb();
 
-    const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
+      const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
 
-    // Build where clause for job postings
-    const postingWhere: any = {};
-    if (scopedDepartmentId) {
-      postingWhere.departmentId = scopedDepartmentId;
-    }
+      // Build where clause for job postings
+      const postingWhere: any = {};
+      if (scopedDepartmentId) {
+        postingWhere.departmentId = scopedDepartmentId;
+      }
 
-    // Get job postings (with department filter if needed)
-    const postings = await adminDb.jobPosting.findMany({
-      where: postingWhere,
-      select: { id: true, status: true },
-    });
+      // Get job postings (with department filter if needed)
+      const postings = await adminDb.jobPosting.findMany({
+        where: postingWhere,
+        select: { id: true, status: true },
+      });
 
-    const postingIds = postings.map((p) => p.id);
+      const postingIds = postings.map((p) => p.id);
 
-    // Get applications for these job postings
-    const applicationWhere: any = {
-      isSoftDeleted: false,
-    };
-    if (postingIds.length > 0) {
-      applicationWhere.roleId = { in: postingIds };
-    } else if (scopedDepartmentId) {
-      // No postings in this department, so no applications either
-      return {
-        totalApplications: 0,
-        applicationsByDepartment: [],
-        pendingApplications: 0,
-        totalPostings: 0,
-        postingsByDepartment: [],
-        activePostings: 0,
-        totalHired: 0,
-        hiredByDepartment: [],
+      // Get applications for these job postings
+      const applicationWhere: any = {
+        isSoftDeleted: false,
       };
-    }
+      if (postingIds.length > 0) {
+        applicationWhere.roleId = { in: postingIds };
+      } else if (scopedDepartmentId) {
+        // No postings in this department, so no applications either
+        return {
+          totalApplications: 0,
+          applicationsByDepartment: [],
+          pendingApplications: 0,
+          totalPostings: 0,
+          postingsByDepartment: [],
+          activePostings: 0,
+          totalHired: 0,
+          hiredByDepartment: [],
+        };
+      }
 
-    const [applications, totalApplications, pendingApplications, totalHired] = await Promise.all([
-      adminDb.jobApplication.findMany({
-        where: applicationWhere,
+      const [applications, totalApplications, pendingApplications, totalHired] = await Promise.all([
+        adminDb.jobApplication.findMany({
+          where: applicationWhere,
+          select: {
+            id: true,
+            status: true,
+            roleId: true,
+          },
+        }),
+        adminDb.jobApplication.count({ where: applicationWhere }),
+        adminDb.jobApplication.count({
+          where: {
+            ...applicationWhere,
+            status: { in: ["applied", "screening", "interviewing"] },
+          },
+        }),
+        adminDb.jobApplication.count({
+          where: {
+            ...applicationWhere,
+            status: "hired",
+          },
+        }),
+      ]);
+
+      // Get department information for job postings
+      const postingsWithDept = await adminDb.jobPosting.findMany({
+        where: postingWhere,
         select: {
           id: true,
           status: true,
-          roleId: true,
+          departmentId: true,
+          department: true,
         },
-      }),
-      adminDb.jobApplication.count({ where: applicationWhere }),
-      adminDb.jobApplication.count({
-        where: {
-          ...applicationWhere,
-          status: { in: ["applied", "screening", "interviewing"] },
-        },
-      }),
-      adminDb.jobApplication.count({
-        where: {
-          ...applicationWhere,
-          status: "hired",
-        },
-      }),
-    ]);
+      });
 
-    // Get department information for job postings
-    const postingsWithDept = await adminDb.jobPosting.findMany({
-      where: postingWhere,
-      select: {
-        id: true,
-        status: true,
-        departmentId: true,
-        department: true,
-      },
-    });
-
-    // Count applications by department
-    const appsByDept = new Map<string, number>();
-    const hiredByDept = new Map<string, number>();
-    for (const app of applications) {
-      const posting = postingsWithDept.find((p) => p.id === app.roleId);
-      const deptName = posting?.department ? (typeof posting.department === 'string' ? posting.department : posting.department.name) : "Unassigned";
-      appsByDept.set(deptName, (appsByDept.get(deptName) || 0) + 1);
-      if (app.status === "hired") {
-        hiredByDept.set(deptName, (hiredByDept.get(deptName) || 0) + 1);
+      // Count applications by department
+      const appsByDept = new Map<string, number>();
+      const hiredByDept = new Map<string, number>();
+      for (const app of applications) {
+        const posting = postingsWithDept.find((p) => p.id === app.roleId);
+        const deptName = posting?.department
+          ? typeof posting.department === "string"
+            ? posting.department
+            : posting.department.name
+          : "Unassigned";
+        appsByDept.set(deptName, (appsByDept.get(deptName) || 0) + 1);
+        if (app.status === "hired") {
+          hiredByDept.set(deptName, (hiredByDept.get(deptName) || 0) + 1);
+        }
       }
-    }
 
-    // Count postings by department
-    const postingsByDept = new Map<string, number>();
-    let activePostings = 0;
-    for (const posting of postingsWithDept) {
-      const deptName = posting.department ? (typeof posting.department === 'string' ? posting.department : posting.department.name) : "Unassigned";
-      postingsByDept.set(deptName, (postingsByDept.get(deptName) || 0) + 1);
-      if (posting.status === "published") {
-        activePostings += 1;
+      // Count postings by department
+      const postingsByDept = new Map<string, number>();
+      let activePostings = 0;
+      for (const posting of postingsWithDept) {
+        const deptName = posting.department
+          ? typeof posting.department === "string"
+            ? posting.department
+            : posting.department.name
+          : "Unassigned";
+        postingsByDept.set(deptName, (postingsByDept.get(deptName) || 0) + 1);
+        if (posting.status === "published") {
+          activePostings += 1;
+        }
       }
-    }
 
-    return {
-      totalApplications,
-      applicationsByDepartment: Array.from(appsByDept.entries()).map(([department, count]) => ({
-        department,
-        count,
-      })),
-      pendingApplications,
-      totalPostings: postingsWithDept.length,
-      postingsByDepartment: Array.from(postingsByDept.entries()).map(([department, count]) => ({
-        department,
-        count,
-      })),
-      activePostings,
-      totalHired,
-      hiredByDepartment: Array.from(hiredByDept.entries()).map(([department, count]) => ({
-        department,
-        count,
-      })),
-    };
-  });
+      return {
+        totalApplications,
+        applicationsByDepartment: Array.from(appsByDept.entries()).map(([department, count]) => ({
+          department,
+          count,
+        })),
+        pendingApplications,
+        totalPostings: postingsWithDept.length,
+        postingsByDepartment: Array.from(postingsByDept.entries()).map(([department, count]) => ({
+          department,
+          count,
+        })),
+        activePostings,
+        totalHired,
+        hiredByDepartment: Array.from(hiredByDept.entries()).map(([department, count]) => ({
+          department,
+          count,
+        })),
+      };
+    },
+  );

@@ -46,10 +46,11 @@ import {
   type FrappeHiredResult,
   type FrappeOnboardingDataSources,
 } from "@/lib/frappe-hired-handler";
-import {
-  classifyFrappeError,
-  isFrappeRetryable,
-} from "@/lib/frappe-provisioning";
+import type {
+  EducationalQualificationInput,
+  PreviousWorkExperienceInput,
+} from "@/lib/job-application-fields";
+import { classifyFrappeError, isFrappeRetryable } from "@/lib/frappe-provisioning";
 
 export interface HandleFrappeApplicationHiredOptions {
   db: PrismaClient;
@@ -91,7 +92,7 @@ async function isFrappeEmployeeSyncEnabled(): Promise<boolean> {
  * - Already upserted/enriched → no-op (handled by upsertFrappeEmployeeAtHired)
  */
 export async function handleFrappeApplicationHired(
-  options: HandleFrappeApplicationHiredOptions
+  options: HandleFrappeApplicationHiredOptions,
 ): Promise<FrappeApplicationHiredResult> {
   const { db, client, applicationId, candidateId, correlationId, workerId } = options;
   const logPrefix = `[frappe-hired-handler:${applicationId.slice(0, 8)}]`;
@@ -127,6 +128,12 @@ export async function handleFrappeApplicationHired(
         roleTitle: true,
         status: true,
         roleId: true,
+        coverLetter: true,
+        offeredAt: true,
+        hiredAt: true,
+        frappeJobApplicantName: true,
+        educationalQualifications: true,
+        previousWorkExperiences: true,
       },
     });
 
@@ -137,7 +144,7 @@ export async function handleFrappeApplicationHired(
     // Verify status is HIRED (early check before expensive queries)
     if (application.status !== "hired") {
       console.warn(
-        `${logPrefix} Application status is ${application.status}, not hired - aborting handler`
+        `${logPrefix} Application status is ${application.status}, not hired - aborting handler`,
       );
       return {
         triggered: false,
@@ -178,8 +185,16 @@ export async function handleFrappeApplicationHired(
         teamName: true,
         notes: true,
         doj: true,
+        frappeEmployeeName: true,
       },
     });
+
+    const reportingManager = employee?.reportingManagerId
+      ? await db.employee.findUnique({
+          where: { userId: employee.reportingManagerId },
+          select: { frappeEmployeeName: true },
+        })
+      : null;
 
     const jobPosting = await db.jobPosting.findUnique({
       where: { id: application.roleId },
@@ -200,6 +215,16 @@ export async function handleFrappeApplicationHired(
         email: application.email,
         roleTitle: application.roleTitle,
         status: application.status,
+        coverLetter: application.coverLetter,
+        offeredAt: application.offeredAt,
+        hiredAt: application.hiredAt,
+        frappeJobApplicantName: application.frappeJobApplicantName,
+        educationalQualifications: Array.isArray(application.educationalQualifications)
+          ? (application.educationalQualifications as EducationalQualificationInput[])
+          : [],
+        previousWorkExperiences: Array.isArray(application.previousWorkExperiences)
+          ? (application.previousWorkExperiences as PreviousWorkExperienceInput[])
+          : [],
       },
       onboardingRecord: onboardingRecord
         ? {
@@ -227,6 +252,7 @@ export async function handleFrappeApplicationHired(
             baseSalary: employee.baseSalary,
             salaryCurrency: employee.salaryCurrency,
             reportingManagerId: employee.reportingManagerId,
+            reportingManagerEmployeeName: reportingManager?.frappeEmployeeName || null,
             reportingHrId: employee.reportingHrId,
             teamName: employee.teamName,
             notes: employee.notes,
@@ -256,7 +282,7 @@ export async function handleFrappeApplicationHired(
     const idempotencyKey = generateIdempotencyKey(
       "frappe_employee_upsert",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     const eventResult = await createIntegrationEvent(db, {
@@ -307,7 +333,7 @@ export async function handleFrappeApplicationHired(
       onboardingData,
       db,
       client,
-      correlationId || eventId
+      correlationId || eventId,
     );
 
     console.log(`${logPrefix} Upsert completed`, {

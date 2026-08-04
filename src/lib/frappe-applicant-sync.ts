@@ -14,6 +14,10 @@
 
 import { PrismaClient } from "@prisma/client";
 import type { FrappeClient } from "@/integrations/frappe/client";
+import type {
+  EducationalQualificationInput,
+  PreviousWorkExperienceInput,
+} from "./job-application-fields";
 
 export interface SyncJobApplicationResult {
   success: boolean;
@@ -33,22 +37,35 @@ export interface SyncJobApplicationResult {
 export async function syncJobApplicationToFrappe(
   db: PrismaClient,
   client: FrappeClient,
-  applicationId: string
+  applicationId: string,
 ): Promise<SyncJobApplicationResult> {
   const logPrefix = `[frappe-applicant-sync:${applicationId.slice(0, 8)}]`;
 
   console.log(`${logPrefix} Starting Job Applicant sync`);
 
   try {
-    // Step 1: Load job application with job posting relation
+    // Step 1: Load job application
     const application = await db.jobApplication.findUnique({
       where: { id: applicationId },
-      include: {
-        jobPosting: {
-          select: {
-            frappeJobOpeningName: true,
-          },
-        },
+      select: {
+        id: true,
+        userId: true,
+        roleId: true,
+        fullName: true,
+        email: true,
+        roleTitle: true,
+        status: true,
+        phoneNumber: true,
+        country: true,
+        coverLetter: true,
+        resumeLink: true,
+        resumeStoragePath: true,
+        expectedSalaryCurrency: true,
+        expectedSalaryMin: true,
+        expectedSalaryMax: true,
+        educationalQualifications: true,
+        previousWorkExperiences: true,
+        frappeJobApplicantName: true,
       },
     });
 
@@ -64,6 +81,11 @@ export async function syncJobApplicationToFrappe(
       fullName: application.fullName,
       email: application.email,
       roleTitle: application.roleTitle,
+    });
+
+    const posting = await db.jobPosting.findUnique({
+      where: { id: application.roleId },
+      select: { frappeJobOpeningName: true },
     });
 
     // Step 2: Map to Frappe Job Applicant payload
@@ -111,14 +133,14 @@ export async function syncJobApplicationToFrappe(
     }
 
     // Step 5: Link to Job Opening if available
-    if (application.jobPosting?.frappeJobOpeningName) {
+    if (posting?.frappeJobOpeningName) {
       console.log(`${logPrefix} Linking to Job Opening`, {
-        jobOpening: application.jobPosting.frappeJobOpeningName,
+        jobOpening: posting.frappeJobOpeningName,
       });
 
       try {
         await client.updateJobApplicant(applicantName, {
-          job_title: application.jobPosting.frappeJobOpeningName,
+          job_title: posting.frappeJobOpeningName,
         });
 
         console.log(`${logPrefix} Linked to Job Opening successfully`);
@@ -159,13 +181,22 @@ export async function syncJobApplicationToFrappe(
  * - currency: Expected salary currency
  * - lower_range: Expected salary min
  * - upper_range: Expected salary max
- * - status: Always "Open" for new applications
+ * - status: Derived from Ciago application status
  */
-function mapApplicationToFrappePayload(application: any): any {
-  const payload: any = {
+function mapApplicationToFrappePayload(
+  application: JobApplicationSyncRecord,
+): Record<string, unknown> {
+  const educationRows = Array.isArray(application.educationalQualifications)
+    ? application.educationalQualifications
+    : [];
+  const workRows = Array.isArray(application.previousWorkExperiences)
+    ? application.previousWorkExperiences
+    : [];
+
+  const payload: Record<string, unknown> = {
     applicant_name: application.fullName,
     email_id: application.email,
-    status: "Open",
+    status: mapApplicationStatusToFrappeApplicantStatus(application.status),
   };
 
   // Optional fields
@@ -203,5 +234,99 @@ function mapApplicationToFrappePayload(application: any): any {
     payload.upper_range = Number(application.expectedSalaryMax);
   }
 
+  const details = buildApplicantDetails(application, educationRows, workRows);
+  if (details.coverLetter) {
+    payload.cover_letter = details.coverLetter;
+  }
+  const notes = buildApplicantNotes(application);
+  if (notes) {
+    payload.notes = notes;
+  }
+
   return payload;
 }
+
+function mapApplicationStatusToFrappeApplicantStatus(status: string): string {
+  switch (status) {
+    case "rejected":
+      return "Rejected";
+    case "offered":
+    case "hired":
+      return "Accepted";
+    case "screening":
+    case "interviewing":
+      return "Replied";
+    default:
+      return "Open";
+  }
+}
+
+function buildApplicantNotes(application: JobApplicationSyncRecord): string {
+  return `Ciago User ID: ${application.userId}`;
+}
+
+function buildApplicantDetails(
+  application: JobApplicationSyncRecord,
+  educationRows: EducationalQualificationInput[],
+  workRows: PreviousWorkExperienceInput[],
+): { coverLetter: string | null } {
+  const sections: string[] = [];
+
+  if (educationRows.length > 0) {
+    sections.push(
+      [
+        "Educational Qualifications:",
+        ...educationRows.map((row, index) => {
+          const parts = [
+            row.qualification,
+            row.level,
+            row.school,
+            row.yearOfPassing ? `Year: ${row.yearOfPassing}` : null,
+            row.classPercentage ? `Class/Percentage: ${row.classPercentage}` : null,
+            row.majorOptionalSubjects
+              ? `Major/Optional Subjects: ${row.majorOptionalSubjects}`
+              : null,
+          ].filter(Boolean);
+          return `${index + 1}. ${parts.join(" · ")}`;
+        }),
+      ].join("\n"),
+    );
+  }
+
+  if (workRows.length > 0) {
+    sections.push(
+      [
+        "Previous Work Experience:",
+        ...workRows.map((row, index) => {
+          const parts = [row.designation, row.company, row.salary, row.address].filter(Boolean);
+          return `${index + 1}. ${parts.join(" · ")}`;
+        }),
+      ].join("\n"),
+    );
+  }
+
+  if (sections.length === 0) {
+    return { coverLetter: application.coverLetter || null };
+  }
+
+  const baseCoverLetter = application.coverLetter?.trim()
+    ? `${application.coverLetter.trim()}\n\n---\n\n`
+    : "";
+  return { coverLetter: `${baseCoverLetter}${sections.join("\n\n")}` };
+}
+type JobApplicationSyncRecord = {
+  userId: string;
+  fullName: string;
+  email: string;
+  status: string;
+  phoneNumber: string | null;
+  country: string | null;
+  coverLetter: string | null;
+  resumeLink: string | null;
+  resumeStoragePath: string | null;
+  expectedSalaryCurrency: string | null;
+  expectedSalaryMin: bigint | null;
+  expectedSalaryMax: bigint | null;
+  educationalQualifications?: EducationalQualificationInput[] | null;
+  previousWorkExperiences?: PreviousWorkExperienceInput[] | null;
+};
