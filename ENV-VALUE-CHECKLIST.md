@@ -72,3 +72,21 @@ These are provided automatically by GitHub Actions or the workflow:
 3. Convert the private key to base64.
 4. Paste the base64 output into the matching `*_PRIVATE_KEY` secret.
 
+## 6) Values you already have in `.env`
+
+Use these existing values from your repo `.env` file where they match the deployment setup:
+
+| `.env` value | Can be reused for |
+|---|---|
+| `FRAPPE_SITE_NAME` | `DEV_SITE_NAME`, `STAGING_SITE_NAME`, `PROD_SITE_NAME` if the same site name is used |
+| `FRAPPE_DB_PASSWORD` | database password in `docker-compose.yml` / server `.env` |
+| `FRAPPE_BASE_URL` | server-side app config or reverse proxy config |
+| `DATABASE_URL` / `NEON_DATABASE_URL` | local development or app runtime database config |
+| `CLERK_*` / `VITE_CLERK_PUBLISHABLE_KEY` | app runtime auth config |
+| `RESEND_API_KEY` / `RESEND_WEBHOOK_SECRET` | app runtime email config |
+| `TURNSTILE_SECRET_KEY` / `VITE_TURNSTILE_SITE_KEY` | app runtime bot protection config |
+| `R2_*` / `VITE_R2_PUBLIC_URL` | app runtime storage config |
+| `ORANGEHRM_*` | OrangeHRM integration config |
+| `GITHUB_TOKEN` / `GITHUB_ORG` | local tooling only; GitHub Actions already provides `GITHUB_TOKEN` automatically |
+
+If a value already exists in `.env`, copy it only into the place that actually needs it.
