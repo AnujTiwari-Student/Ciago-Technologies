@@ -298,7 +298,7 @@ def generate_joining_letter(
 
     # Build PDF
     doc.build(elements)
-    print(f"✅ Joining letter generated: {output_path}")
+    print(f"[SUCCESS] Joining letter generated: {output_path}")
     return output_path
 
 

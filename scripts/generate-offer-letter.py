@@ -255,7 +255,7 @@ def generate_offer_letter(
 
     # Build PDF
     doc.build(elements)
-    print(f"✅ Offer letter generated: {output_path}")
+    print(f"[SUCCESS] Offer letter generated: {output_path}")
     return output_path
 
 
