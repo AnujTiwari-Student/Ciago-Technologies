@@ -5,6 +5,13 @@
 ### Secrets Configuration
 Add these secrets to: Settings → Secrets and Variables → Actions
 
+**Branch Model**
+- `development` → development deployments
+- `staging` → staging deployments
+- `production-hetzner` → Frappe/Hetzner production release branch
+- `production-cloudflare` → Cloudflare production release branch
+- `main` → production workflow trigger branch
+
 **Container Registry** (5 minutes)
 - [ ] `REGISTRY_TOKEN` = GitHub token (use GITHUB_TOKEN in workflows)
 - [ ] `REGISTRY_USERNAME` = Your GitHub username
@@ -37,6 +44,11 @@ Add these secrets to: Settings → Secrets and Variables → Actions
 
 **Notifications** (5 minutes)
 - [ ] `SLACK_WEBHOOK` = Slack webhook URL for deployment notifications
+
+**Reuse from `.env` when available**
+- `FRAPPE_SITE_NAME` can map to `DEV_SITE_NAME`, `STAGING_SITE_NAME`, `PROD_SITE_NAME`
+- `FRAPPE_DB_PASSWORD` can be reused for server/database config
+- `CLERK_*`, `RESEND_*`, `TURNSTILE_*`, `R2_*`, `ORANGEHRM_*` stay in app/runtime config, not GitHub Actions secrets
 
 ---
 
@@ -363,4 +375,3 @@ ssh deploy@PROD_IP "docker-compose exec backend bench --site erpnext.local clear
 **Status**: Ready for Production Deployment ✅  
 **Last Updated**: August 2024  
 **Next Review**: Quarterly security audit
-

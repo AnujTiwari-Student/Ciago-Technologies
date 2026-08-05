@@ -6,6 +6,13 @@ Use this file to collect every value you need to paste into GitHub, Hetzner, Clo
 
 Paste these in **GitHub → Settings → Secrets and variables → Actions**.
 
+### Branch model
+- `development` → dev deployments
+- `staging` → staging deployments
+- `production-hetzner` → Hetzner production release branch
+- `production-cloudflare` → Cloudflare production release branch
+- `main` → production workflow trigger branch
+
 | Value name | What to paste | Where to get it |
 |---|---|---|
 | `DEV_SERVER_IP` | Dev Hetzner server IP | Hetzner console |

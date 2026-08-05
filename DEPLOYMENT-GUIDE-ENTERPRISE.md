@@ -46,7 +46,7 @@
                             ↓
     ┌─────────────────────────────────────────────────────────────┐
     │              PRODUCTION (manual approval)                    │
-    │            (production/main branch)                          │
+    │   (main trigger + production-hetzner/cloudflare branches)    │
     ├──────────────────────────┬─────────────────────────────────┤
     │  Frappe on Hetzner       │  Frontend on Cloudflare Workers │
     │  • Docker containers     │  • Vite + React               │
@@ -61,7 +61,7 @@
 |---|---|---|---|---|---|
 | **Development** | `development` | ❌ Auto | Hetzner | Cloudflare | dev.ciagotech.com |
 | **Staging** | `staging` | ❌ Auto | Hetzner | Cloudflare | staging.ciagotech.com |
-| **Production** | `production` | ✅ Manual | Hetzner | Cloudflare | ciagotech.com |
+| **Production** | `main` trigger, releases via `production-hetzner` / `production-cloudflare` | ✅ Manual | Hetzner | Cloudflare | ciagotech.com |
 
 ---
 
@@ -70,6 +70,9 @@
 ### Required Secrets for All Environments
 
 Add these secrets to your GitHub Repository Settings → Secrets and Variables → Actions:
+
+> Reuse values already present in your local `.env` only when they belong to app/runtime configuration.
+> Keep CI/CD and server credentials in GitHub Secrets.
 
 #### Container Registry Secrets
 ```
@@ -145,25 +148,27 @@ cat ~/.ssh/hetzner_deploy_key | base64 -w 0           # Linux
 
 ### Production Environment Protection Rules
 
-Navigate to: Repository Settings → Environments → Production
+Navigate to: Repository Settings → Environments → `production-hetzner` and `production-cloudflare`
 
 1. **Enable Protection Rules**:
    - ✅ Require reviewers: `1` minimum
    - ✅ Restrict who can deploy: Add team members/approvers
-   - ✅ Deployment branches: Allow only `production` and `main`
+   - ✅ Deployment branches: Allow only `main` plus the matching release branch
 
 2. **Reviewers**:
    - Tech Lead (approval for Frappe)
    - DevOps Lead (approval for Cloudflare)
 
 3. **Secrets**:
-   - All PROD_* secrets should be scoped to production environment
+   - `production-hetzner` should contain all `PROD_*` secrets
+   - `production-cloudflare` should contain `CLOUDFLARE_*` secrets
 
 ### Development & Staging Environments
 
 1. No approval required
 2. Deploy immediately on push
 3. Same secret structure with DEV_/STAGING_ prefixes
+4. Reuse `.env` values only for app/runtime config, not deployment secrets
 
 ### Environment URLs
 
@@ -181,7 +186,7 @@ Navigate to: Repository Settings → Environments → Production
 .github/workflows/
 ├── ci-cd-dev.yml       # Development pipeline (auto-deploy on push to 'dev')
 ├── ci-cd-staging.yml   # Staging pipeline (auto-deploy on push to 'staging')
-└── ci-cd-prod.yml      # Production pipeline (manual approval required)
+└── ci-cd-prod.yml      # Production pipeline (manual approval required, triggers on main)
 ```
 
 ### Pipeline Stages (All Environments)
@@ -279,13 +284,13 @@ git push origin staging
 
 ### Production Deployment (Manual Approval)
 
-**Trigger**: Push to `production` branch + reviewer approval
+**Trigger**: Push to `main` branch + reviewer approval
 
 ```bash
-# 1. Merge to production branch
-git checkout production
+# 1. Merge release branch changes into main
+git checkout main
 git merge staging
-git push origin production
+git push origin main
 
 # 2. GitHub Actions runs full CI/CD pipeline
 # (All checks must pass)
@@ -379,7 +384,7 @@ The `deploy.sh` script handles all server-side operations:
    FROM frappe/erpnext:v15.125.0  # Upgrade to patched version
    
    # Rebuild and push
-   git push origin production
+   git push origin main
    ```
 
 4. **Accept Risk (if necessary)**
@@ -711,4 +716,3 @@ docker-compose exec backend bench --site erpnext.local get-site-config
 **Last Updated**: August 2024  
 **Version**: 1.0  
 **Status**: Production Ready ✅
-
