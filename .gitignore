@@ -51,3 +51,28 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Deployment plans directory (contains sensitive planning info)
+deployment-plans/
+
+# Archived development scripts (one-time setup, not needed in repo)
+scripts-archive/
+
+# Frappe backups and exports
+backups/
+production-backup/
+production-final-backup/
+*.tar.gz
+*.sql.gz
+*.sql
+ciago_spark.tar.gz
+site_config_dev.json
+common_site_config_dev.json
+
+# Database exports
+*.db
+*.sqlite
+*.sqlite3
+
+# Cloudflare Workers (deployed separately)
+resend-worker/
