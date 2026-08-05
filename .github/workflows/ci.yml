@@ -2,8 +2,17 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches:
+      - main
+      - development
+      - staging
+      - production
   pull_request:
+    branches:
+      - main
+      - development
+      - staging
+      - production
 
 permissions:
   contents: read
