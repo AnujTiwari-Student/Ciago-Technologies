@@ -1,0 +1,216 @@
+version: '3.8'
+
+# Oracle Cloud Free Tier Configuration
+# VM.Standard.A1.Flex: 4 OCPU ARM + 24GB RAM + 200GB Storage
+# Optimized for ARM64 architecture and free tier limits
+
+services:
+  frappe-mariadb:
+    image: arm64v8/mariadb:10.11
+    container_name: frappe-oracle-mariadb
+    restart: unless-stopped
+    platform: linux/arm64
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: frappe
+      MYSQL_USER: frappe
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - /opt/frappe-data/mariadb:/var/lib/mysql
+    networks:
+      - frappe-network
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=300
+      - --innodb-buffer-pool-size=2G
+      - --innodb-log-file-size=256M
+      - --innodb-flush-log-at-trx-commit=2
+      - --innodb-flush-method=O_DIRECT
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-redis-cache:
+    image: arm64v8/redis:alpine
+    container_name: frappe-oracle-redis-cache
+    restart: unless-stopped
+    platform: linux/arm64
+    volumes:
+      - /opt/frappe-data/redis-cache:/data
+    networks:
+      - frappe-network
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-redis-queue:
+    image: arm64v8/redis:alpine
+    container_name: frappe-oracle-redis-queue
+    restart: unless-stopped
+    platform: linux/arm64
+    volumes:
+      - /opt/frappe-data/redis-queue:/data
+    networks:
+      - frappe-network
+    command: redis-server --maxmemory 512mb --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-backend:
+    image: frappe/erpnext:v15
+    container_name: frappe-oracle-backend
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      frappe-mariadb:
+        condition: service_healthy
+      frappe-redis-cache:
+        condition: service_healthy
+      frappe-redis-queue:
+        condition: service_healthy
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      DB_NAME: frappe
+      DB_PASSWORD: ${MARIADB_PASSWORD}
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+      SOCKETIO_PORT: 9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-frappe.oracle.ciagotech.com}
+    volumes:
+      - /opt/frappe-data/sites:/home/frappe/frappe-bench/sites
+      - /opt/frappe-data/logs:/home/frappe/frappe-bench/logs
+      - /opt/frappe-data/backups:/home/frappe/frappe-bench/sites/backups
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    networks:
+      - frappe-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/method/version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  frappe-nginx:
+    image: arm64v8/nginx:alpine
+    container_name: frappe-oracle-nginx
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      - frappe-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/frappe-data/sites:/var/www/html:ro
+      - /opt/frappe-data/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /opt/frappe-data/nginx/ssl:/etc/nginx/ssl:ro
+      - /opt/frappe-data/nginx/logs:/var/log/nginx
+    networks:
+      - frappe-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Worker for background jobs
+  frappe-worker-default:
+    image: frappe/erpnext:v15
+    container_name: frappe-oracle-worker-default
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - /opt/frappe-data/sites:/home/frappe/frappe-bench/sites
+      - /opt/frappe-data/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue default
+
+  # Worker for short jobs
+  frappe-worker-short:
+    image: frappe/erpnext:v15
+    container_name: frappe-oracle-worker-short
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - /opt/frappe-data/sites:/home/frappe/frappe-bench/sites
+      - /opt/frappe-data/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue short
+
+  # Worker for long jobs
+  frappe-worker-long:
+    image: frappe/erpnext:v15
+    container_name: frappe-oracle-worker-long
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - /opt/frappe-data/sites:/home/frappe/frappe-bench/sites
+      - /opt/frappe-data/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue long
+
+  # Scheduler for periodic tasks
+  frappe-scheduler:
+    image: frappe/erpnext:v15
+    container_name: frappe-oracle-scheduler
+    restart: unless-stopped
+    platform: linux/arm64
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - /opt/frappe-data/sites:/home/frappe/frappe-bench/sites
+      - /opt/frappe-data/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench schedule
+
+networks:
+  frappe-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# Note: Volumes are stored on block volume (/opt/frappe-data) which is mounted separately
+# Total storage usage: ~20-30GB (within 200GB free tier limit)

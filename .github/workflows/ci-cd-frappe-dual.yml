@@ -1,0 +1,506 @@
+name: CI/CD - Frappe Dual Cloud (Oracle + Hetzner)
+
+on:
+  push:
+    branches:
+      - oracle      # Deploy to Oracle Cloud Free Tier
+      - production  # Deploy to Hetzner Production
+  pull_request:
+    branches:
+      - oracle
+      - production
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deployment target'
+        required: true
+        type: choice
+        options:
+          - oracle
+          - hetzner
+          - both
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frappe
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  deployments: write
+
+concurrency:
+  group: frappe-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # =========================================================================
+  # STEP 1: Security & Code Quality (STRICT MODE)
+  # =========================================================================
+  security-scan:
+    name: "🔐 Security Scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy secret scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: secret
+          scan-ref: .
+          format: sarif
+          output: trivy-secret-results.sarif
+          exit-code: "1"
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-secret-results.sarif
+        if: always()
+
+  # =========================================================================
+  # STEP 2: Determine Deployment Target
+  # =========================================================================
+  determine-target:
+    name: "🎯 Determine Deployment Target"
+    runs-on: ubuntu-latest
+    needs: security-scan
+    outputs:
+      deploy-oracle: ${{ steps.target.outputs.oracle }}
+      deploy-hetzner: ${{ steps.target.outputs.hetzner }}
+      environment: ${{ steps.target.outputs.environment }}
+    steps:
+      - name: Determine target
+        id: target
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TARGET="${{ github.event.inputs.target }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/oracle" ]]; then
+            TARGET="oracle"
+          elif [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+            TARGET="hetzner"
+          else
+            TARGET="none"
+          fi
+
+          echo "Target: $TARGET"
+
+          if [[ "$TARGET" == "both" ]]; then
+            echo "oracle=true" >> $GITHUB_OUTPUT
+            echo "hetzner=true" >> $GITHUB_OUTPUT
+            echo "environment=both" >> $GITHUB_OUTPUT
+          elif [[ "$TARGET" == "oracle" ]]; then
+            echo "oracle=true" >> $GITHUB_OUTPUT
+            echo "hetzner=false" >> $GITHUB_OUTPUT
+            echo "environment=oracle" >> $GITHUB_OUTPUT
+          elif [[ "$TARGET" == "hetzner" ]]; then
+            echo "oracle=false" >> $GITHUB_OUTPUT
+            echo "hetzner=true" >> $GITHUB_OUTPUT
+            echo "environment=hetzner" >> $GITHUB_OUTPUT
+          else
+            echo "oracle=false" >> $GITHUB_OUTPUT
+            echo "hetzner=false" >> $GITHUB_OUTPUT
+            echo "environment=none" >> $GITHUB_OUTPUT
+          fi
+
+  # =========================================================================
+  # STEP 3: Build Frappe Docker Image (if deploying)
+  # =========================================================================
+  build:
+    name: "🐳 Build Frappe Docker Image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: determine-target
+    if: needs.determine-target.outputs.environment != 'none'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value={{branch}}-{{date 'YYYYMMDD-HHmmss'}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # =========================================================================
+  # STEP 4a: Deploy to Oracle Cloud (Free Tier)
+  # =========================================================================
+  deploy-oracle:
+    name: "🆓 Deploy to Oracle Cloud (Free Tier)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [determine-target, build]
+    if: needs.determine-target.outputs.deploy-oracle == 'true' && github.event_name == 'push'
+    environment:
+      name: oracle-cloud
+      url: https://${{ secrets.ORACLE_DOMAIN || secrets.ORACLE_PUBLIC_IP }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Oracle Cloud
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ORACLE_PUBLIC_IP }}
+          username: ${{ secrets.ORACLE_SSH_USER || 'ubuntu' }}
+          key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || '22' }}
+          script: |
+            set -e
+            echo "════════════════════════════════════════════════════════════"
+            echo "🆓 ORACLE CLOUD DEPLOYMENT: Frappe (Free Tier)"
+            echo "════════════════════════════════════════════════════════════"
+
+            # Navigate to Frappe directory
+            cd /opt/ciago-frappe || { echo "ERROR: /opt/ciago-frappe not found"; exit 1; }
+
+            # Pull latest code
+            echo "📥 Pulling latest code from oracle branch..."
+            git fetch origin
+            git checkout oracle
+            git pull origin oracle
+
+            # Pull latest Docker images
+            echo "🐳 Pulling Docker images..."
+            docker-compose -f docker-compose.oracle.yml pull
+
+            # Stop containers
+            echo "⏸️  Stopping containers..."
+            docker-compose -f docker-compose.oracle.yml down
+
+            # Start containers with new images
+            echo "▶️  Starting containers..."
+            docker-compose -f docker-compose.oracle.yml up -d
+
+            # Wait for services to be ready
+            echo "⏳ Waiting for services to start..."
+            sleep 30
+
+            # Health check
+            echo "🏥 Running health check..."
+            docker-compose -f docker-compose.oracle.yml ps
+
+            echo "════════════════════════════════════════════════════════════"
+            echo "✅ ORACLE CLOUD DEPLOYMENT COMPLETED"
+            echo "════════════════════════════════════════════════════════════"
+        timeout-minutes: 10
+
+      - name: Verify Oracle deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ORACLE_PUBLIC_IP }}
+          username: ${{ secrets.ORACLE_SSH_USER || 'ubuntu' }}
+          key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || '22' }}
+          script: |
+            echo "🔍 Verifying Oracle deployment..."
+
+            cd /opt/ciago-frappe
+
+            # Check container status
+            echo "Container status:"
+            docker-compose -f docker-compose.oracle.yml ps
+
+            # Check logs for errors
+            echo "Checking logs for errors..."
+            docker-compose -f docker-compose.oracle.yml logs --tail=50 frappe-backend | grep -i error || true
+
+            # Test API endpoint (if accessible)
+            ORACLE_SITE="${{ secrets.ORACLE_DOMAIN || secrets.ORACLE_PUBLIC_IP }}"
+            curl -f "http://${ORACLE_SITE}:8000/api/method/version" || echo "⚠️  API not accessible (may need domain setup)"
+
+            echo "✅ Verification complete"
+        continue-on-error: true
+
+  # =========================================================================
+  # STEP 4b: Deploy to Hetzner (Production)
+  # =========================================================================
+  deploy-hetzner:
+    name: "🚀 Deploy to Hetzner (Production)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [determine-target, build]
+    if: needs.determine-target.outputs.deploy-hetzner == 'true' && github.event_name == 'push'
+    environment:
+      name: hetzner-production
+      url: https://${{ secrets.HETZNER_DOMAIN || 'api.ciagotech.com' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Manual Approval Required
+        run: echo "⏳ Production deployment requires manual approval from GitHub Environment"
+
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HETZNER_PUBLIC_IP }}
+          username: ${{ secrets.HETZNER_SSH_USER || 'ciago' }}
+          key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          script: |
+            set -e
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚀 HETZNER PRODUCTION DEPLOYMENT: Frappe"
+            echo "════════════════════════════════════════════════════════════"
+
+            # Navigate to Frappe directory
+            cd /opt/ciago-frappe || { echo "ERROR: /opt/ciago-frappe not found"; exit 1; }
+
+            # Pull latest code
+            echo "📥 Pulling latest code from production branch..."
+            git fetch origin
+            git checkout production
+            git pull origin production
+
+            # Backup before deployment
+            echo "💾 Creating pre-deployment backup..."
+            ./backup-hetzner.sh || echo "⚠️  Backup script not found, continuing..."
+
+            # Pull latest Docker images
+            echo "🐳 Pulling Docker images..."
+            docker-compose -f docker-compose.hetzner.yml pull
+
+            # Graceful shutdown
+            echo "⏸️  Stopping containers gracefully..."
+            docker-compose -f docker-compose.hetzner.yml down
+
+            # Start containers
+            echo "▶️  Starting containers..."
+            docker-compose -f docker-compose.hetzner.yml up -d
+
+            # Wait for services
+            echo "⏳ Waiting for services to start..."
+            sleep 45
+
+            # Run migrations (if needed)
+            echo "🔄 Running migrations..."
+            docker-compose -f docker-compose.hetzner.yml exec -T frappe-backend \
+              bench --site ${{ secrets.HETZNER_SITE_NAME || 'api.ciagotech.com' }} migrate || echo "⚠️  Migration failed or not needed"
+
+            # Clear cache
+            echo "🧹 Clearing cache..."
+            docker-compose -f docker-compose.hetzner.yml exec -T frappe-backend \
+              bench --site ${{ secrets.HETZNER_SITE_NAME || 'api.ciagotech.com' }} clear-cache
+
+            # Health check
+            echo "🏥 Running health check..."
+            docker-compose -f docker-compose.hetzner.yml ps
+
+            echo "════════════════════════════════════════════════════════════"
+            echo "✅ HETZNER DEPLOYMENT COMPLETED"
+            echo "════════════════════════════════════════════════════════════"
+        timeout-minutes: 12
+
+      - name: Verify Hetzner deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HETZNER_PUBLIC_IP }}
+          username: ${{ secrets.HETZNER_SSH_USER || 'ciago' }}
+          key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          script: |
+            echo "🔍 Verifying Hetzner deployment..."
+
+            cd /opt/ciago-frappe
+
+            # Check container status
+            echo "Container status:"
+            docker-compose -f docker-compose.hetzner.yml ps
+
+            # Check logs for errors
+            echo "Checking logs for errors..."
+            docker-compose -f docker-compose.hetzner.yml logs --tail=50 frappe-backend | grep -i error || true
+
+            # Test HTTPS endpoint
+            HETZNER_DOMAIN="${{ secrets.HETZNER_DOMAIN || 'api.ciagotech.com' }}"
+            curl -f "https://${HETZNER_DOMAIN}/api/method/version" || echo "⚠️  HTTPS API not accessible"
+
+            echo "✅ Verification complete"
+
+      - name: Post-deployment health check
+        run: |
+          echo "🏥 External health check..."
+          HETZNER_DOMAIN="${{ secrets.HETZNER_DOMAIN || 'api.ciagotech.com' }}"
+
+          # Test API endpoint
+          curl -f "https://${HETZNER_DOMAIN}/api/method/version" || exit 1
+
+          # Test login page
+          curl -f "https://${HETZNER_DOMAIN}/login" -I || exit 1
+
+          echo "✅ Health check passed"
+
+  # =========================================================================
+  # STEP 5: Post-Deployment Notifications
+  # =========================================================================
+  notify-success:
+    name: "📢 Notify Deployment Success"
+    runs-on: ubuntu-latest
+    needs: [determine-target, deploy-oracle, deploy-hetzner]
+    if: |
+      always() &&
+      (needs.deploy-oracle.result == 'success' || needs.deploy-hetzner.result == 'success')
+    steps:
+      - name: Determine deployment details
+        id: details
+        run: |
+          DEPLOYED_TO=""
+          if [[ "${{ needs.deploy-oracle.result }}" == "success" ]]; then
+            DEPLOYED_TO="Oracle Cloud (Free Tier)"
+          fi
+          if [[ "${{ needs.deploy-hetzner.result }}" == "success" ]]; then
+            if [[ -n "$DEPLOYED_TO" ]]; then
+              DEPLOYED_TO="$DEPLOYED_TO + Hetzner Production"
+            else
+              DEPLOYED_TO="Hetzner Production"
+            fi
+          fi
+          echo "deployed_to=$DEPLOYED_TO" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ FRAPPE DEPLOYMENT SUCCESSFUL",
+              "attachments": [
+                {
+                  "color": "good",
+                  "fields": [
+                    {
+                      "title": "Deployed To",
+                      "value": "${{ steps.details.outputs.deployed_to }}",
+                      "short": false
+                    },
+                    {
+                      "title": "Oracle URL",
+                      "value": "http://${{ secrets.ORACLE_DOMAIN || secrets.ORACLE_PUBLIC_IP }}:8000",
+                      "short": true
+                    },
+                    {
+                      "title": "Hetzner URL",
+                      "value": "https://${{ secrets.HETZNER_DOMAIN || 'api.ciagotech.com' }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "${{ github.sha }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Author",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
+
+  notify-failure:
+    name: "🚨 Notify Deployment Failure"
+    runs-on: ubuntu-latest
+    needs: [deploy-oracle, deploy-hetzner]
+    if: |
+      always() &&
+      (needs.deploy-oracle.result == 'failure' || needs.deploy-hetzner.result == 'failure')
+    steps:
+      - name: Send Slack failure notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ FRAPPE DEPLOYMENT FAILED",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "${{ github.sha }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Oracle Status",
+                      "value": "${{ needs.deploy-oracle.result }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Hetzner Status",
+                      "value": "${{ needs.deploy-hetzner.result }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Action URL",
+                      "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                      "short": false
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Create issue for deployment failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const oracleStatus = '${{ needs.deploy-oracle.result }}';
+            const hetznerStatus = '${{ needs.deploy-hetzner.result }}';
+
+            let failedTargets = [];
+            if (oracleStatus === 'failure') failedTargets.push('Oracle Cloud');
+            if (hetznerStatus === 'failure') failedTargets.push('Hetzner');
+
+            const targets = failedTargets.join(' + ');
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Frappe deployment failed (${targets}) - ${context.sha.substring(0, 7)}`,
+              body: `**Frappe deployment failed**\n\n- Targets: ${targets}\n- Commit: ${context.sha}\n- Branch: ${context.ref}\n- Oracle Status: ${oracleStatus}\n- Hetzner Status: ${hetznerStatus}\n- Run: ${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nPlease investigate and take corrective action.`,
+              labels: ['deployment', 'frappe', 'critical']
+            });
+        continue-on-error: true

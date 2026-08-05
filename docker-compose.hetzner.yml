@@ -1,0 +1,241 @@
+version: '3.8'
+
+# Hetzner Cloud Production Configuration
+# CPX21: 3 vCPU AMD + 4GB RAM + 80GB NVMe SSD
+# Or CX31: 2 vCPU Intel + 8GB RAM + 80GB NVMe SSD
+# Optimized for production performance
+
+services:
+  frappe-mariadb:
+    image: mariadb:10.11
+    container_name: frappe-hetzner-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: frappe
+      MYSQL_USER: frappe
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - frappe-network
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=500
+      - --innodb-buffer-pool-size=2G
+      - --innodb-log-file-size=512M
+      - --innodb-flush-log-at-trx-commit=1
+      - --innodb-flush-method=O_DIRECT
+      - --innodb-read-io-threads=4
+      - --innodb-write-io-threads=4
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-redis-cache:
+    image: redis:alpine
+    container_name: frappe-hetzner-redis-cache
+    restart: unless-stopped
+    volumes:
+      - redis-cache-data:/data
+    networks:
+      - frappe-network
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-redis-queue:
+    image: redis:alpine
+    container_name: frappe-hetzner-redis-queue
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - frappe-network
+    command: redis-server --maxmemory 512mb --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frappe-backend:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-backend
+    restart: unless-stopped
+    depends_on:
+      frappe-mariadb:
+        condition: service_healthy
+      frappe-redis-cache:
+        condition: service_healthy
+      frappe-redis-queue:
+        condition: service_healthy
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      DB_NAME: frappe
+      DB_PASSWORD: ${MARIADB_PASSWORD}
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+      SOCKETIO_PORT: 9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-api.ciagotech.com}
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+      - frappe-backups:/home/frappe/frappe-bench/sites/backups
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:9000:9000"
+    networks:
+      - frappe-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/method/version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  frappe-nginx:
+    image: nginx:alpine
+    container_name: frappe-hetzner-nginx
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - frappe-sites:/var/www/html:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    networks:
+      - frappe-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Worker for background jobs (default queue)
+  frappe-worker-default:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-worker-default
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue default
+
+  # Worker for short jobs
+  frappe-worker-short:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-worker-short
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue short
+
+  # Worker for long jobs
+  frappe-worker-long:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-worker-long
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench worker --queue long
+
+  # Scheduler for periodic tasks
+  frappe-scheduler:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-scheduler
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    environment:
+      DB_HOST: frappe-mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe-network
+    command: bench schedule
+
+  # SocketIO server for real-time updates
+  frappe-socketio:
+    image: frappe/erpnext:v15
+    container_name: frappe-hetzner-socketio
+    restart: unless-stopped
+    depends_on:
+      - frappe-backend
+    environment:
+      REDIS_CACHE: redis://frappe-redis-cache:6379
+      REDIS_QUEUE: redis://frappe-redis-queue:6379
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    ports:
+      - "127.0.0.1:9001:9001"
+    networks:
+      - frappe-network
+    command: node apps/frappe/socketio.js
+
+networks:
+  frappe-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
+
+volumes:
+  mariadb-data:
+    driver: local
+  redis-cache-data:
+    driver: local
+  redis-queue-data:
+    driver: local
+  frappe-sites:
+    driver: local
+  frappe-logs:
+    driver: local
+  frappe-backups:
+    driver: local
+  nginx-logs:
+    driver: local
