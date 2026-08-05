@@ -40,6 +40,40 @@ Built with a modern, type-safe, server-rendered stack — TanStack Start on Clou
 
 ---
 
+## Related Projects
+
+### Cloudflare Workers
+
+This repository includes a separate Cloudflare Worker for Resend webhook processing:
+
+- **Repository**: [Ciago_Worker](https://github.com/AnujTiwari-Student/Ciago_Worker)
+- **Purpose**: Handles Resend email webhooks and stores events in Neon database
+- **Deployment**: Automatic via GitHub Actions on push to main
+
+#### Using as Git Submodule (Optional)
+
+If you want to include the worker in your local development environment:
+
+```bash
+# Add as submodule
+git submodule add https://github.com/AnujTiwari-Student/Ciago_Worker.git resend-worker
+
+# After cloning this repo, initialize submodules
+git submodule init
+git submodule update
+
+# To update submodule to latest
+cd resend-worker
+git pull origin main
+cd ..
+git add resend-worker
+git commit -m "Update resend-worker submodule"
+```
+
+**Note**: The `resend-worker/` directory is gitignored in this repository. The worker is developed and deployed independently.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
