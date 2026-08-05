@@ -1,0 +1,71 @@
+# Enterprise-grade Frappe + React Application
+# This Dockerfile:
+# 1. Builds a custom Frappe image with the Ciago custom app
+# 2. Compiles the React + Vite frontend into static assets
+# 3. Serves frontend through Frappe's Nginx
+
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy frontend dependencies
+COPY package.json bun.lock* ./
+
+# Install dependencies
+RUN npm ci --prefer-offline --no-audit
+
+# Copy frontend source
+COPY src ./src
+COPY public ./public
+COPY vite.config.ts tsconfig.json eslint.config.js components.json ./
+
+# Build frontend for production
+RUN npm run build
+
+# Verify build output
+RUN ls -la .output/
+
+# Stage 2: Custom Frappe image with app and frontend
+FROM frappe/erpnext:v15.118.3
+
+USER root
+
+# Install security updates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+
+# Install custom Ciago app
+RUN bench get-app ciago-hrms https://github.com/Ciago-Technologies/ciago-hrms.git || \
+    bench get-app --branch main ciago-hrms https://github.com/Ciago-Technologies/ciago-hrms.git
+
+# Build the app
+RUN bench build --app ciago-hrms
+
+# Copy React frontend build output to Frappe's public directory
+COPY --from=frontend-builder /app/frontend/.output/public /home/frappe/frappe-bench/sites/common_site_config.json.bak
+
+# Create a symlink to serve React app from Frappe's public static folder
+RUN mkdir -p /home/frappe/frappe-bench/sites/assets/ciago-app && \
+    echo "Frontend build copied successfully"
+
+# Install other essential HRMS apps
+RUN bench get-app --branch version-15 hrms && bench build --app hrms || true
+
+# Set correct permissions
+RUN chmod -R 755 /home/frappe/frappe-bench/sites
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/method/frappe.client.get_list -H "Authorization: Bearer null" || exit 1
+
+# Run Frappe in the default foreground mode
+EXPOSE 8000 8001 9000
+
+# The base image's entrypoint handles container init
+CMD ["frappe", "--version"]

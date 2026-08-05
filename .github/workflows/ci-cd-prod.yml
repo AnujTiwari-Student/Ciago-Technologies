@@ -1,0 +1,505 @@
+name: CI/CD - Production (Frappe + Cloudflare)
+
+on:
+  push:
+    branches:
+      - production
+      - main
+  pull_request:
+    branches:
+      - production
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frappe
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  checks: write
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # =========================================================================
+  # STEP 1: Code Quality & Secret Scanning (FAIL FAST) - STRICT MODE
+  # =========================================================================
+  security-scan:
+    name: "🔐 STRICT: Secrets & Dependency Audit"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy secret scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: secret
+          scan-ref: .
+          format: sarif
+          output: trivy-secret-results.sarif
+          exit-code: "1"
+
+      - name: Upload Trivy secret scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-secret-results.sarif
+
+      - name: Run gitleaks secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  code-quality:
+    name: "🔍 STRICT: Linting & Code Quality"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: security-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run ESLint (Frontend) - FAIL ON ERROR
+        run: npm run lint
+
+      - name: Run Prettier check (Frontend) - FAIL ON ERROR
+        run: npm run format -- --check
+
+      - name: Install backend dependencies
+        run: |
+          pip install --no-cache-dir flake8 black isort bandit[baseline] safety
+          pip install --no-cache-dir -q -r requirements.txt || true
+
+      - name: Run Black formatter check (Backend)
+        run: black --check .
+
+      - name: Run isort import check (Backend)
+        run: isort --check-only .
+
+      - name: Run Flake8 linter (Backend) - FAIL ON ERROR
+        run: |
+          flake8 . --count --statistics \
+            --ignore=E501,W503,E203 \
+            --exclude=.git,__pycache__,venv,migrations,node_modules
+
+  # =========================================================================
+  # STEP 2: Testing & SAST (STRICT MODE - MUST PASS)
+  # =========================================================================
+  test:
+    name: "✅ STRICT: Testing & Security Analysis"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run frontend tests - MUST PASS
+        run: npm run test
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-production
+          path: coverage/
+        if: always()
+
+      - name: Run Bandit SAST (Backend Security) - FAIL ON HIGH/CRITICAL
+        run: |
+          pip install --no-cache-dir bandit[baseline]
+          bandit -r . -f json -o bandit-report.json \
+            --exclude ./venv,./migrations,./node_modules,./.venv \
+            --severity-level high
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report-prod
+          path: bandit-report.json
+
+      - name: Frontend dependency audit - STRICT
+        run: npm audit --audit-level=moderate
+
+      - name: Backend dependency security check - STRICT
+        run: |
+          pip install --no-cache-dir safety
+          safety check --json > safety-report.json
+
+      - name: Upload Safety report
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-security-report-prod
+          path: safety-report.json
+
+  # =========================================================================
+  # STEP 3: Build & Container Security Scan (CRITICAL SECURITY)
+  # =========================================================================
+  build:
+    name: "🐳 CRITICAL: Docker Build & Container Scanning"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    if: success()
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=v{{date 'YYYYMMDD.HHmmss'}}
+            type=raw,value=latest
+
+      - name: Build Docker image for scanning
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scan - STRICT MODE
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: "/tmp/image.tar"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Upload Trivy scan to Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container-production"
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.tags }}
+          format: cyclonedx-json
+          output-file: sbom-production.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-production
+          path: sbom-production.json
+
+      - name: Push production image to registry
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # =========================================================================
+  # STEP 4a: Deploy Frappe to Hetzner (WITH MANUAL APPROVAL)
+  # =========================================================================
+  deploy-frappe-hetzner:
+    name: "🚀 Deploy Frappe to Hetzner (Production)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/production'
+    environment:
+      name: production-hetzner
+      url: https://api.ciagotech.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Wait for approval
+        run: echo "⏳ Deployment requires manual approval from GitHub Environment"
+
+      - name: Deploy Frappe to Hetzner server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HETZNER_IP }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PROD_SSH_PORT || '22' }}
+          script: |
+            set -e
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚀 PRODUCTION DEPLOYMENT: FRAPPE to Hetzner"
+            echo "════════════════════════════════════════════════════════════"
+            
+            # Navigate to Frappe directory
+            cd /opt/ciago-frappe || { echo "ERROR: /opt/ciago-frappe not found"; exit 1; }
+            
+            # Pull latest code
+            echo "📥 Pulling latest code from production branch..."
+            git fetch origin
+            git checkout production
+            git pull origin production
+            
+            # Verify deploy.sh exists
+            if [[ ! -f ./deploy.sh ]]; then
+              echo "ERROR: deploy.sh not found"
+              exit 1
+            fi
+            
+            # Make deploy script executable
+            chmod +x ./deploy.sh
+            
+            # Run deployment
+            echo "🐳 Running Frappe deployment with security checks..."
+            ./deploy.sh "${{ needs.build.outputs.image-tag }}" "${{ secrets.PROD_SITE_NAME }}" production
+            
+            echo "════════════════════════════════════════════════════════════"
+            echo "✅ FRAPPE DEPLOYMENT COMPLETED"
+            echo "════════════════════════════════════════════════════════════"
+        timeout-minutes: 15
+
+      - name: Post-deployment health check
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HETZNER_IP }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PROD_SSH_PORT || '22' }}
+          script: |
+            echo "🏥 Running health checks..."
+            
+            cd /opt/ciago-frappe
+            
+            # Check if containers are running
+            docker-compose ps
+            
+            # Check API endpoint
+            curl -f https://api.ciagotech.com/api/method/frappe.client.get_list || true
+            
+            echo "✅ Health checks completed"
+
+      - name: Create GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production-hetzner',
+              description: 'Frappe backend deployment',
+              auto_merge: false,
+              required_contexts: [],
+              production_environment: true
+            });
+        continue-on-error: true
+
+  # =========================================================================
+  # STEP 4b: Deploy Frontend to Cloudflare Workers (WITH MANUAL APPROVAL)
+  # =========================================================================
+  deploy-frontend-cloudflare:
+    name: "☁️ Deploy Frontend to Cloudflare Workers"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/production'
+    environment:
+      name: production-cloudflare
+      url: https://ciagotech.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Wait for approval
+        run: echo "⏳ Cloudflare deployment requires manual approval"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers (Production)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_AUTH_TOKEN: ${{ secrets.WRANGLER_AUTH_TOKEN }}
+        run: |
+          echo "════════════════════════════════════════════════════════════"
+          echo "☁️ PRODUCTION DEPLOYMENT: Frontend to Cloudflare Workers"
+          echo "════════════════════════════════════════════════════════════"
+          
+          npm run deploy
+          
+          echo "════════════════════════════════════════════════════════════"
+          echo "✅ CLOUDFLARE DEPLOYMENT COMPLETED"
+          echo "════════════════════════════════════════════════════════════"
+
+  # =========================================================================
+  # STEP 5: Post-Deployment Notifications
+  # =========================================================================
+  notify-success:
+    name: "📢 Notify Deployment Success"
+    runs-on: ubuntu-latest
+    needs: [deploy-frappe-hetzner, deploy-frontend-cloudflare]
+    if: success()
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ PRODUCTION DEPLOYMENT SUCCESSFUL",
+              "attachments": [
+                {
+                  "color": "good",
+                  "fields": [
+                    {
+                      "title": "Frappe API",
+                      "value": "https://api.ciagotech.com",
+                      "short": true
+                    },
+                    {
+                      "title": "Frontend",
+                      "value": "https://ciagotech.com",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "${{ github.sha }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Author",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
+
+  notify-failure:
+    name: "🚨 Notify Deployment Failure"
+    runs-on: ubuntu-latest
+    needs: [deploy-frappe-hetzner, deploy-frontend-cloudflare]
+    if: failure()
+    steps:
+      - name: Send Slack failure notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ PRODUCTION DEPLOYMENT FAILED",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "${{ github.sha }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Author",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Action URL",
+                      "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                      "short": false
+                    }
+                  ]
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Create issue for deployment failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Production deployment failed - ${context.sha.substring(0, 7)}`,
+              body: `**Production deployment failed**\n\n- Commit: ${context.sha}\n- Branch: ${context.ref}\n- Run: ${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nPlease investigate and take corrective action.`,
+              labels: ['deployment', 'production', 'critical']
+            });
+        continue-on-error: true

@@ -1,0 +1,339 @@
+name: CI/CD - Staging
+
+on:
+  push:
+    branches:
+      - staging
+  pull_request:
+    branches:
+      - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frappe
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # STEP 1: Code Quality & Secret Scanning (FAIL FAST)
+  # =========================================================================
+  security-scan:
+    name: "🔐 Security: Secrets & Dependency Audit"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy secret scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: secret
+          scan-ref: .
+          format: sarif
+          output: trivy-secret-results.sarif
+        continue-on-error: true
+
+      - name: Upload Trivy secret scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-secret-results.sarif
+        continue-on-error: true
+
+      - name: Run gitleaks secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  code-quality:
+    name: "🔍 Linting & Code Quality"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: security-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run ESLint (Frontend)
+        run: npm run lint
+
+      - name: Run Prettier check (Frontend)
+        run: npm run format -- --check
+
+      - name: Install backend dependencies
+        run: |
+          pip install --no-cache-dir flake8 black isort bandit[baseline] safety
+          pip install --no-cache-dir -q -r requirements.txt || true
+
+      - name: Run Black formatter check (Backend)
+        run: black --check . || true
+
+      - name: Run isort import check (Backend)
+        run: isort --check-only . || true
+
+      - name: Run Flake8 linter (Backend)
+        run: |
+          flake8 . --count --statistics \
+            --ignore=E501,W503,E203 \
+            --exclude=.git,__pycache__,venv,migrations,node_modules \
+            || true
+
+  # =========================================================================
+  # STEP 2: Testing & SAST
+  # =========================================================================
+  test:
+    name: "✅ Testing & Security Analysis"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-staging
+          path: coverage/
+        if: always()
+
+      - name: Run Bandit SAST (Backend Security)
+        run: |
+          pip install --no-cache-dir bandit[baseline]
+          bandit -r . -f json -o bandit-report.json \
+            --exclude ./venv,./migrations,./node_modules,./.venv \
+            || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report-staging
+          path: bandit-report.json
+        if: always()
+
+      - name: Frontend dependency audit
+        run: npm audit --audit-level=moderate
+
+      - name: Backend dependency security check
+        run: |
+          pip install --no-cache-dir safety
+          safety check --json > safety-report.json || true
+
+      - name: Upload Safety report
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-security-report-staging
+          path: safety-report.json
+        if: always()
+
+  # =========================================================================
+  # STEP 3: Build & Container Security Scan
+  # =========================================================================
+  build:
+    name: "🐳 Docker Build & Vulnerability Scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    if: success()
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=staging-{{date 'YYYYMMDD'}}
+
+      - name: Build Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Run Trivy vulnerability scan (Fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: "/tmp/image.tar"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container"
+        if: always()
+
+      - name: Load and push Docker image
+        if: success()
+        run: docker load --input /tmp/image.tar
+
+      - name: Push Docker image to registry
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.tags }}
+          format: cyclonedx-json
+          output-file: sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-staging
+          path: sbom.json
+
+  # =========================================================================
+  # STEP 4: Deploy to Staging
+  # =========================================================================
+  deploy:
+    name: "🚀 Deploy to Staging Server"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    if: success() && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.ciagotech.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_SERVER_IP }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || '22' }}
+          script: |
+            set -e
+            echo "🚀 Deploying Frappe to staging..."
+            
+            cd /opt/ciago-frappe
+            
+            # Pull latest changes
+            git pull origin staging
+            
+            # Make deploy script executable
+            chmod +x ./deploy.sh
+            
+            # Run deployment with image tag
+            ./deploy.sh "${{ needs.build.outputs.image-tag }}" "${{ secrets.STAGING_SITE_NAME }}" staging
+            
+            echo "✅ Deployment completed"
+
+      - name: Post deployment notification
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ github.run_id }},
+              state: 'success',
+              environment_url: 'https://staging.ciagotech.com',
+              description: 'Staging deployment successful'
+            });
+        continue-on-error: true
+
+      - name: Send Slack notification on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ Staging deployment failed",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "text": "Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}"
+                }
+              ]
+            }
+        continue-on-error: true
