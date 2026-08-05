@@ -191,6 +191,9 @@ model JobApplication {
   status                           String                      @default("applied")
   offeredAt                        DateTime?                   @map("offered_at") @db.Timestamptz(6)
   hiredAt                          DateTime?                   @map("hired_at") @db.Timestamptz(6)
+  joiningDate                      DateTime?                   @map("joining_date") @db.Timestamptz(6)
+  offerLetterSentAt                DateTime?                   @map("offer_letter_sent_at") @db.Timestamptz(6)
+  joiningLetterSentAt              DateTime?                   @map("joining_letter_sent_at") @db.Timestamptz(6)
   createdAt                        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt                        DateTime?                   @map("deleted_at") @db.Timestamptz(6)
   isSoftDeleted                    Boolean                     @default(false) @map("is_soft_deleted")
@@ -226,6 +229,7 @@ model JobApplication {
   @@index([userId, roleId, createdAt(sort: Desc)], map: "job_applications_user_role_idx")
   @@index([frappeEmployeeName], map: "idx_job_applications_frappe_employee_name")
   @@index([frappeRecordStatus], map: "idx_job_applications_frappe_record_status")
+  @@index([joiningDate], map: "idx_job_applications_joining_date", where: raw("(joining_date IS NOT NULL)"))
   @@map("job_applications")
   @@schema("public")
 }

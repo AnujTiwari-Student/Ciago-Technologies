@@ -76,3 +76,9 @@ common_site_config_dev.json
 
 # Cloudflare Workers (deployed separately)
 resend-worker/
+
+# Test directory (local testing only)
+.tests/
+
+# Documentation directory (local docs only)
+.docs/
