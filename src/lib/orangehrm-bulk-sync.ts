@@ -37,10 +37,15 @@ export async function syncDepartmentsToOrangeHRM(client: OrangeHRMClient): Promi
 
     try {
       const newSubunit = await client.createSubunit(dept.name);
-      console.log(`[orangehrm-bulk-sync] ✅ Created department: ${newSubunit.name} (ID: ${newSubunit.id})`);
+      console.log(
+        `[orangehrm-bulk-sync] ✅ Created department: ${newSubunit.name} (ID: ${newSubunit.id})`,
+      );
       created++;
     } catch (error: any) {
-      console.error(`[orangehrm-bulk-sync] ❌ Failed to create department "${dept.name}":`, error?.message);
+      console.error(
+        `[orangehrm-bulk-sync] ❌ Failed to create department "${dept.name}":`,
+        error?.message,
+      );
       failed.push(dept.name);
     }
   }
@@ -83,10 +88,15 @@ export async function syncEmploymentStatusesToOrangeHRM(client: OrangeHRMClient)
 
     try {
       const newStatus = await client.createEmploymentStatus(statusName);
-      console.log(`[orangehrm-bulk-sync] ✅ Created employment status: ${newStatus.name} (ID: ${newStatus.id})`);
+      console.log(
+        `[orangehrm-bulk-sync] ✅ Created employment status: ${newStatus.name} (ID: ${newStatus.id})`,
+      );
       created++;
     } catch (error: any) {
-      console.error(`[orangehrm-bulk-sync] ❌ Failed to create status "${statusName}":`, error?.message);
+      console.error(
+        `[orangehrm-bulk-sync] ❌ Failed to create status "${statusName}":`,
+        error?.message,
+      );
       failed.push(statusName);
     }
   }
@@ -114,7 +124,7 @@ export async function syncJobTitlesToOrangeHRM(client: OrangeHRMClient): Promise
 
   const ohrJobTitles = await client.getJobTitles();
   const existingTitles = new Set(
-    ohrJobTitles.filter((jt) => !jt.deleted).map((jt) => jt.title.toLowerCase())
+    ohrJobTitles.filter((jt) => !jt.deleted).map((jt) => jt.title.toLowerCase()),
   );
 
   let created = 0;
@@ -130,10 +140,15 @@ export async function syncJobTitlesToOrangeHRM(client: OrangeHRMClient): Promise
 
     try {
       const newJobTitle = await client.createJobTitle(posting.title);
-      console.log(`[orangehrm-bulk-sync] ✅ Created job title: ${newJobTitle.title} (ID: ${newJobTitle.id})`);
+      console.log(
+        `[orangehrm-bulk-sync] ✅ Created job title: ${newJobTitle.title} (ID: ${newJobTitle.id})`,
+      );
       created++;
     } catch (error: any) {
-      console.error(`[orangehrm-bulk-sync] ❌ Failed to create job title "${posting.title}":`, error?.message);
+      console.error(
+        `[orangehrm-bulk-sync] ❌ Failed to create job title "${posting.title}":`,
+        error?.message,
+      );
       failed.push(posting.title);
     }
   }
@@ -165,9 +180,15 @@ export async function fullSyncToOrangeHRM(client: OrangeHRMClient): Promise<{
   console.log("=".repeat(60));
   console.log("✅ SYNC COMPLETE");
   console.log("=".repeat(60));
-  console.log(`Departments: ${departments.created} created, ${departments.existed} existed, ${departments.failed.length} failed`);
-  console.log(`Employment Statuses: ${employmentStatuses.created} created, ${employmentStatuses.existed} existed, ${employmentStatuses.failed.length} failed`);
-  console.log(`Job Titles: ${jobTitles.created} created, ${jobTitles.existed} existed, ${jobTitles.failed.length} failed`);
+  console.log(
+    `Departments: ${departments.created} created, ${departments.existed} existed, ${departments.failed.length} failed`,
+  );
+  console.log(
+    `Employment Statuses: ${employmentStatuses.created} created, ${employmentStatuses.existed} existed, ${employmentStatuses.failed.length} failed`,
+  );
+  console.log(
+    `Job Titles: ${jobTitles.created} created, ${jobTitles.existed} existed, ${jobTitles.failed.length} failed`,
+  );
   console.log("=".repeat(60) + "\n");
 
   return { departments, employmentStatuses, jobTitles };

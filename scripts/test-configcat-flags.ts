@@ -74,9 +74,8 @@ async function main() {
   console.log("📋 Test 3: Helper Functions");
 
   try {
-    const { isOrangeHRMProvisioningEnabled, isResendEmailEnabled } = await import(
-      "../src/lib/feature-flags.server"
-    );
+    const { isOrangeHRMProvisioningEnabled, isResendEmailEnabled } =
+      await import("../src/lib/feature-flags.server");
 
     const ohrEnabled = await isOrangeHRMProvisioningEnabled(testUser);
     console.log(`   isOrangeHRMProvisioningEnabled: ${ohrEnabled}`);
@@ -133,7 +132,11 @@ async function main() {
   console.log("📋 Test 5: Environment Check");
   const sdkKey = process.env.CONFIGCAT_SDK_KEY || process.env.CONFIGCAT_SERVER_SDK_KEY;
   if (sdkKey) {
-    const envType = sdkKey.includes("test") ? "TEST" : sdkKey.includes("prod") ? "PRODUCTION" : "DEVELOPMENT";
+    const envType = sdkKey.includes("test")
+      ? "TEST"
+      : sdkKey.includes("prod")
+        ? "PRODUCTION"
+        : "DEVELOPMENT";
     console.log(`   SDK Key Environment: ${envType}`);
     console.log(`   Key: ${sdkKey.slice(0, 20)}...`);
   }

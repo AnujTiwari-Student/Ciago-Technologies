@@ -55,7 +55,8 @@ print(json.dumps(doctype_info, indent=2))
 `;
 
   // Execute via Docker
-  const result = await $`docker exec frappe-backend bash -c "bench --site ${SITE_NAME} execute '${pythonScript}'"`.text();
+  const result =
+    await $`docker exec frappe-backend bash -c "bench --site ${SITE_NAME} execute '${pythonScript}'"`.text();
 
   const data = JSON.parse(result);
 
@@ -88,18 +89,21 @@ print(json.dumps(doctype_info, indent=2))
 
   // Analyze Select fields (these have fixed options)
   const selectFields = data.fields.filter((f: any) => f.fieldtype === "Select" && field.options);
-  console.log(`\n📝 Select fields with options (${selectFields.filter((f: any) => f.options).length}):`);
+  console.log(
+    `\n📝 Select fields with options (${selectFields.filter((f: any) => f.options).length}):`,
+  );
   for (const field of selectFields.slice(0, 10)) {
     if (field.options) {
-      const options = field.options.split('\n').slice(0, 3).join(', ');
-      console.log(`   ${field.fieldname}: ${options}${field.options.split('\n').length > 3 ? '...' : ''}`);
+      const options = field.options.split("\n").slice(0, 3).join(", ");
+      console.log(
+        `   ${field.fieldname}: ${options}${field.options.split("\n").length > 3 ? "..." : ""}`,
+      );
     }
   }
 
   // Save full metadata to file
   await Bun.write("docs/frappe-employee-doctype-raw.json", JSON.stringify(data, null, 2));
   console.log(`\n💾 Full metadata saved to: docs/frappe-employee-doctype-raw.json`);
-
 } catch (error) {
   console.error("❌ Error inspecting DocType:", error);
   process.exit(1);

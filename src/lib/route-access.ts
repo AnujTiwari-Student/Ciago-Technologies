@@ -6,12 +6,7 @@ import { canAccessDashboard } from "./dashboard-access";
 
 export type AppRole = "user" | "admin";
 
-export type Surface =
-  | "public"
-  | "careers"
-  | "my-applications"
-  | "onboarding"
-  | "admin";
+export type Surface = "public" | "careers" | "my-applications" | "onboarding" | "admin";
 
 const DASHBOARD_ELIGIBLE_SIMPLE_ROLES: Set<AppRole> = new Set(["admin"]);
 

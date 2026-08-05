@@ -13,30 +13,35 @@
 **Completed**: 2026-08-03
 
 ### Implementation Summary
+
 Frappe User account creation is now integrated into ALL 4 HIRED lifecycle paths. After successful Employee enrichment, the system provisions a Frappe User with secure invitation (no plaintext passwords).
 
 ### Architecture
+
 - **CiagoTech** handles: recruitment, applications, document verification, APPLIED→HIRED lifecycle, sync to Frappe
 - **Frappe** handles: post-hire employee management, dashboards, leave, attendance, expenses, HR ops
 - **User provisioning**: CiagoTech AppRole → frappe-role-mapping.ts → Frappe HRMS roles → Frappe User created with send_welcome_email
 
 ### Integration Points Connected (4/4)
+
 1. **Already-complete idempotent path**: Re-enrichment triggers User provisioning (safe on repeat)
 2. **Reconciliation from job_applications**: After enriching reconciled Employee
 3. **Reconciliation from employees table**: After enriching Employee found via CiagoTech employees table
 4. **New provisioning fallback**: After centralized provisioning + enrichment succeeds
 
 ### Role Mapping (src/lib/frappe-role-mapping.ts)
-| CiagoTech AppRole | Frappe Roles Assigned |
-|---|---|
-| employee | Employee, Employee Self Service |
-| manager | + Leave Approver, Expense Approver |
-| hr | + HR User, HR Manager |
-| admin/system_engineer/developer | + System Manager |
-| Multiple roles | ALL applicable roles combined |
-| (none) | Administrator NEVER auto-assigned |
+
+| CiagoTech AppRole               | Frappe Roles Assigned              |
+| ------------------------------- | ---------------------------------- |
+| employee                        | Employee, Employee Self Service    |
+| manager                         | + Leave Approver, Expense Approver |
+| hr                              | + HR User, HR Manager              |
+| admin/system_engineer/developer | + System Manager                   |
+| Multiple roles                  | ALL applicable roles combined      |
+| (none)                          | Administrator NEVER auto-assigned  |
 
 ### Security
+
 - Uses Frappe `send_welcome_email=1` for secure invitation
 - No plaintext passwords stored in CiagoTech
 - User receives invitation link → sets own password in Frappe
@@ -44,30 +49,37 @@ Frappe User account creation is now integrated into ALL 4 HIRED lifecycle paths.
 - Non-blocking: User provisioning failure does NOT break Employee enrichment
 
 ### Idempotency
+
 - Checks if Frappe User already exists before creating
 - If User exists but not linked to Employee → links
 - If User exists and already linked → no-op (already_exists)
 - Safe to call multiple times
 
 ### Files Created/Modified
+
 **Created (earlier):**
+
 - `src/lib/frappe-role-mapping.ts` — CiagoTech AppRole → Frappe HRMS roles
 - `src/lib/frappe-user-provisioning.ts` — provisionFrappeUser() with idempotency and audit logging
 
 **Modified:**
+
 - `src/lib/frappe-hired-handler.ts` — Added provisionUserAfterEnrichment() helper + 4 integration point calls
 - `src/integrations/frappe/types.ts` — Added user_id to UpdateEmployeePayload
 - `src/integrations/frappe/client.ts` — getUser(), createUser(), linkUserToEmployee(), disableUser()
 
 ### TypeScript Compilation
+
 - ✅ No errors in frappe-hired-handler.ts, frappe-user-provisioning.ts, frappe-role-mapping.ts, frappe/client.ts, frappe/types.ts
 - Pre-existing errors in unrelated files remain (UsersDirectoryPanel, feature-flags, attendance, etc.)
 
 ### Test Suite
+
 - 109 pass, 6 fail (all failures pre-existing in Clerk/feature-flags tests — unrelated to this work)
 - No new test failures introduced
 
 ### E2E Validation (VERIFIED IN DEVELOPMENT — 2026-08-03)
+
 - ✅ APPLIED → Frappe Employee created (HR-EMP-00014)
 - ✅ Employee persisted in CiagoTech DB (frappeEmployeeName)
 - ✅ HIRED → Frappe Employee enriched (same employee, no duplicate)
@@ -81,18 +93,21 @@ Frappe User account creation is now integrated into ALL 4 HIRED lifecycle paths.
 - ✅ Administrator NEVER auto-assigned
 
 ### Role Mapping E2E (VERIFIED — 4/4 pass)
-| CiagoTech Role | Expected Frappe Roles | Result |
-|---|---|---|
-| employee | Employee, Employee Self Service | ✅ VERIFIED |
-| employee+manager | +Leave Approver, Expense Approver | ✅ VERIFIED |
-| employee+hr | +HR User, HR Manager | ✅ VERIFIED |
-| employee+admin+system_engineer | +System Manager | ✅ VERIFIED |
+
+| CiagoTech Role                 | Expected Frappe Roles             | Result      |
+| ------------------------------ | --------------------------------- | ----------- |
+| employee                       | Employee, Employee Self Service   | ✅ VERIFIED |
+| employee+manager               | +Leave Approver, Expense Approver | ✅ VERIFIED |
+| employee+hr                    | +HR User, HR Manager              | ✅ VERIFIED |
+| employee+admin+system_engineer | +System Manager                   | ✅ VERIFIED |
 
 ### Frappe Discovery: Role Assignment Order
+
 Frappe removes Employee/Employee Self Service roles if no Employee record is linked to the User.
 Fix implemented: Create User → Link to Employee → THEN assign roles via updateUserRoles().
 
 ### Login Flow E2E (VERIFIED — 16/16 pass, 2026-08-03)
+
 - ✅ APPLIED → Employee created → HIRED → Employee enriched → User created
 - ✅ Password set (admin API bypass — prod uses invitation email)
 - ✅ Frappe login successful (session established)
@@ -104,6 +119,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - Note: Dev uses admin password-set since no SMTP configured; production uses Frappe invitation email
 
 ### Current State
+
 - FRAPPE_EMPLOYEE_SYNC_ENABLED=false (production flag OFF)
 - Integration complete and verified at code + E2E + login level
 - Production deployment NOT authorized (Phase 7 gates remain)
@@ -116,6 +132,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 **Completed**: 2026-08-03
 
 ### Implementation Summary
+
 - Enhanced Frappe dashboard from basic connection status to comprehensive integration monitoring
 - Added environment/safety status: clearly shows Development, Frappe Sync OFF, OrangeHRM operational, Production NOT deployed
 - Connection health: status, base URL, site name, version info
@@ -128,6 +145,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - All metrics server-side authorized to admin/system_engineer/developer only
 
 ### Frappe Dashboard Features
+
 1. **Environment & Safety Status**
    - Environment: Development vs Production
    - Frappe Sync: ON/OFF indicator
@@ -177,17 +195,21 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
    - 15 most recent entries
 
 ### Files Modified
+
 **Modified:**
+
 - `src/lib/frappe-dashboard.functions.ts` — Expanded getFrappeDashboardStats() with comprehensive metrics
 - `src/routes/_authenticated/admin.tsx` — Enhanced FrappeDashboardPanel with new sections
 
 ### Security
+
 - All server functions enforce admin OR system_engineer OR developer authorization
 - No client-side authorization bypass possible
 - No secrets/credentials exposed in dashboard
 - Department metrics show global view (appropriate for system roles)
 
 ### Architecture Preserved
+
 - No changes to APPLIED provisioning lifecycle
 - No changes to HIRED enrichment lifecycle
 - No changes to idempotency/retry/recovery mechanisms
@@ -201,6 +223,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 **Completed**: 2026-08-03
 
 ### Implementation Summary
+
 - Extended AppRole enum with `system_engineer`, `developer`
 - Created `src/lib/dashboard-access.ts` for role → surface authorization
 - Implemented department-scoped data filtering in server functions across applications, job postings, and employee directory
@@ -212,11 +235,11 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - Implemented employee directory with department-aware filtering and statistics
 
 ### Features Implemented
+
 1. **Department-Scoped Authorization**
    - Server-side filtering in `listAllApplications`, `listAllJobPostings`, `listApplicantsByRole`
    - Employee directory with department scoping
    - Dashboard metrics with department breakdowns
-   
 2. **Employee Directory**
    - Full employee listing with search and filtering
    - Department-scoped for HR/manager roles
@@ -238,13 +261,16 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
    - Restricted to admin/system_engineer/developer roles
 
 ### Files Created/Modified
+
 **Created:**
+
 - `src/lib/dashboard-access.ts` — Role → dashboard surface authorization (includes employee-directory surface)
 - `src/lib/frappe-dashboard.functions.ts` — Frappe dashboard data server functions
 - `src/lib/employee-directory.functions.ts` — Employee directory server functions with department scoping
 - `scripts/migrate-job-posting-departments.ts` — One-time migration linking job postings to Department table
 
 **Modified:**
+
 - `prisma/schema.prisma` — Added system_engineer, developer to AppRole enum
 - `prisma/seed.ts` — Dev user role/department seeding
 - `src/lib/admin.functions.ts` — Department-scoped filtering for applications, applicants-by-role; added getDashboardMetrics()
@@ -257,6 +283,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - `src/components/site/Header.tsx` — Shows admin nav for dashboard-eligible users
 
 ### Database State
+
 - AppRole enum: admin, moderator, user, employee, hr, manager, system_engineer, developer
 - Departments seeded: 12 departments (Engineering, HR, Operations, etc.)
 - Job postings migrated: 2 postings linked to Engineering department
@@ -264,6 +291,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - Employee.department uses DeptType enum (NOT migrated to FK — preserves existing architecture)
 
 ### Testing
+
 - Test suite: 118/118 passing (1 pre-existing flaky timeout test skipped)
 - 3 type errors in new code (fixed): userProfile → clerkUserMap, department field access
 - OrangeHRM integration: unchanged
@@ -271,6 +299,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - FRAPPE_EMPLOYEE_SYNC_ENABLED: false (unchanged)
 
 ### Architecture Notes
+
 - Employee.department remains as DeptType enum, NOT migrated to Department FK
 - Department scoping maps Department.id → Department.code → DeptType enum value
 - Server-side authorization enforced at every query; no client-side filtering for security
@@ -281,6 +310,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 ## Phase 0: Infrastructure & Discovery ⏳ IN PROGRESS
 
 ### Repository Audit
+
 - [x] Find and inspect current OrangeHRM Docker Compose file
 - [x] Inspect .env and .env.example files
 - [x] Count OrangeHRM references across repository (3089 occurrences, 75+ files)
@@ -292,6 +322,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - [x] Create comprehensive inventory table in frappe.md
 
 ### Documentation Foundation
+
 - [x] Create `docs/frappe.md` with repository inventory
 - [x] Document current OrangeHRM architecture baseline
 - [x] Create architecture decisions log (ADR-001 through ADR-005)
@@ -299,6 +330,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - [x] Create `todo-frappe.md` (this file)
 
 ### Docker Infrastructure
+
 - [x] Review official Frappe/ERPNext v15 Docker documentation (✅ frappe_docker repo, pwd.yml, compose.yaml)
 - [x] Validate reference Docker Compose for ERPNext v15 + Frappe HR (✅ INCOMPLETE - missing configurator, hrms install)
 - [x] Identify required vs optional services (✅ 9 required + 1 bootstrap: db, redis-cache, redis-queue, configurator, backend, websocket, scheduler, queue-short, queue-long, frontend)
@@ -311,12 +343,14 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - [x] Resolve persistence blocker (✅ --mariadb-user-host-login-scope='%' creates DB user with wildcard host)
 
 ### Environment Configuration
+
 - [x] Add Frappe environment variables to `.env` with placeholder comments (✅ ERPNEXT_VERSION, FRAPPE_DB_PASSWORD, FRAPPE_BASE_URL, FRAPPE_SITE_NAME, FRAPPE_API_KEY, FRAPPE_API_SECRET)
 - [ ] Document authentication method (API key vs OAuth vs session-based)
 - [ ] Create `.env.example` entries for Frappe variables
 - [ ] Add comments: DO NOT INVENT - generate from live Frappe UI
 
 ### Frappe Stack Startup
+
 - [x] Start Frappe Docker stack (`docker compose -f docker-compose.frappe.yml up -d`) ✅
 - [x] Verify all services healthy (db, redis-cache, redis-queue, backend, scheduler, worker) ✅
 - [x] Initialize Frappe site with HR module (✅ site: ciago.localhost, apps: frappe+erpnext+hrms)
@@ -327,6 +361,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - [x] Verify persistence across docker compose down/up (✅ 3 cycles tested, all pass)
 
 ### Phase 0 Completion Gate
+
 - [x] **STOP and report status to user**
 - [x] All Phase 0 deliverables complete
 - [x] Frappe HR accessible and functional (http://localhost:8180, login: Administrator/admin)
@@ -340,6 +375,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 **Validation Complete**: 2026-08-02
 
 **Key Findings**:
+
 1. ✅ **Custom image built**: `frappe-erpnext-hrms:v15` (ERPNext + HRMS baked in)
 2. ✅ **Official architecture confirmed**: 9 required services + 1 bootstrap container
 3. ✅ **Persistence solved**: `--mariadb-user-host-login-scope='%'` creates wildcard DB users
@@ -347,12 +383,14 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 5. ✅ **HRMS baked into custom image**: Survives container recreation
 
 **Root Cause of Persistence Bug (RESOLVED)**:
+
 - `bench new-site` without `--mariadb-user-host-login-scope='%'` creates DB users scoped to container IP (e.g. `user@172.21.0.9`)
 - After `docker compose down/up`, container gets new IP → MariaDB auth fails
 - Fix: Always pass `--mariadb-user-host-login-scope='%'` when creating sites
 - This creates `user@%` (wildcard) which works from any IP
 
 **All Blockers Resolved**:
+
 - ✅ Service architecture validated (9 services)
 - ✅ Volumes validated (4 volumes, 3 critical)
 - ✅ Ports validated (8180 for HTTP)
@@ -375,6 +413,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 **Status**: ✅ ALL TESTS PASSING (8/8 - 100%)
 
 ### Implementation Complete
+
 - [x] Create `src/lib/frappe-provisioning.ts` (638 lines)
 - [x] Create `src/lib/frappe-hired-handler.ts` (674 lines)
 - [x] Create `src/lib/frappe-applied-handler.ts` (257 lines)
@@ -396,6 +435,7 @@ Fix implemented: Create User → Link to Employee → THEN assign roles via upda
 - [x] Create Phase 2 completion report
 
 ### Live Test Results
+
 ```
 Total:          8 tests
 Passed:         8 (100%)
@@ -405,6 +445,7 @@ Success Rate:   100%
 ```
 
 ### Test Scenarios Verified
+
 1. ✅ Authentication (Administrator user)
 2. ✅ Create Employee (APPLIED) → HR-EMP-00006
 3. ✅ Retrieve Employee
@@ -415,7 +456,9 @@ Success Rate:   100%
 8. ✅ Cleanup (terminate → status=Left)
 
 ### Database Fields Used
+
 **JobApplication**:
+
 - `frappeEmployeeName` (string) — HR-EMP-XXXXX
 - `frappeProvisioningState` — not_started | pending | processing | succeeded | failed | needs_manual_review
 - `frappeProvisioningAttemptedAt` (timestamp)
@@ -424,47 +467,54 @@ Success Rate:   100%
 - `frappeTerminatedAt` (timestamp)
 
 **Employee**:
+
 - `frappeEmployeeName` (string)
 - `frappeRecordStatus`
 - `frappeTerminatedAt` (timestamp)
 
 ### Field Mapping Implemented (from Phase 1)
-| Ciago Field | Frappe Field | Status |
-|-------------|--------------|--------|
-| firstName | first_name | ✅ |
-| middleName | middle_name | ✅ |
-| lastName | last_name | ✅ |
-| joinedDate | date_of_joining | ✅ |
-| workEmail | company_email | ✅ |
-| personalEmail | personal_email | ✅ |
-| mobile | cell_number | ✅ |
-| address | current_address | ✅ |
-| emergencyContact.name | emergency_contact_name | ✅ |
-| emergencyContact.phone | emergency_phone | ✅ |
-| emergencyContact.relationship | relation | ✅ |
+
+| Ciago Field                   | Frappe Field           | Status |
+| ----------------------------- | ---------------------- | ------ |
+| firstName                     | first_name             | ✅     |
+| middleName                    | middle_name            | ✅     |
+| lastName                      | last_name              | ✅     |
+| joinedDate                    | date_of_joining        | ✅     |
+| workEmail                     | company_email          | ✅     |
+| personalEmail                 | personal_email         | ✅     |
+| mobile                        | cell_number            | ✅     |
+| address                       | current_address        | ✅     |
+| emergencyContact.name         | emergency_contact_name | ✅     |
+| emergencyContact.phone        | emergency_phone        | ✅     |
+| emergencyContact.relationship | relation               | ✅     |
 
 ### Link Fields (NOT YET IMPLEMENTED - Phase 2.1)
-| Ciago Field | Frappe Field | Status |
-|-------------|--------------|--------|
-| jobTitleId → title | designation (Link) | ⏳ Future |
-| subUnitId → name | department (Link) | ⏳ Future |
-| locationId → name | branch (Link) | ⏳ Future |
+
+| Ciago Field        | Frappe Field           | Status    |
+| ------------------ | ---------------------- | --------- |
+| jobTitleId → title | designation (Link)     | ⏳ Future |
+| subUnitId → name   | department (Link)      | ⏳ Future |
+| locationId → name  | branch (Link)          | ⏳ Future |
 | empStatusId → name | employment_type (Link) | ⏳ Future |
 
 ### Required Fields Handling (BLOCKER RESOLVED)
+
 **Problem**: Frappe requires `gender` and `date_of_birth`, not in onboarding flow
 
 **Solution Implemented**:
+
 - Gender: "Other" (neutral placeholder)
 - DOB: "1990-01-01" (generic placeholder)
 - Provisioning state: `needs_manual_review` when placeholders used
 - Audit log: Documents placeholder usage with reason
 
 **Awaiting Product Decision**:
+
 - Continue with placeholder + manual review?
 - OR add gender/DOB to onboarding form?
 
 ### Remaining Work (Phase 2.1 - Link Fields)
+
 - [ ] Implement `ensureDesignation()` — create/find Designation DocType
 - [ ] Implement `ensureDepartment()` — create/find Department DocType
 - [ ] Implement `ensureEmploymentType()` — create/find Employment Type DocType
@@ -473,6 +523,7 @@ Success Rate:   100%
 - [ ] Test Link field creation and reconciliation
 
 ### Phase 2 Deliverables
+
 - ✅ Frappe provisioning logic (APPLIED state)
 - ✅ Frappe enrichment logic (HIRED state)
 - ✅ Frappe orchestration (integration events)
@@ -487,6 +538,7 @@ Success Rate:   100%
 ---
 
 ### Completed Actions (Phase 1)
+
 - [x] Logged into Frappe HR at http://localhost:8180 (credentials: Administrator/PLMqaz2901@)
 - [ ] User navigates to Employee form
 - [ ] User documents actual field names/IDs visible in form
@@ -497,6 +549,7 @@ Success Rate:   100%
 - [ ] User screenshots employee form for reference
 
 ### Field Mapping Documentation
+
 - [x] Created comprehensive field mapping table in `docs/phase1-findings.md`
 - [ ] Document firstName/middleName/lastName mappings
 - [ ] Document email field mapping (workEmail → ?)
@@ -508,6 +561,7 @@ Success Rate:   100%
 - [ ] Confirm contact enrichment supported (email/mobile/address)
 
 ### API Structure Documentation
+
 - [x] Documented base URL: `/api/resource/Employee` (standard Frappe REST pattern)
 - [x] Documented authentication: API key (`Authorization: token key:secret`) or session-based
 - [x] Documented employee creation: `POST /api/resource/Employee` with required fields
@@ -518,6 +572,7 @@ Success Rate:   100%
 - [x] Tested live API with employee HR-EMP-00003 (John Doe)
 
 ### Authentication Method
+
 - [x] Confirmed: API key recommended (simpler than OAuth, standard for Frappe integrations)
 - [ ] Generate API key from Frappe UI (User → API Access) — **USER ACTION REQUIRED**
 - [ ] Generate API secret from Frappe UI — **USER ACTION REQUIRED**
@@ -525,6 +580,7 @@ Success Rate:   100%
 - [x] Tested session-based auth (working) — API key preferred for production
 
 ### Phase 1 Completion Gate
+
 - [x] All field mappings confirmed and documented in `docs/phase1-findings.md`
 - [x] All API endpoints documented and tested
 - [x] Authentication working (session-based verified, API key approach documented)
@@ -539,12 +595,14 @@ Success Rate:   100%
 **Blocked Until**: Phase 1 complete (field mappings confirmed)
 
 ### Create Frappe Integration Directory
+
 - [ ] Create `src/integrations/frappe/` directory
 - [ ] Create `src/integrations/frappe/client.ts`
 - [ ] Create `src/integrations/frappe/types.ts`
 - [ ] Create `src/integrations/frappe/auth.ts` (if needed for session management)
 
 ### Implement Frappe API Client
+
 - [ ] Implement base client class with request/retry logic
 - [ ] Implement authentication (API key or session-based)
 - [ ] Implement `createEmployee()` method
@@ -556,6 +614,7 @@ Success Rate:   100%
 - [ ] Implement request timeout handling
 
 ### Type Definitions
+
 - [ ] Define `FrappeEmployeeCreate` type (create payload)
 - [ ] Define `FrappeEmployeeUpdate` type (update payload)
 - [ ] Define `FrappeEmployeeResponse` type (API response)
@@ -564,12 +623,14 @@ Success Rate:   100%
 - [ ] Define `FrappeContactDetailsUpdate` type (if supported)
 
 ### Client Factory
+
 - [ ] Implement `getFrappeClient()` factory function
 - [ ] Read environment variables (FRAPPE_BASE_URL, FRAPPE_API_KEY, etc.)
 - [ ] Validate configuration
 - [ ] Return configured client instance
 
 ### Unit Tests for API Client
+
 - [ ] Test createEmployee with valid payload
 - [ ] Test createEmployee with missing required fields
 - [ ] Test getEmployee success
@@ -580,6 +641,7 @@ Success Rate:   100%
 - [ ] Test timeout handling
 
 ### Phase 2 Completion Gate
+
 - [ ] All API client methods implemented
 - [ ] Unit tests passing
 - [ ] Manual integration test with live Frappe HR successful
@@ -592,12 +654,14 @@ Success Rate:   100%
 **Blocked Until**: Phase 2 complete (API client working)
 
 ### Create Frappe Business Logic Files
+
 - [ ] Create `src/lib/frappe-provisioning.ts` (copy from orangehrm-provisioning.ts)
 - [ ] Create `src/lib/frappe-hired-handler.ts` (copy from orangehrm-hired-handler.ts)
 - [ ] Create `src/lib/frappe-applied-handler.ts` (copy from orangehrm-applied-handler.ts)
 - [ ] Create `src/lib/frappe-types.ts` (adapt from orangehrm-types.ts)
 
 ### Update Provisioning Logic
+
 - [ ] Replace `getOrangeHRMClient()` with `getFrappeClient()` in frappe-provisioning.ts
 - [ ] Update field mappings (firstName/lastName → Frappe fields)
 - [ ] Update contact field mappings (email/mobile → Frappe fields, if supported)
@@ -609,6 +673,7 @@ Success Rate:   100%
 - [ ] Preserve integration event publishing
 
 ### Update HIRED Handler
+
 - [ ] Replace OrangeHRM client with Frappe client in frappe-hired-handler.ts
 - [ ] Update name enrichment logic (via Frappe updateEmployee)
 - [ ] Update contact enrichment logic (if supported by Frappe)
@@ -617,12 +682,14 @@ Success Rate:   100%
 - [ ] Preserve error handling and rollback
 
 ### Update APPLIED Handler
+
 - [ ] Replace OrangeHRM client with Frappe client in frappe-applied-handler.ts
 - [ ] Update employee creation logic
 - [ ] Update initial provisioning logic
 - [ ] Preserve APPLIED state workflow
 
 ### Integration with Application
+
 - [ ] Update `src/lib/admin.functions.ts` to use frappe-provisioning
 - [ ] Update provisioning triggers to use Frappe handlers
 - [ ] Add feature flag: `frappe_employee_sync_enabled` (parallel to OrangeHRM flag)
@@ -631,18 +698,21 @@ Success Rate:   100%
 - [ ] Update `src/lib/feature-flags.client.tsx` with Frappe flag
 
 ### Update UI Components
+
 - [ ] Update `src/components/admin/ProvisioningPanel.tsx` labels (OrangeHRM → Frappe HR)
 - [ ] Update status messages
 - [ ] Update error messages
 - [ ] Add Frappe HR connection status indicator
 
 ### Backward Compatibility (Transition Period)
+
 - [ ] Keep OrangeHRM code intact (do not delete)
 - [ ] Use feature flag to switch between OrangeHRM and Frappe
 - [ ] Allow rollback to OrangeHRM if Frappe fails
 - [ ] Log which system is active in audit logs
 
 ### Phase 3 Completion Gate
+
 - [ ] All business logic migrated
 - [ ] Feature flag functional (can switch between OrangeHRM/Frappe)
 - [ ] Manual test: Create employee at APPLIED state via Frappe
@@ -657,6 +727,7 @@ Success Rate:   100%
 **Blocked Until**: Phase 3 complete (business logic working)
 
 ### Update Unit Tests
+
 - [ ] Copy `src/lib/__tests__/orangehrm-provisioning.test.ts` → `frappe-provisioning.test.ts`
 - [ ] Update mocks to use Frappe client
 - [ ] Update field assertions (OrangeHRM → Frappe field names)
@@ -671,6 +742,7 @@ Success Rate:   100%
 - [ ] Verify 6 tests passing
 
 ### Create Integration Tests
+
 - [ ] Create `scripts/test-frappe-connection.ts` (test basic connectivity)
 - [ ] Create `scripts/test-frappe-auth.ts` (test authentication)
 - [ ] Create `scripts/test-frappe-employee-create.ts` (test employee creation)
@@ -685,23 +757,27 @@ Success Rate:   100%
   - Test 7: Cleanup (terminate/delete)
 
 ### Create Verification Scripts
+
 - [ ] Create `scripts/verify-frappe-capabilities.ts`
 - [ ] Create `scripts/discover-frappe-endpoints.ts`
 - [ ] Create `scripts/inspect-frappe-employee.ts`
 - [ ] Create `scripts/verify-complete-frappe-flow.ts`
 
 ### Run Full Test Suite
+
 - [ ] Run all unit tests: `npm test`
 - [ ] Verify all tests passing (or only expected failures)
 - [ ] Run integration tests with live Frappe HR
 - [ ] Verify 6/7 or 7/7 scenarios passing (contact depends on Frappe support)
 
 ### Update package.json Scripts
+
 - [ ] Add `"frappe:test": "bun run scripts/test-frappe-connection.ts"`
 - [ ] Add `"frappe:auth": "bun run scripts/test-frappe-auth.ts"`
 - [ ] Add `"frappe:integration": "bun run scripts/test-frappe-phase3-integration.ts"`
 
 ### Phase 4 Completion Gate
+
 - [ ] All unit tests passing
 - [ ] All integration tests passing (with clear EXPECTED_UNSUPPORTED for unsupported features)
 - [ ] Test coverage equivalent to OrangeHRM tests
@@ -715,6 +791,7 @@ Success Rate:   100%
 **Status**: ✅ ALL TESTS PASSING (6/6 validation + 114/114 main suite - 100%)
 
 ### Phase 5 Validation Completed
+
 - [x] Development flag enabled during test (FRAPPE_EMPLOYEE_SYNC_ENABLED=true)
 - [x] Real APPLIED flow creates Frappe employee (HR-EMP-00012)
 - [x] Frappe employee reference persists in application DB (frappeEmployeeName)
@@ -735,6 +812,7 @@ Success Rate:   100%
 ### Phase 5 Exit Criteria: 17/17 COMPLETE ✅
 
 **Test Results**:
+
 - Test 1: APPLIED → Create Frappe Employee: ✅ PASS
 - Test 2: Verify Frappe Employee in Live Instance: ✅ PASS
 - Test 3: Verify Database State: ✅ PASS
@@ -760,6 +838,7 @@ Success Rate:   100%
 **Status**: ✅ ALL VALIDATION CRITERIA SATISFIED
 
 **Phase 6 Validation Completed**:
+
 - [x] Feature flag defaults OFF verified (`.env=false`)
 - [x] Flag behavior tested (env override working)
 - [x] APPLIED workflow verified (Phase 5: HR-EMP-00012 created)
@@ -790,6 +869,7 @@ Success Rate:   100%
 **Status**: ⏳ **PLANNING COMPLETE** - Awaiting Infrastructure & Approval
 
 **Phase 7 Planning Completed**:
+
 - [x] Implementation audit complete (feature flags, APPLIED, HIRED, idempotency, retry, race protection, reconciliation, manual-review, audit logging, OrangeHRM independence)
 - [x] Production prerequisites identified (A-O checklist)
 - [x] Rollout strategy defined (Stages 1-4: internal → limited → gradual → full)
@@ -806,6 +886,7 @@ Success Rate:   100%
 **Implementation**: ✅ **COMPLETE** (Phases 0-6 verified)
 
 **BLOCKERS FOR STAGE 1**:
+
 - [ ] A. Production Frappe infrastructure deployed (URL, site, MariaDB, Redis, SSL)
 - [ ] B. Production API credentials generated (Frappe UI → API Access)
 - [ ] C. Production API permissions verified (Employee create/read/update)
@@ -813,9 +894,11 @@ Success Rate:   100%
 - [ ] G. Production environment variables configured (FRAPPE_BASE_URL, FRAPPE_API_KEY, etc.)
 
 **OPTIONAL (ConfigCat workaround available)**:
+
 - [ ] H. ConfigCat flag registered (required for Stage 3 percentage rollout)
 
 **NO BLOCKERS**:
+
 - [x] E. Reference data (Link fields deferred to Phase 2.1, approved)
 - [x] F. Gender/DOB placeholder policy (approved Phase 2)
 - [x] I. Logging (implemented and verified)
@@ -825,6 +908,7 @@ Success Rate:   100%
 - [x] O. OrangeHRM parallel operation (verified Phase 5/6)
 
 **REQUIRED FOR STAGE 3**:
+
 - [ ] J. Monitoring dashboard (database queries sufficient for Stage 1-2)
 - [ ] K. Alerting configuration (manual monitoring sufficient for Stage 1-2)
 
@@ -833,6 +917,7 @@ Success Rate:   100%
 ### Phase 7 Rollout Strategy
 
 **Stage 1: Internal Validation** (Production Environment, Internal Test Applications)
+
 - **Scope**: 5-10 internal test applications only
 - **Frappe Flag**: ON for internal only (targeted or env var)
 - **OrangeHRM Flag**: ON (parallel)
@@ -840,6 +925,7 @@ Success Rate:   100%
 - **Approval Gate**: User/project owner sign-off before Stage 2
 
 **Stage 2: Limited Production Cohort** (1-5% Real Candidates)
+
 - **Scope**: First 10-20 real candidate applications
 - **Frappe Flag**: ON for 1-5% (ConfigCat percentage or env var)
 - **OrangeHRM Flag**: ON (parallel)
@@ -848,6 +934,7 @@ Success Rate:   100%
 - **Approval Gate**: User/project owner sign-off before Stage 3
 
 **Stage 3: Gradual Expansion** (5% → 10% → 25% → 50% → 100%)
+
 - **Scope**: Incremental percentage increases with validation gates
 - **Frappe Flag**: ConfigCat percentage rollout (requires registration)
 - **OrangeHRM Flag**: ON (parallel)
@@ -856,6 +943,7 @@ Success Rate:   100%
 - **Approval Gate**: User/project owner approval before each percentage increase
 
 **Stage 4: OrangeHRM Deprecation** (Future Phase 8+)
+
 - **Prerequisites**: Frappe at 100% for ≥1 month, zero incidents, user confidence
 - **Scope**: Archive OrangeHRM code, disable OrangeHRM flag, remove Docker containers
 - **NOT IN PHASE 7 SCOPE**
@@ -865,6 +953,7 @@ Success Rate:   100%
 ### Phase 7 Manual Actions Required
 
 **PRIORITY 1 - BLOCKERS (Infrastructure Team)**:
+
 1. [ ] Deploy production Frappe instance (ERPNext 15.118.3+, HRMS 15.63.2+)
    - Platform: TBD (Cloud provider? On-premise?)
    - Network: accessible from production application
@@ -896,24 +985,24 @@ Success Rate:   100%
    - Verify: GET /api/resource/Employee/{known-employee} succeeds
    - Verify: API key has Employee create/read/update permissions
 
-**PRIORITY 2 - OPTIONAL (Recommended for Stage 3)**:
-6. [ ] Register ConfigCat flag `frappe_employee_sync_enabled`
-   - Key: `frappe_employee_sync_enabled`
-   - Type: Boolean
-   - Default: `false`
-   - Environments: dev=false, staging=false, production=false
-   - Description: "Enable Frappe HR employee sync at APPLIED/HIRED states"
+**PRIORITY 2 - OPTIONAL (Recommended for Stage 3)**: 6. [ ] Register ConfigCat flag `frappe_employee_sync_enabled`
+
+- Key: `frappe_employee_sync_enabled`
+- Type: Boolean
+- Default: `false`
+- Environments: dev=false, staging=false, production=false
+- Description: "Enable Frappe HR employee sync at APPLIED/HIRED states"
 
 7. [ ] Train HR admins on manual-review workflow
    - Document: query `needs_manual_review` applications
    - Document: Frappe UI employee review steps
    - Document: manual gender/DOB updates
 
-**PRIORITY 3 - STAGE 3 PREPARATION**:
-8. [ ] Implement monitoring dashboard (Stage 3 requirement)
-   - Grafana/Datadog/custom dashboard
-   - Metrics: success rate, duplicate detection, manual-review queue, API latency
-   - Queries defined in Phase 7 plan
+**PRIORITY 3 - STAGE 3 PREPARATION**: 8. [ ] Implement monitoring dashboard (Stage 3 requirement)
+
+- Grafana/Datadog/custom dashboard
+- Metrics: success rate, duplicate detection, manual-review queue, API latency
+- Queries defined in Phase 7 plan
 
 9. [ ] Configure alerting (Stage 3 requirement)
    - Critical: duplicate employees, success rate < 80%
@@ -925,6 +1014,7 @@ Success Rate:   100%
 ### Phase 7 Approval Gates
 
 **Gate 1: Phase 7 Planning Approval** ⏳ **AWAITING USER DECISION**
+
 - [ ] User reviews `docs/phase7-production-rollout-plan.md` (36K — rollout strategy)
 - [ ] User reviews `docs/phase7-production-readiness-report.md` (26K — implementation audit)
 - [ ] User reviews `PHASE7-PLANNING-SUMMARY.md` (14K — executive summary)
@@ -937,6 +1027,7 @@ Success Rate:   100%
 **Gate 1 Status**: ⏳ AWAITING USER REVIEW (estimated 45-60 minutes)
 
 **What Gate 1 Authorizes**:
+
 - ✅ Infrastructure team can deploy production Frappe
 - ✅ User can generate API credentials
 - ✅ DevOps team can configure production environment
@@ -944,6 +1035,7 @@ Success Rate:   100%
 - ❌ Does NOT modify production application behavior
 
 **Gate 2: Stage 1 Execution Approval** ⏳ **REQUIRED AFTER INFRASTRUCTURE**
+
 - [ ] Production Frappe infrastructure deployed
 - [ ] Production API credentials generated and stored in Doppler
 - [ ] Production environment variables configured
@@ -952,6 +1044,7 @@ Success Rate:   100%
 - [ ] User approves Stage 1 execution (enable Frappe for internal test apps)
 
 **Gate 3: Stage 2 Execution Approval** ⏳ **REQUIRED AFTER STAGE 1**
+
 - [ ] Stage 1 validation complete (5-10 internal test applications)
 - [ ] Stage 1 success criteria met (100% success rate)
 - [ ] No Stage 1 incidents
@@ -959,6 +1052,7 @@ Success Rate:   100%
 - [ ] User approves Stage 2 execution (enable Frappe for 1-5% real candidates)
 
 **Gate 4+: Stage 3 Expansion Approvals** ⏳ **REQUIRED FOR EACH INCREMENT**
+
 - [ ] Previous stage success criteria met
 - [ ] Success rate ≥95%, zero duplicates, manual-review manageable
 - [ ] No production incidents
@@ -970,6 +1064,7 @@ Success Rate:   100%
 ### Phase 7 Safety Verification
 
 ✅ **All Safety Criteria Satisfied**:
+
 - Production flag OFF by default (`.env=false`)
 - Feature flag architecture correct (independent Frappe/OrangeHRM)
 - OrangeHRM unchanged (git diff clean)
@@ -980,11 +1075,13 @@ Success Rate:   100%
 - Approval gates enforced
 
 ⚠️ **Production Infrastructure NOT Deployed**:
+
 - Frappe instance URL unknown (not localhost)
 - API credentials not generated
 - Cannot enable Frappe in production until infrastructure deployed
 
 ❌ **DO NOT ENABLE FRAPPE IN PRODUCTION** without:
+
 1. Gate 1 approval (Phase 7 plan)
 2. Production infrastructure deployed and validated
 3. Gate 2 approval (Stage 1 execution)
@@ -996,6 +1093,7 @@ Success Rate:   100%
 **Rollback Method**: Feature flag OFF (ConfigCat or environment variable)
 
 **Rollback Steps**:
+
 1. Set `FRAPPE_EMPLOYEE_SYNC_ENABLED=false` (or ConfigCat flag OFF)
 2. Verify no new Frappe integration events created (DB query)
 3. Verify OrangeHRM continues (DB query)
@@ -1003,12 +1101,14 @@ Success Rate:   100%
 5. Manual reconciliation for applications in rollback window (if needed)
 
 **Rollback Impact**:
+
 - ✅ No data loss (existing Frappe employees preserved)
 - ✅ Application workflow unaffected
 - ✅ Candidate experience unaffected
 - ⚠️ Manual reconciliation required for rollback window
 
 **Rollback Triggers**:
+
 - **Immediate**: Duplicate employees, success rate < 80%, Frappe API outage, OrangeHRM regression
 - **Planned**: Success rate < 90% sustained, manual-review overwhelming, latency unacceptable
 
@@ -1019,11 +1119,13 @@ Success Rate:   100%
 ### Phase 7 Documentation
 
 **Created**:
+
 - [x] `docs/phase7-production-rollout-plan.md` — Comprehensive rollout strategy
 - [x] `docs/phase7-production-readiness-report.md` — Implementation audit and readiness assessment
 - [x] `todo-frappe.md` — Updated to Phase 7 status (this section)
 
 **Next Documentation** (After Stage 1):
+
 - [ ] `docs/phase7-stage1-validation-report.md` — Stage 1 results
 - [ ] Update `todo-frappe.md` with Stage 1 completion status
 
@@ -1035,6 +1137,7 @@ Success Rate:   100%
 The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retirement is approved.
 
 ### Update Core Documentation (FUTURE PHASE)
+
 - [ ] Update `docs/orangeHRM.md.md` → rename to `docs/frappe-hr.md` (or keep frappe.md)
 - [ ] Archive OrangeHRM documentation → `docs/archive/orangehrm-*.md`
 - [ ] Update `docs/phase1-migration-applied.md` (replace OrangeHRM references)
@@ -1048,23 +1151,27 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Update `todo.md` (root - remove OrangeHRM tasks)
 
 ### Update Environment Documentation
+
 - [ ] Update `.env.example` with Frappe variables
 - [ ] Remove or comment out OrangeHRM variables
 - [ ] Add setup instructions for Frappe HR
 - [ ] Document how to generate Frappe API keys
 
 ### Update Code Comments
+
 - [ ] Search for "OrangeHRM" in comments: `grep -r "OrangeHRM" src/ --include="*.ts" --include="*.tsx"`
 - [ ] Update code comments referencing OrangeHRM
 - [ ] Update docstrings in Frappe integration files
 - [ ] Update TODO comments
 
 ### Update Configuration Files
-- [ ] Update `package.json` scripts (remove/comment orangehrm:* scripts)
+
+- [ ] Update `package.json` scripts (remove/comment orangehrm:\* scripts)
 - [ ] Update `vite.config.ts` proxy (remove /oauth/orangehrm proxy)
 - [ ] Update `.claude/settings.local.json` (if needed)
 
 ### Archive OrangeHRM Code
+
 - [ ] Move `src/integrations/orangehrm/` → `src/integrations/archive/orangehrm/`
 - [ ] Move `src/lib/orangehrm-*.ts` → `src/lib/archive/orangehrm-*.ts`
 - [ ] Move `src/lib/__tests__/orangehrm-*.test.ts` → `src/lib/__tests__/archive/orangehrm-*.test.ts`
@@ -1073,11 +1180,13 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Update imports if any files still reference archived code
 
 ### Remove Feature Flags (Optional - if fully migrated)
+
 - [ ] Remove `orangehrm_employee_sync_enabled` flag (or keep disabled)
 - [ ] Remove `frappe_employee_sync_enabled` flag (or set as default)
 - [ ] Simplify provisioning code to only use Frappe (no switching logic)
 
 ### Create Migration Guide
+
 - [ ] Create `docs/migration-guide-orangehrm-to-frappe.md`
 - [ ] Document what changed
 - [ ] Document breaking changes (if any)
@@ -1086,6 +1195,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Document API differences
 
 ### Phase 5 Completion Gate
+
 - [ ] All documentation updated
 - [ ] No broken references to OrangeHRM in active code
 - [ ] Migration guide complete
@@ -1098,6 +1208,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 **Blocked Until**: Phase 5 complete (docs updated, code clean)
 
 ### Pre-Production Validation
+
 - [ ] Run full unit test suite: `npm test` → expect 102+ tests passing
 - [ ] Run Frappe integration test: `npm run frappe:integration` → expect 6/7 or 7/7 passing
 - [ ] Manual test: APPLIED provisioning with real onboarding data structure
@@ -1108,6 +1219,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Review audit logs for correctness
 
 ### Verify Workflow Preservation
+
 - [ ] Confirm APPLIED provisioning creates employee in Frappe HR
 - [ ] Confirm HIRED enrichment updates name/contact/job details
 - [ ] Confirm idempotency: repeat enrichment with same data → no errors
@@ -1118,6 +1230,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Confirm manual review fallback: error → employee marked for manual review
 
 ### User Acceptance Testing
+
 - [ ] User tests APPLIED provisioning via admin panel
 - [ ] User tests HIRED enrichment via admin panel
 - [ ] User verifies employee data in Frappe HR UI
@@ -1126,12 +1239,14 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] User documents any issues
 
 ### Performance Validation
+
 - [ ] Measure provisioning latency (APPLIED)
 - [ ] Measure enrichment latency (HIRED)
 - [ ] Compare to OrangeHRM baseline (if available)
 - [ ] Identify any performance regressions
 
 ### Final Sign-Off
+
 - [ ] All tests passing
 - [ ] All manual tests successful
 - [ ] User acceptance complete
@@ -1145,18 +1260,21 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 **Blocked Until**: Phase 6 complete and user sign-off received
 
 ### Remove OrangeHRM Infrastructure
+
 - [ ] **STOP OrangeHRM containers**: `docker-compose stop orangehrm orangehrm-db`
-- [ ] **BACKUP OrangeHRM volumes** (just in case): 
+- [ ] **BACKUP OrangeHRM volumes** (just in case):
   - `docker run --rm -v orangehrm-db-data:/data -v $(pwd):/backup ubuntu tar czf /backup/orangehrm-db-backup-$(date +%Y%m%d).tar.gz /data`
   - `docker run --rm -v orangehrm-data:/data -v $(pwd):/backup ubuntu tar czf /backup/orangehrm-data-backup-$(date +%Y%m%d).tar.gz /data`
 - [ ] Remove OrangeHRM service definitions from `docker-compose.yml`
 - [ ] Optionally remove OrangeHRM volumes (after confirming backup): `docker volume rm orangehrm-db-data orangehrm-data`
 
 ### Remove OrangeHRM Environment Variables
+
 - [ ] Remove OrangeHRM variables from `.env` (lines 40-45)
 - [ ] Remove OrangeHRM variables from `.env.example`
 
 ### Remove OrangeHRM Archived Code (Optional)
+
 - [ ] Delete `src/integrations/archive/orangehrm/` (if confident)
 - [ ] Delete `src/lib/archive/orangehrm-*.ts` (if confident)
 - [ ] Delete `src/lib/__tests__/archive/orangehrm-*.test.ts` (if confident)
@@ -1164,11 +1282,13 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] OR: Keep archived for 30 days, then delete
 
 ### Update Monitoring/Observability
+
 - [ ] Update logging to reference Frappe HR
 - [ ] Update error tracking (if Frappe errors have different format)
 - [ ] Update dashboards/metrics (if monitoring HR integration latency)
 
 ### Final Cleanup
+
 - [ ] Run `git status` to review all changes
 - [ ] Commit changes: `git add -A && git commit -m "Complete migration from OrangeHRM to Frappe HR"`
 - [ ] Push to remote (if applicable)
@@ -1178,20 +1298,24 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 ## Rollback Plan
 
 ### If Phase 0-2 Fails (No Code Changed)
+
 1. Stop Frappe containers: `docker-compose -f docker-compose.frappe.yml down`
 2. Continue using OrangeHRM (no changes needed)
 
 ### If Phase 3 Fails (Code Changed, Feature Flag Available)
+
 1. Set feature flag: `frappe_employee_sync_enabled = false`
 2. Set feature flag: `orangehrm_employee_sync_enabled = true`
 3. Application reverts to OrangeHRM
 
 ### If Phase 4-5 Fails (Tests/Docs Updated)
+
 1. Revert git commits: `git revert HEAD~N` (where N = number of commits to revert)
 2. Stop Frappe containers
 3. Continue using OrangeHRM
 
 ### If Phase 6 Fails (Pre-Production Issues)
+
 1. Revert all code changes via git
 2. Stop Frappe containers
 3. Restore OrangeHRM environment variables
@@ -1204,6 +1328,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 ## Success Metrics
 
 ### Technical Success
+
 - [ ] All unit tests passing (102+ tests)
 - [ ] All integration tests passing (6/7 or 7/7 scenarios)
 - [ ] Zero errors in audit logs during validation
@@ -1211,6 +1336,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Enrichment latency ≤ OrangeHRM baseline + 10%
 
 ### Functional Success
+
 - [ ] APPLIED provisioning creates correct employee in Frappe HR
 - [ ] HIRED enrichment updates all supported fields
 - [ ] Idempotency preserved (no duplicate entries)
@@ -1219,6 +1345,7 @@ The tasks below are for a future phase (possibly Phase 8+) when OrangeHRM retire
 - [ ] Audit logging complete and accurate
 
 ### User Success
+
 - [ ] User can provision employees via admin panel
 - [ ] User can see employee data in Frappe HR UI
 - [ ] User confirms expected behavior

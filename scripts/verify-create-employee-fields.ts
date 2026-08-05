@@ -185,7 +185,6 @@ async function main() {
     }
 
     console.log("\n✅ Verification complete\n");
-
   } catch (error: any) {
     console.error("\n❌ Verification failed:", error.message);
 

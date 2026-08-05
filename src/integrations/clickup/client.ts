@@ -12,11 +12,7 @@ export class ClickUpClient {
     this.workspaceId = workspaceId;
   }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `https://api.clickup.com/api/v2${path}`;
 
     const response = await fetch(url, {

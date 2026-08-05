@@ -110,7 +110,9 @@ function ClerkAuthProvider({ children }: { children: ReactNode }) {
         // Clerk React SDK not available — render loading shell
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!impls) {

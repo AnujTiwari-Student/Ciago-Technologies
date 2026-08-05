@@ -37,11 +37,7 @@ async function shouldScopeToDepartment(userId: string): Promise<string | null> {
   const roleSet = new Set(roles.map((r) => r.role));
 
   // Admin and system roles see everything
-  if (
-    roleSet.has("admin") ||
-    roleSet.has("system_engineer") ||
-    roleSet.has("developer")
-  ) {
+  if (roleSet.has("admin") || roleSet.has("system_engineer") || roleSet.has("developer")) {
     return null;
   }
 

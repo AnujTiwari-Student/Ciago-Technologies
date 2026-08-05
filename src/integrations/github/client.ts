@@ -12,11 +12,7 @@ export class GitHubClient {
     this.org = org;
   }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `https://api.github.com${path}`;
 
     const response = await fetch(url, {

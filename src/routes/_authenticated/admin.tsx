@@ -107,7 +107,19 @@ export const Route = createFileRoute("/_authenticated/admin")({
   validateSearch: zodValidator(
     z.object({
       tab: fallback(
-        z.enum(["applications", "postings", "users", "documents", "audit", "by-role", "profile", "frappe", "employee-directory"]).optional(),
+        z
+          .enum([
+            "applications",
+            "postings",
+            "users",
+            "documents",
+            "audit",
+            "by-role",
+            "profile",
+            "frappe",
+            "employee-directory",
+          ])
+          .optional(),
         undefined,
       ),
     }),
@@ -164,7 +176,15 @@ const AUDIT_STYLE: Record<string, string> = {
 const inr = new Intl.NumberFormat("en-IN");
 
 const TAB_META: Record<
-  "applications" | "postings" | "users" | "audit" | "by-role" | "documents" | "profile" | "frappe" | "employee-directory",
+  | "applications"
+  | "postings"
+  | "users"
+  | "audit"
+  | "by-role"
+  | "documents"
+  | "profile"
+  | "frappe"
+  | "employee-directory",
   { title: string; desc: string; icon: any }
 > = {
   applications: {
@@ -1758,16 +1778,24 @@ function DocumentVerificationPanel() {
     queryFn: () => fetchQueue(),
   });
 
-  const [filter, setFilter] = useState<"all" | "submitted" | "approved" | "rejected" | "changes_requested">("submitted");
+  const [filter, setFilter] = useState<
+    "all" | "submitted" | "approved" | "rejected" | "changes_requested"
+  >("submitted");
   const [selectedRecord, setSelectedRecord] = useState<OnboardingQueueRow | null>(null);
 
   const filtered = useMemo(() => {
     if (!data) return [];
     if (filter === "all") return data;
-    if (filter === "submitted") return data.filter((r) => r.status === "submitted" && (r.verification_status === "pending" || r.verification_status === "not_submitted"));
+    if (filter === "submitted")
+      return data.filter(
+        (r) =>
+          r.status === "submitted" &&
+          (r.verification_status === "pending" || r.verification_status === "not_submitted"),
+      );
     if (filter === "approved") return data.filter((r) => r.verification_status === "approved");
     if (filter === "rejected") return data.filter((r) => r.verification_status === "rejected");
-    if (filter === "changes_requested") return data.filter((r) => r.verification_status === "changes_requested");
+    if (filter === "changes_requested")
+      return data.filter((r) => r.verification_status === "changes_requested");
     return data;
   }, [data, filter]);
 
@@ -1811,7 +1839,16 @@ function DocumentVerificationPanel() {
             size="sm"
             onClick={() => setFilter("submitted")}
           >
-            Pending ({data.filter((r) => r.status === "submitted" && (r.verification_status === "pending" || r.verification_status === "not_submitted")).length})
+            Pending (
+            {
+              data.filter(
+                (r) =>
+                  r.status === "submitted" &&
+                  (r.verification_status === "pending" ||
+                    r.verification_status === "not_submitted"),
+              ).length
+            }
+            )
           </Button>
           <Button
             variant={filter === "approved" ? "default" : "outline"}
@@ -1827,7 +1864,8 @@ function DocumentVerificationPanel() {
             onClick={() => setFilter("changes_requested")}
             className="border-amber-600/50 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
           >
-            Changes Requested ({data.filter((r) => r.verification_status === "changes_requested").length})
+            Changes Requested (
+            {data.filter((r) => r.verification_status === "changes_requested").length})
           </Button>
           <Button
             variant={filter === "rejected" ? "default" : "outline"}
@@ -1878,13 +1916,18 @@ function DocumentVerificationPanel() {
                       </span>
                     )}
                     {row.submitted_at && (
-                      <span>
-                        Submitted {new Date(row.submitted_at).toLocaleDateString()}
-                      </span>
+                      <span>Submitted {new Date(row.submitted_at).toLocaleDateString()}</span>
                     )}
                   </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setSelectedRecord(row); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRecord(row);
+                  }}
+                >
                   View Documents
                 </Button>
               </div>
@@ -1894,10 +1937,7 @@ function DocumentVerificationPanel() {
       </div>
 
       {selectedRecord && (
-        <DocumentDetailDialog
-          record={selectedRecord}
-          onClose={() => setSelectedRecord(null)}
-        />
+        <DocumentDetailDialog record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       )}
     </div>
   );
@@ -1926,8 +1966,11 @@ function DocumentDetailDialog({
   const [overallFeedback, setOverallFeedback] = useState("");
 
   const reviewMutation = useMutation({
-    mutationFn: (vars: { document_id: string; status: "approved" | "changes_requested" | "rejected"; feedback?: string }) =>
-      reviewDoc({ data: vars }),
+    mutationFn: (vars: {
+      document_id: string;
+      status: "approved" | "changes_requested" | "rejected";
+      feedback?: string;
+    }) => reviewDoc({ data: vars }),
     onSuccess: () => {
       toast.success("Document reviewed");
       qc.invalidateQueries({ queryKey: ["onboarding-detail", record.onboarding_id] });
@@ -1939,8 +1982,11 @@ function DocumentDetailDialog({
   });
 
   const statusMutation = useMutation({
-    mutationFn: (vars: { onboarding_id: string; verification_status: "pending" | "approved" | "changes_requested" | "rejected"; rejection_feedback?: string }) =>
-      updateStatus({ data: vars }),
+    mutationFn: (vars: {
+      onboarding_id: string;
+      verification_status: "pending" | "approved" | "changes_requested" | "rejected";
+      rejection_feedback?: string;
+    }) => updateStatus({ data: vars }),
     onSuccess: () => {
       toast.success("Overall status updated");
       qc.invalidateQueries({ queryKey: ["onboarding-detail", record.onboarding_id] });
@@ -1976,15 +2022,16 @@ function DocumentDetailDialog({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Verification:</span>
-                <Badge variant="outline"
+                <Badge
+                  variant="outline"
                   className={
                     data.onboarding.verification_status === "approved"
                       ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
                       : data.onboarding.verification_status === "rejected"
-                      ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
-                      : data.onboarding.verification_status === "changes_requested"
-                      ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
-                      : ""
+                        ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
+                        : data.onboarding.verification_status === "changes_requested"
+                          ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                          : ""
                   }
                 >
                   {data.onboarding.verification_status}
@@ -2019,7 +2066,9 @@ function DocumentDetailDialog({
                 </div>
                 {(overallStatus === "rejected" || overallStatus === "changes_requested") && (
                   <div className="space-y-2">
-                    <Label htmlFor="overall-feedback">Feedback {overallStatus === "rejected" && "(Required)"}</Label>
+                    <Label htmlFor="overall-feedback">
+                      Feedback {overallStatus === "rejected" && "(Required)"}
+                    </Label>
                     <Textarea
                       id="overall-feedback"
                       value={overallFeedback}
@@ -2032,7 +2081,11 @@ function DocumentDetailDialog({
                 <Button
                   size="sm"
                   className="w-full"
-                  disabled={!overallStatus || statusMutation.isPending || (overallStatus === "rejected" && !overallFeedback.trim())}
+                  disabled={
+                    !overallStatus ||
+                    statusMutation.isPending ||
+                    (overallStatus === "rejected" && !overallFeedback.trim())
+                  }
                   onClick={() => {
                     if (overallStatus === "rejected" && !overallFeedback.trim()) {
                       toast.error("Feedback is required for rejection");
@@ -2045,7 +2098,9 @@ function DocumentDetailDialog({
                     });
                   }}
                 >
-                  {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {statusMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Update Overall Status
                 </Button>
               </div>
@@ -2056,14 +2111,16 @@ function DocumentDetailDialog({
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold">Documents ({data.documents.length})</h3>
-                {data.documents.some(d => d.is_reupload) && (
+                {data.documents.some((d) => d.is_reupload) && (
                   <Badge variant="outline" className="bg-sky-500/15 text-sky-600 border-sky-500/30">
-                    🔄 {data.documents.filter(d => d.is_reupload).length} document(s) re-uploaded
+                    🔄 {data.documents.filter((d) => d.is_reupload).length} document(s) re-uploaded
                   </Badge>
                 )}
               </div>
               {data.documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No documents uploaded yet</p>
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No documents uploaded yet
+                </p>
               ) : (
                 <div className="space-y-3">
                   {data.documents.map((doc) => (
@@ -2088,13 +2145,18 @@ function DocumentDetailDialog({
                                   {doc.status}
                                 </Badge>
                                 {doc.is_reupload && (
-                                  <Badge variant="outline" className="bg-sky-500/15 text-sky-600 border-sky-500/30">
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-sky-500/15 text-sky-600 border-sky-500/30"
+                                  >
                                     🔄 Re-uploaded (v{doc.version})
                                   </Badge>
                                 )}
                               </div>
                               {doc.original_filename && (
-                                <p className="text-xs text-muted-foreground mt-1">{doc.original_filename}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {doc.original_filename}
+                                </p>
                               )}
                               {doc.is_reupload && doc.feedback && (
                                 <p className="text-xs text-sky-700 dark:text-sky-400 mt-2 font-medium">
@@ -2138,10 +2200,19 @@ function DocumentDetailDialog({
                                   size="sm"
                                   variant="default"
                                   className="bg-emerald-600 hover:bg-emerald-700"
-                                  onClick={() => reviewMutation.mutate({ document_id: doc.id, status: "approved" })}
+                                  onClick={() =>
+                                    reviewMutation.mutate({
+                                      document_id: doc.id,
+                                      status: "approved",
+                                    })
+                                  }
                                   disabled={reviewMutation.isPending}
                                 >
-                                  {reviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                                  {reviewMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    "Approve"
+                                  )}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -2152,7 +2223,11 @@ function DocumentDetailDialog({
                                       toast.error("Feedback is required for requesting changes");
                                       return;
                                     }
-                                    reviewMutation.mutate({ document_id: doc.id, status: "changes_requested", feedback: feedback.trim() });
+                                    reviewMutation.mutate({
+                                      document_id: doc.id,
+                                      status: "changes_requested",
+                                      feedback: feedback.trim(),
+                                    });
                                   }}
                                   disabled={reviewMutation.isPending}
                                 >
@@ -2167,7 +2242,11 @@ function DocumentDetailDialog({
                                       toast.error("Feedback is required for rejection");
                                       return;
                                     }
-                                    reviewMutation.mutate({ document_id: doc.id, status: "rejected", feedback: feedback.trim() });
+                                    reviewMutation.mutate({
+                                      document_id: doc.id,
+                                      status: "rejected",
+                                      feedback: feedback.trim(),
+                                    });
                                   }}
                                   disabled={reviewMutation.isPending}
                                 >
@@ -2176,7 +2255,10 @@ function DocumentDetailDialog({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => { setReviewingDoc(null); setFeedback(""); }}
+                                  onClick={() => {
+                                    setReviewingDoc(null);
+                                    setFeedback("");
+                                  }}
                                   disabled={reviewMutation.isPending}
                                 >
                                   Cancel
@@ -2288,7 +2370,10 @@ function FrappeDashboardPanel() {
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
               <span className="text-sm font-medium text-muted-foreground">OrangeHRM</span>
-              <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
+              <Badge
+                variant="outline"
+                className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+              >
                 {data.orangehrmOperational ? "OPERATIONAL" : "OFFLINE"}
               </Badge>
             </div>
@@ -2479,7 +2564,10 @@ function FrappeDashboardPanel() {
                       className="flex items-center justify-between text-sm"
                     >
                       <span className="text-muted-foreground">{dept.department}</span>
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                      >
                         {dept.count}
                       </Badge>
                     </div>
@@ -2517,7 +2605,10 @@ function FrappeDashboardPanel() {
                             </p>
                           )}
                         </div>
-                        <Badge variant="outline" className="bg-rose-500/15 text-rose-600 border-rose-500/30">
+                        <Badge
+                          variant="outline"
+                          className="bg-rose-500/15 text-rose-600 border-rose-500/30"
+                        >
                           {item.provisioningState}
                         </Badge>
                       </div>
@@ -2544,11 +2635,12 @@ function FrappeDashboardPanel() {
                           <p className="text-sm font-medium">{item.fullName}</p>
                           <p className="text-xs text-muted-foreground">{item.email}</p>
                           <p className="text-xs text-muted-foreground">Status: {item.status}</p>
-                          {item.reason && (
-                            <p className="text-xs text-purple-600">{item.reason}</p>
-                          )}
+                          {item.reason && <p className="text-xs text-purple-600">{item.reason}</p>}
                         </div>
-                        <Badge variant="outline" className="bg-purple-500/15 text-purple-600 border-purple-500/30">
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-500/15 text-purple-600 border-purple-500/30"
+                        >
                           {item.provisioningState}
                         </Badge>
                       </div>
@@ -2589,9 +2681,7 @@ function FrappeDashboardPanel() {
                   >
                     <div className="font-medium">{emp.fullName}</div>
                     <div className="text-sm text-muted-foreground">{emp.email}</div>
-                    <div className="font-mono text-xs">
-                      {emp.frappeEmployeeName || "—"}
-                    </div>
+                    <div className="font-mono text-xs">{emp.frappeEmployeeName || "—"}</div>
                     <div>
                       <Badge
                         variant="outline"
@@ -2785,12 +2875,8 @@ function EmployeeDirectoryPanel() {
                     <div className="text-sm">
                       <Badge variant="outline">{emp.department || "Unassigned"}</Badge>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {emp.designation || "—"}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {emp.teamName || "—"}
-                    </div>
+                    <div className="text-sm text-muted-foreground">{emp.designation || "—"}</div>
+                    <div className="text-sm text-muted-foreground">{emp.teamName || "—"}</div>
                     <div className="text-sm text-muted-foreground">
                       {emp.doj
                         ? new Date(emp.doj).toLocaleDateString("en-US", {

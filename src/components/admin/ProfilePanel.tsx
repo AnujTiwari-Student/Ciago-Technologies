@@ -57,7 +57,7 @@ export function ProfilePanel() {
                     "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-all",
                     section === s.id
                       ? "bg-brand text-white shadow-md"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
@@ -106,7 +106,11 @@ function PublicProfileSection() {
   const saveMutation = useMutation({
     mutationFn: () =>
       upsertMutation({
-        data: { full_name: fullName.trim() || null, bio: bio.trim() || null, avatar_path: avatar.trim() || null },
+        data: {
+          full_name: fullName.trim() || null,
+          bio: bio.trim() || null,
+          avatar_path: avatar.trim() || null,
+        },
       }),
     onSuccess: () => {
       toast.success("Profile updated");
@@ -319,7 +323,7 @@ function AppearanceSection() {
                 "flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-all",
                 theme === "light"
                   ? "border-brand bg-brand/5"
-                  : "border-border hover:border-brand/50"
+                  : "border-border hover:border-brand/50",
               )}
             >
               <Sun className="h-6 w-6" />
@@ -333,7 +337,7 @@ function AppearanceSection() {
                 "flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-all",
                 theme === "dark"
                   ? "border-brand bg-brand/5"
-                  : "border-border hover:border-brand/50"
+                  : "border-border hover:border-brand/50",
               )}
             >
               <Moon className="h-6 w-6" />

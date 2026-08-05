@@ -33,9 +33,9 @@
 
 ## Phase 2 — Portal/Copy/Nav Removal
 
-- [x] [Phase 2] Delete src/routes/_authenticated/employee.tsx → new-architecture.md §2.1
-- [x] [Phase 2] Delete src/routes/_authenticated/hr.tsx → new-architecture.md §2.1
-- [x] [Phase 2] Delete src/routes/_authenticated/manager.tsx → new-architecture.md §2.1
+- [x] [Phase 2] Delete src/routes/\_authenticated/employee.tsx → new-architecture.md §2.1
+- [x] [Phase 2] Delete src/routes/\_authenticated/hr.tsx → new-architecture.md §2.1
+- [x] [Phase 2] Delete src/routes/\_authenticated/manager.tsx → new-architecture.md §2.1
 - [x] [Phase 2] Delete src/components/hr/HrTasksPanel.tsx → new-architecture.md §2.1
 - [x] [Phase 2] Move needed HR functions (reviewOnboardingDocument, setOnboardingDoj) to shared module → new-architecture.md §2.2 (kept in hr.functions.ts — no consumer outside deleted hr.tsx; will wire to admin in Phase 7)
 - [ ] [Phase 2] Delete src/lib/hr.functions.ts → new-architecture.md §2.2 (deferred: functions still needed for Phase 7 admin onboarding review)

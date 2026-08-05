@@ -108,9 +108,7 @@ export const withdrawMyApplication = createServerFn({ method: "POST" })
     if (row.status !== "applied")
       throw new Error("Only applications in the Applied stage can be withdrawn");
 
-    await context.db.withRLS((tx) =>
-      tx.jobApplication.delete({ where: { id: data.id } }),
-    );
+    await context.db.withRLS((tx) => tx.jobApplication.delete({ where: { id: data.id } }));
 
     if (row.resumeStoragePath) {
       const { getStorage } = await import("@/lib/storage");

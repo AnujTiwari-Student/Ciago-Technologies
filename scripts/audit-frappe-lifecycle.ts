@@ -63,30 +63,29 @@ async function auditFrappeRoles(client: FrappeClient): Promise<void> {
     console.log(`Found ${roles.length} enabled roles in Frappe:\n`);
 
     // Categorize roles
-    const hrmsRoles = roles.filter(r =>
-      r.name.toLowerCase().includes("employee") ||
-      r.name.toLowerCase().includes("hr") ||
-      r.name.toLowerCase().includes("manager")
+    const hrmsRoles = roles.filter(
+      (r) =>
+        r.name.toLowerCase().includes("employee") ||
+        r.name.toLowerCase().includes("hr") ||
+        r.name.toLowerCase().includes("manager"),
     );
 
-    const systemRoles = roles.filter(r =>
-      r.name.toLowerCase().includes("system") ||
-      r.name.toLowerCase().includes("admin") ||
-      r.name === "Administrator"
+    const systemRoles = roles.filter(
+      (r) =>
+        r.name.toLowerCase().includes("system") ||
+        r.name.toLowerCase().includes("admin") ||
+        r.name === "Administrator",
     );
 
-    const otherRoles = roles.filter(r =>
-      !hrmsRoles.includes(r) && !systemRoles.includes(r)
-    );
+    const otherRoles = roles.filter((r) => !hrmsRoles.includes(r) && !systemRoles.includes(r));
 
     console.log("HRMS/Employee Roles:");
-    hrmsRoles.forEach(r => console.log(`  - ${r.name} (desk: ${r.desk_access})`));
+    hrmsRoles.forEach((r) => console.log(`  - ${r.name} (desk: ${r.desk_access})`));
 
     console.log("\nSystem/Admin Roles:");
-    systemRoles.forEach(r => console.log(`  - ${r.name} (desk: ${r.desk_access})`));
+    systemRoles.forEach((r) => console.log(`  - ${r.name} (desk: ${r.desk_access})`));
 
     console.log(`\nOther Roles: ${otherRoles.length} (use --verbose to list)`);
-
   } catch (error) {
     console.error("Failed to fetch Frappe roles:", error);
   }
@@ -100,8 +99,18 @@ async function auditFrappeUsers(client: FrappeClient): Promise<void> {
       method: "GET",
       url: "/api/resource/User",
       params: {
-        fields: JSON.stringify(["name", "email", "enabled", "first_name", "last_name", "user_type"]),
-        filters: JSON.stringify([["enabled", "=", 1], ["user_type", "!=", "Website User"]]),
+        fields: JSON.stringify([
+          "name",
+          "email",
+          "enabled",
+          "first_name",
+          "last_name",
+          "user_type",
+        ]),
+        filters: JSON.stringify([
+          ["enabled", "=", 1],
+          ["user_type", "!=", "Website User"],
+        ]),
         limit_page_length: 20,
       },
     });
@@ -116,7 +125,6 @@ async function auditFrappeUsers(client: FrappeClient): Promise<void> {
       console.log(`  Enabled: ${user.enabled === 1 ? "Yes" : "No"}`);
       console.log();
     }
-
   } catch (error) {
     console.error("Failed to fetch Frappe users:", error);
   }
@@ -130,7 +138,15 @@ async function auditFrappeEmployees(client: FrappeClient): Promise<void> {
       method: "GET",
       url: "/api/resource/Employee",
       params: {
-        fields: JSON.stringify(["name", "employee_name", "company_email", "personal_email", "status", "user_id", "date_of_joining"]),
+        fields: JSON.stringify([
+          "name",
+          "employee_name",
+          "company_email",
+          "personal_email",
+          "status",
+          "user_id",
+          "date_of_joining",
+        ]),
         limit_page_length: 10,
       },
     });
@@ -149,13 +165,12 @@ async function auditFrappeEmployees(client: FrappeClient): Promise<void> {
     }
 
     // Check for employees WITHOUT user_id
-    const unlinkedEmployees = employees.filter(e => !e.user_id);
+    const unlinkedEmployees = employees.filter((e) => !e.user_id);
     console.log(`\n⚠️  ${unlinkedEmployees.length} employees have NO linked Frappe User`);
     if (unlinkedEmployees.length > 0) {
       console.log("Unlinked employees:");
-      unlinkedEmployees.forEach(e => console.log(`  - ${e.name} (${e.employee_name})`));
+      unlinkedEmployees.forEach((e) => console.log(`  - ${e.name} (${e.employee_name})`));
     }
-
   } catch (error) {
     console.error("Failed to fetch Frappe employees:", error);
   }
@@ -247,7 +262,6 @@ async function auditUserCreationCapability(client: FrappeClient): Promise<void> 
         console.log(`    ... and ${adminUser.roles.length - 5} more`);
       }
     }
-
   } catch (error) {
     console.error("Failed to fetch Administrator user:", error);
   }

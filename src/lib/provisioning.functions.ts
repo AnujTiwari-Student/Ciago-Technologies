@@ -145,8 +145,7 @@ export const provisionServiceAccounts = createServerFn({ method: "POST" })
 
     // Update mapping status
     const allSuccess = results.github.success && results.teams.success && results.clickup.success;
-    const anySuccess =
-      results.github.success || results.teams.success || results.clickup.success;
+    const anySuccess = results.github.success || results.teams.success || results.clickup.success;
 
     await adminDb.serviceAccountMapping.update({
       where: { id: mapping.id },

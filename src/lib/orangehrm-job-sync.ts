@@ -55,11 +55,12 @@ function buildJobDescription(posting: JobPostingData): string {
   sections.push(`• Location: ${posting.location}${posting.isRemote ? " (Remote)" : ""}`);
 
   if (posting.salaryMinInr || posting.salaryMaxInr) {
-    const salaryRange = posting.salaryMinInr && posting.salaryMaxInr
-      ? `₹${posting.salaryMinInr.toLocaleString("en-IN")} - ₹${posting.salaryMaxInr.toLocaleString("en-IN")}`
-      : posting.salaryMinInr
-        ? `Starting from ₹${posting.salaryMinInr.toLocaleString("en-IN")}`
-        : `Up to ₹${posting.salaryMaxInr?.toLocaleString("en-IN")}`;
+    const salaryRange =
+      posting.salaryMinInr && posting.salaryMaxInr
+        ? `₹${posting.salaryMinInr.toLocaleString("en-IN")} - ₹${posting.salaryMaxInr.toLocaleString("en-IN")}`
+        : posting.salaryMinInr
+          ? `Starting from ₹${posting.salaryMinInr.toLocaleString("en-IN")}`
+          : `Up to ₹${posting.salaryMaxInr?.toLocaleString("en-IN")}`;
     sections.push(`• Salary Range: ${salaryRange}`);
   }
 
@@ -80,7 +81,10 @@ function buildJobDescription(posting: JobPostingData): string {
 /**
  * Determine if job should be published based on status
  */
-function shouldPublishJob(status: string, internalOnly: boolean): {
+function shouldPublishJob(
+  status: string,
+  internalOnly: boolean,
+): {
   isPublished: boolean;
   status: boolean;
 } {
@@ -119,7 +123,7 @@ function shouldPublishJob(status: string, internalOnly: boolean): {
  */
 export async function syncJobPostingToOrangeHRM(
   client: OrangeHRMClient,
-  posting: JobPostingData
+  posting: JobPostingData,
 ): Promise<{
   vacancyId: number;
   action: "created" | "updated" | "skipped";
@@ -141,7 +145,7 @@ export async function syncJobPostingToOrangeHRM(
   // Step 4: Check if vacancy already exists (by job title and name)
   const existingVacancies = await client.getJobVacancies();
   const existingVacancy = existingVacancies.find(
-    (v) => v.jobTitleId === jobTitleId && v.name === posting.title
+    (v) => v.jobTitleId === jobTitleId && v.name === posting.title,
   );
 
   const payload = {
@@ -173,7 +177,7 @@ export async function syncAllJobPostingsToOrangeHRM(
   options: {
     includeArchived?: boolean;
     includeDraft?: boolean;
-  } = {}
+  } = {},
 ): Promise<{
   created: number;
   updated: number;

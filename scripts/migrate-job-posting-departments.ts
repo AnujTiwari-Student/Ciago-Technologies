@@ -36,10 +36,10 @@ async function main() {
       const deptId = deptByName.get(posting.department.toLowerCase());
 
       if (deptId) {
-        await client.query(
-          `UPDATE job_postings SET department_id = $1 WHERE id = $2`,
-          [deptId, posting.id]
-        );
+        await client.query(`UPDATE job_postings SET department_id = $1 WHERE id = $2`, [
+          deptId,
+          posting.id,
+        ]);
         console.log(`✓ ${posting.title} → ${posting.department}`);
         updated++;
       } else {

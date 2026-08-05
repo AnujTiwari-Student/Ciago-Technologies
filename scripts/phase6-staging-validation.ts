@@ -53,7 +53,14 @@ const results: TestResult[] = [];
 
 function logTest(result: TestResult) {
   results.push(result);
-  const icon = result.status === "PASS" ? "✅" : result.status === "FAIL" ? "❌" : result.status === "SKIP" ? "⏭️" : "🚫";
+  const icon =
+    result.status === "PASS"
+      ? "✅"
+      : result.status === "FAIL"
+        ? "❌"
+        : result.status === "SKIP"
+          ? "⏭️"
+          : "🚫";
   console.log(`${icon} [${result.test}] ${result.status}: ${result.message}`);
   if (result.evidence) {
     console.log("   Evidence:", JSON.stringify(result.evidence, null, 2));
@@ -142,7 +149,7 @@ async function testB_APPLIEDWorkflow() {
     });
 
     // Wait for integration event processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Verify Frappe employee created
     const appWithFrappe = await db.jobApplication.findUnique({
@@ -234,7 +241,7 @@ async function testC_HIREDWorkflow() {
     });
 
     // Wait for APPLIED processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const afterApplied = await db.jobApplication.findUnique({
       where: { id: testApp.id },
@@ -278,7 +285,7 @@ async function testC_HIREDWorkflow() {
     });
 
     // Wait for HIRED processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const afterHired = await db.jobApplication.findUnique({
       where: { id: testApp.id },
@@ -346,7 +353,7 @@ async function testD_Idempotency() {
       },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const first = await db.jobApplication.findUnique({
       where: { id: testApp.id },
@@ -369,7 +376,7 @@ async function testD_Idempotency() {
       data: { status: "applied" },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const second = await db.jobApplication.findUnique({
       where: { id: testApp.id },
@@ -539,13 +546,13 @@ async function main() {
 
   console.log("\n=== Validation Summary ===");
   console.log(`Total Tests: ${results.length}`);
-  console.log(`PASS: ${results.filter(r => r.status === "PASS").length}`);
-  console.log(`FAIL: ${results.filter(r => r.status === "FAIL").length}`);
-  console.log(`SKIP: ${results.filter(r => r.status === "SKIP").length}`);
-  console.log(`BLOCKED: ${results.filter(r => r.status === "BLOCKED").length}`);
+  console.log(`PASS: ${results.filter((r) => r.status === "PASS").length}`);
+  console.log(`FAIL: ${results.filter((r) => r.status === "FAIL").length}`);
+  console.log(`SKIP: ${results.filter((r) => r.status === "SKIP").length}`);
+  console.log(`BLOCKED: ${results.filter((r) => r.status === "BLOCKED").length}`);
   console.log(`Duration: ${(totalDuration / 1000).toFixed(2)}s\n`);
 
-  const allPassed = results.every(r => r.status === "PASS");
+  const allPassed = results.every((r) => r.status === "PASS");
   if (allPassed) {
     console.log("✅ Phase 6 Validation: COMPLETE");
   } else {
@@ -554,7 +561,7 @@ async function main() {
   }
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error("❌ Phase 6 Validation Error:", error);
   process.exit(1);
 });

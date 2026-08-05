@@ -18,8 +18,8 @@ describe("computeDocRequirements", () => {
     expect(keys).toContain("ug_degree");
 
     // HR-configured docs should be mandatory
-    expect(out.find(r => r.key === "aadhaar")?.mandatory).toBe(true);
-    expect(out.find(r => r.key === "pan")?.mandatory).toBe(true);
+    expect(out.find((r) => r.key === "aadhaar")?.mandatory).toBe(true);
+    expect(out.find((r) => r.key === "pan")?.mandatory).toBe(true);
   });
 
   it("internship: adds mandatory all-semester marksheet and optional UG degree", () => {

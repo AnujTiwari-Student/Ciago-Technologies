@@ -25,11 +25,7 @@ dotenv.config();
 import { getAdminDb } from "@/lib/db/admin";
 import { getOrangeHRMClient } from "@/integrations/orangehrm/client";
 import { provisionOrangeHRMEmployee } from "@/lib/orangehrm-provisioning";
-import {
-  createIntegrationEvent,
-  claimEvent,
-  markEventSucceeded,
-} from "@/lib/integration-events";
+import { createIntegrationEvent, claimEvent, markEventSucceeded } from "@/lib/integration-events";
 
 const db = getAdminDb();
 const disposableEmployeeIds: number[] = [];
@@ -92,7 +88,7 @@ async function main() {
 
   if (result2.empNumber !== result1.empNumber) {
     throw new Error(
-      `Test 2 FAILED: Employee ID changed! ${result1.empNumber} → ${result2.empNumber}`
+      `Test 2 FAILED: Employee ID changed! ${result1.empNumber} → ${result2.empNumber}`,
     );
   }
 

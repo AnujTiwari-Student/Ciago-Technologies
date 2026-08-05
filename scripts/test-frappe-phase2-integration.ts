@@ -21,7 +21,10 @@
 
 import "dotenv/config";
 import { createFrappeClient } from "../src/integrations/frappe/client";
-import type { CreateEmployeePayload, UpdateEmployeePayload } from "../src/integrations/frappe/types";
+import type {
+  CreateEmployeePayload,
+  UpdateEmployeePayload,
+} from "../src/integrations/frappe/types";
 
 // Test configuration
 const TEST_CONFIG = {
@@ -31,7 +34,7 @@ const TEST_CONFIG = {
   testMiddleName: "Phase2",
   testGender: "Other" as const,
   testDOB: "1990-01-01",
-  testJoiningDate: new Date().toISOString().split('T')[0],
+  testJoiningDate: new Date().toISOString().split("T")[0],
   testMobile: "+1234567890",
   testAddress: "123 Test Street, Test City, Test Province",
 };
@@ -46,12 +49,25 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
-function logTest(name: string, status: TestResult["status"], message: string, error?: string, data?: any) {
+function logTest(
+  name: string,
+  status: TestResult["status"],
+  message: string,
+  error?: string,
+  data?: any,
+) {
   const result: TestResult = { name, status, message, error, data };
   results.push(result);
 
   const icon = status === "PASS" ? "✓" : status === "FAIL" ? "✗" : status === "SKIP" ? "○" : "⚠";
-  const color = status === "PASS" ? "\x1b[32m" : status === "FAIL" ? "\x1b[31m" : status === "SKIP" ? "\x1b[33m" : "\x1b[35m";
+  const color =
+    status === "PASS"
+      ? "\x1b[32m"
+      : status === "FAIL"
+        ? "\x1b[31m"
+        : status === "SKIP"
+          ? "\x1b[33m"
+          : "\x1b[35m";
   const reset = "\x1b[0m";
 
   console.log(`${color}${icon} ${name}${reset}`);
@@ -66,10 +82,10 @@ function logTest(name: string, status: TestResult["status"], message: string, er
 }
 
 function printSummary() {
-  const passed = results.filter(r => r.status === "PASS").length;
-  const failed = results.filter(r => r.status === "FAIL").length;
-  const skipped = results.filter(r => r.status === "SKIP").length;
-  const expectedFail = results.filter(r => r.status === "EXPECTED_FAIL").length;
+  const passed = results.filter((r) => r.status === "PASS").length;
+  const failed = results.filter((r) => r.status === "FAIL").length;
+  const skipped = results.filter((r) => r.status === "SKIP").length;
+  const expectedFail = results.filter((r) => r.status === "EXPECTED_FAIL").length;
   const total = results.length;
 
   console.log("\n" + "=".repeat(60));
@@ -103,14 +119,14 @@ async function main() {
         "PASS",
         `Successfully authenticated as: ${user}`,
         undefined,
-        { user }
+        { user },
       );
     } catch (error) {
       logTest(
         "Test 1: Authentication",
         "FAIL",
         "Failed to authenticate with Frappe API",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
       return; // Cannot proceed without auth
     }
@@ -142,14 +158,14 @@ async function main() {
           name: employee.name,
           employee_name: employee.employee_name,
           status: employee.status,
-        }
+        },
       );
     } catch (error) {
       logTest(
         "Test 2: Create Employee",
         "FAIL",
         "Failed to create employee",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
       return; // Cannot proceed without employee
     }
@@ -163,7 +179,7 @@ async function main() {
         logTest(
           "Test 3: Retrieve Employee",
           "FAIL",
-          `Employee ${testEmployeeName} not found after creation`
+          `Employee ${testEmployeeName} not found after creation`,
         );
       } else {
         logTest(
@@ -176,7 +192,7 @@ async function main() {
             employee_name: employee.employee_name,
             personal_email: employee.personal_email,
             status: employee.status,
-          }
+          },
         );
       }
     } catch (error) {
@@ -184,7 +200,7 @@ async function main() {
         "Test 3: Retrieve Employee",
         "FAIL",
         "Failed to retrieve employee",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -209,14 +225,14 @@ async function main() {
           cell_number: updated.cell_number,
           current_address: updated.current_address,
           date_of_joining: updated.date_of_joining,
-        }
+        },
       );
     } catch (error) {
       logTest(
         "Test 4: Update Employee",
         "FAIL",
         "Failed to update employee",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -238,14 +254,14 @@ async function main() {
         {
           name: updated.name,
           message: "No errors on duplicate update - idempotent",
-        }
+        },
       );
     } catch (error) {
       logTest(
         "Test 5: Idempotency",
         "FAIL",
         "Failed idempotency test",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -258,7 +274,7 @@ async function main() {
         logTest(
           "Test 6: Reconciliation",
           "FAIL",
-          `No employees found with email: ${TEST_CONFIG.testEmail}`
+          `No employees found with email: ${TEST_CONFIG.testEmail}`,
         );
       } else if (found.length > 1) {
         logTest(
@@ -266,7 +282,7 @@ async function main() {
           "FAIL",
           `Multiple employees found with email: ${TEST_CONFIG.testEmail}`,
           "Duplicate detection required",
-          { count: found.length, names: found.map(e => e.name) }
+          { count: found.length, names: found.map((e) => e.name) },
         );
       } else {
         const reconciled = found[0];
@@ -279,14 +295,14 @@ async function main() {
             {
               name: reconciled.name,
               email: TEST_CONFIG.testEmail,
-            }
+            },
           );
         } else {
           logTest(
             "Test 6: Reconciliation",
             "FAIL",
             `Reconciled employee name mismatch`,
-            `Expected: ${testEmployeeName}, Got: ${reconciled.name}`
+            `Expected: ${testEmployeeName}, Got: ${reconciled.name}`,
           );
         }
       }
@@ -295,7 +311,7 @@ async function main() {
         "Test 6: Reconciliation",
         "FAIL",
         "Failed reconciliation test",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -311,7 +327,7 @@ async function main() {
       logTest(
         "Test 7: Required Fields",
         "FAIL",
-        "Should have failed without required fields but succeeded"
+        "Should have failed without required fields but succeeded",
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -321,18 +337,12 @@ async function main() {
           "PASS",
           "Correctly rejected creation without required fields",
           undefined,
-          { expectedError: "MandatoryError" }
+          { expectedError: "MandatoryError" },
         );
       } else {
-        logTest(
-          "Test 7: Required Fields",
-          "FAIL",
-          "Failed with unexpected error",
-          message
-        );
+        logTest("Test 7: Required Fields", "FAIL", "Failed with unexpected error", message);
       }
     }
-
   } catch (error) {
     console.error("Unexpected test failure:", error);
   } finally {
@@ -340,20 +350,20 @@ async function main() {
     if (testEmployeeName) {
       console.log("Cleanup: Marking test employee as Left");
       try {
-        await client!.terminateEmployee(testEmployeeName, new Date().toISOString().split('T')[0]);
+        await client!.terminateEmployee(testEmployeeName, new Date().toISOString().split("T")[0]);
         logTest(
           "Cleanup",
           "PASS",
           `Successfully marked test employee as Left: ${testEmployeeName}`,
           undefined,
-          { action: "terminated", employeeName: testEmployeeName }
+          { action: "terminated", employeeName: testEmployeeName },
         );
       } catch (error) {
         logTest(
           "Cleanup",
           "FAIL",
           "Failed to cleanup test employee",
-          error instanceof Error ? error.message : String(error)
+          error instanceof Error ? error.message : String(error),
         );
       }
     }

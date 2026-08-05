@@ -27,9 +27,9 @@ async function main() {
   const db = getAdminDb();
   const client = createFrappeClient();
 
-  console.log("=" .repeat(60));
+  console.log("=".repeat(60));
   console.log("E2E: Complete Frappe Login Flow");
-  console.log("=" .repeat(60));
+  console.log("=".repeat(60));
   console.log(`Email: ${TEST_EMAIL}`);
   console.log("");
 
@@ -40,8 +40,13 @@ async function main() {
   let failed = 0;
 
   function check(label: string, condition: boolean, detail: string) {
-    if (condition) { console.log(`  ✅ ${label}: ${detail}`); passed++; }
-    else { console.log(`  ❌ ${label}: ${detail}`); failed++; }
+    if (condition) {
+      console.log(`  ✅ ${label}: ${detail}`);
+      passed++;
+    } else {
+      console.log(`  ❌ ${label}: ${detail}`);
+      failed++;
+    }
   }
 
   try {
@@ -65,10 +70,21 @@ async function main() {
     console.log("\n--- 1. APPLIED ---");
     await db.jobApplication.update({ where: { id: appId }, data: { status: "applied" } });
     const { handleFrappeApplicationApplied } = await import("../src/lib/frappe-applied-handler");
-    const appliedResult = await handleFrappeApplicationApplied({ db, client, applicationId: appId });
-    check("APPLIED triggered", appliedResult.triggered === true, `action=${appliedResult.provisioningResult?.action}`);
+    const appliedResult = await handleFrappeApplicationApplied({
+      db,
+      client,
+      applicationId: appId,
+    });
+    check(
+      "APPLIED triggered",
+      appliedResult.triggered === true,
+      `action=${appliedResult.provisioningResult?.action}`,
+    );
 
-    const appAfter = await db.jobApplication.findUnique({ where: { id: appId }, select: { frappeEmployeeName: true } });
+    const appAfter = await db.jobApplication.findUnique({
+      where: { id: appId },
+      select: { frappeEmployeeName: true },
+    });
     empName = appAfter?.frappeEmployeeName || null;
     check("Employee created", !!empName, empName || "NONE");
 
@@ -76,13 +92,29 @@ async function main() {
     console.log("\n--- 2. HIRED ---");
     await db.jobApplication.update({ where: { id: appId }, data: { status: "hired" } });
 
-    const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } = await import("../src/lib/frappe-hired-handler");
+    const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } =
+      await import("../src/lib/frappe-hired-handler");
     const onboardingData = extractFrappeOnboardingData({
-      application: { id: appId, userId, fullName: TEST_NAME, email: TEST_EMAIL, roleTitle: "Engineer", status: "hired" },
-      onboardingRecord: null, employee: null, jobPosting: null,
+      application: {
+        id: appId,
+        userId,
+        fullName: TEST_NAME,
+        email: TEST_EMAIL,
+        roleTitle: "Engineer",
+        status: "hired",
+      },
+      onboardingRecord: null,
+      employee: null,
+      jobPosting: null,
     });
 
-    const hiredResult = await upsertFrappeEmployeeAtHired(appId, userId, onboardingData, db, client);
+    const hiredResult = await upsertFrappeEmployeeAtHired(
+      appId,
+      userId,
+      onboardingData,
+      db,
+      client,
+    );
     check("HIRED enrichment", hiredResult.success, `action=${hiredResult.action}`);
 
     // === VERIFY USER ===
@@ -105,7 +137,7 @@ async function main() {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `token ${process.env.FRAPPE_API_KEY}:${process.env.FRAPPE_API_SECRET}`,
+        Authorization: `token ${process.env.FRAPPE_API_KEY}:${process.env.FRAPPE_API_SECRET}`,
       },
       body: JSON.stringify({ new_password: TEST_PASSWORD }),
     });
@@ -119,7 +151,11 @@ async function main() {
       body: JSON.stringify({ usr: TEST_EMAIL, pwd: TEST_PASSWORD }),
     });
     const loginData: any = await loginRes.json();
-    check("Login successful", loginRes.ok && loginData.message !== undefined, `full_name=${loginData.full_name}`);
+    check(
+      "Login successful",
+      loginRes.ok && loginData.message !== undefined,
+      `full_name=${loginData.full_name}`,
+    );
 
     // Extract session cookie
     const cookies = loginRes.headers.getSetCookie?.() || [];
@@ -156,39 +192,65 @@ async function main() {
       });
       // Employee should not be able to list all users
       const userListData: any = await userListRes.json();
-      const limitedAccess = !userListRes.ok || (userListData.data?.length <= 1);
-      check("Limited User list access", limitedAccess || userListRes.status === 403,
-        `status=${userListRes.status} count=${userListData.data?.length}`);
+      const limitedAccess = !userListRes.ok || userListData.data?.length <= 1;
+      check(
+        "Limited User list access",
+        limitedAccess || userListRes.status === 403,
+        `status=${userListRes.status} count=${userListData.data?.length}`,
+      );
     } else {
       check("Session cookie", false, "No sid cookie received");
     }
 
     // === IDEMPOTENCY ===
     console.log("\n--- 7. Idempotency ---");
-    const hiredResult2 = await upsertFrappeEmployeeAtHired(appId, userId, onboardingData, db, client);
-    check("Repeat HIRED safe", hiredResult2.success && hiredResult2.action === "already_complete",
-      `action=${hiredResult2.action}`);
-
+    const hiredResult2 = await upsertFrappeEmployeeAtHired(
+      appId,
+      userId,
+      onboardingData,
+      db,
+      client,
+    );
+    check(
+      "Repeat HIRED safe",
+      hiredResult2.success && hiredResult2.action === "already_complete",
+      `action=${hiredResult2.action}`,
+    );
   } catch (error) {
     console.error("\nFATAL:", error instanceof Error ? error.message : error);
     failed++;
   } finally {
     // Cleanup
     console.log("\n--- Cleanup ---");
-    try { await client.disableUser(TEST_EMAIL); } catch {}
+    try {
+      await client.disableUser(TEST_EMAIL);
+    } catch {}
     try {
       await fetch(`${FRAPPE_URL}/api/resource/User/${encodeURIComponent(TEST_EMAIL)}`, {
         method: "DELETE",
-        headers: { "Authorization": `token ${process.env.FRAPPE_API_KEY}:${process.env.FRAPPE_API_SECRET}` },
+        headers: {
+          Authorization: `token ${process.env.FRAPPE_API_KEY}:${process.env.FRAPPE_API_SECRET}`,
+        },
       });
     } catch {}
-    if (empName) try { await client.terminateEmployee(empName, new Date().toISOString().split("T")[0]); } catch {}
+    if (empName)
+      try {
+        await client.terminateEmployee(empName, new Date().toISOString().split("T")[0]);
+      } catch {}
     if (appId) {
-      try { await db.integrationEvent.deleteMany({ where: { entityId: appId } }); } catch {}
-      try { await db.auditLog.deleteMany({ where: { targetResource: `job_applications/${appId}` } }); } catch {}
-      try { await db.jobApplication.delete({ where: { id: appId } }); } catch {}
+      try {
+        await db.integrationEvent.deleteMany({ where: { entityId: appId } });
+      } catch {}
+      try {
+        await db.auditLog.deleteMany({ where: { targetResource: `job_applications/${appId}` } });
+      } catch {}
+      try {
+        await db.jobApplication.delete({ where: { id: appId } });
+      } catch {}
     }
-    try { await db.userRole.deleteMany({ where: { userId } }); } catch {}
+    try {
+      await db.userRole.deleteMany({ where: { userId } });
+    } catch {}
     console.log("  Done.");
 
     console.log(`\n${"=".repeat(60)}`);

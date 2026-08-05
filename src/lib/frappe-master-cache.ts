@@ -25,8 +25,8 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
   const now = Date.now();
 
   // Return cached data if still valid
-  if (masterDataCache && (now - masterDataCache.timestamp) < CACHE_TTL_MS) {
-    console.log('[frappe-master-cache] Using cached master data');
+  if (masterDataCache && now - masterDataCache.timestamp < CACHE_TTL_MS) {
+    console.log("[frappe-master-cache] Using cached master data");
     return {
       designations: masterDataCache.designations,
       departments: masterDataCache.departments,
@@ -34,7 +34,7 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
     };
   }
 
-  console.log('[frappe-master-cache] Fetching fresh master data from Frappe');
+  console.log("[frappe-master-cache] Fetching fresh master data from Frappe");
 
   try {
     // Fetch all three master data types in parallel
@@ -44,11 +44,11 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
       client.listEmploymentTypes(0),
     ]);
 
-    const designations = designationsResp.map(d => d.name);
-    const departments = departmentsResp.map(d => d.name);
-    const employmentTypes = employmentTypesResp.map(e => e.name);
+    const designations = designationsResp.map((d) => d.name);
+    const departments = departmentsResp.map((d) => d.name);
+    const employmentTypes = employmentTypesResp.map((e) => e.name);
 
-    console.log('[frappe-master-cache] Fetched:', {
+    console.log("[frappe-master-cache] Fetched:", {
       designations: designations.length,
       departments: departments.length,
       employmentTypes: employmentTypes.length,
@@ -64,11 +64,11 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
 
     return { designations, departments, employmentTypes };
   } catch (error) {
-    console.error('[frappe-master-cache] Failed to fetch master data:', error);
+    console.error("[frappe-master-cache] Failed to fetch master data:", error);
 
     // If we have stale cache, use it as fallback
     if (masterDataCache) {
-      console.warn('[frappe-master-cache] Using stale cache as fallback');
+      console.warn("[frappe-master-cache] Using stale cache as fallback");
       return {
         designations: masterDataCache.designations,
         departments: masterDataCache.departments,
@@ -76,7 +76,7 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
       };
     }
 
-    throw new Error('Failed to fetch Frappe master data and no cache available');
+    throw new Error("Failed to fetch Frappe master data and no cache available");
   }
 }
 
@@ -85,5 +85,5 @@ export async function getFrappeMasterData(client: FrappeClient): Promise<{
  */
 export function clearMasterDataCache(): void {
   masterDataCache = null;
-  console.log('[frappe-master-cache] Cache cleared');
+  console.log("[frappe-master-cache] Cache cleared");
 }

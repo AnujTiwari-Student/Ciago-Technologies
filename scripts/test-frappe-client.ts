@@ -78,7 +78,6 @@ async function main() {
     }
 
     console.log("\n✅ All tests passed!");
-
   } catch (error) {
     console.error("\n❌ Test failed:");
     if (error instanceof FrappeError) {

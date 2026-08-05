@@ -86,18 +86,23 @@ export function toCapabilities(flags: Partial<Record<FeatureKey, boolean>>): Cap
     new_architecture_enabled:
       flags.new_architecture_enabled ?? getCapabilityDefault(FEATURE_FLAGS.newArchitecture),
     ess_auto_provisioning_enabled:
-      flags.ess_auto_provisioning_enabled ?? getCapabilityDefault(FEATURE_FLAGS.essAutoProvisioning),
+      flags.ess_auto_provisioning_enabled ??
+      getCapabilityDefault(FEATURE_FLAGS.essAutoProvisioning),
     orangehrm_salary_sync_enabled:
-      flags.orangehrm_salary_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.orangehrmSalarySync),
+      flags.orangehrm_salary_sync_enabled ??
+      getCapabilityDefault(FEATURE_FLAGS.orangehrmSalarySync),
     orangehrm_employee_sync_enabled:
-      flags.orangehrm_employee_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.orangehrmEmployeeSync),
+      flags.orangehrm_employee_sync_enabled ??
+      getCapabilityDefault(FEATURE_FLAGS.orangehrmEmployeeSync),
     frappe_employee_sync_enabled:
       flags.frappe_employee_sync_enabled ?? getCapabilityDefault(FEATURE_FLAGS.frappeEmployeeSync),
     resend_email_sending_enabled:
       flags.resend_email_sending_enabled ?? getCapabilityDefault(FEATURE_FLAGS.resendEmailSending),
     auto_offboarding_trigger_enabled:
-      flags.auto_offboarding_trigger_enabled ?? getCapabilityDefault(FEATURE_FLAGS.autoOffboardingTrigger),
+      flags.auto_offboarding_trigger_enabled ??
+      getCapabilityDefault(FEATURE_FLAGS.autoOffboardingTrigger),
     manual_background_verification_only:
-      flags.manual_background_verification_only ?? getCapabilityDefault(FEATURE_FLAGS.manualBackgroundVerificationOnly),
+      flags.manual_background_verification_only ??
+      getCapabilityDefault(FEATURE_FLAGS.manualBackgroundVerificationOnly),
   };
 }

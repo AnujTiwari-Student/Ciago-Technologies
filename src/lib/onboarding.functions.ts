@@ -148,7 +148,15 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
     const adminDb = getAdminDb();
     const posting = await adminDb.jobPosting.findUnique({
       where: { id: app.roleId },
-      select: { jobCode: true, department: true, requiredOnboardingDocs: true, employmentType: true, trackType: true, salaryMinInr: true, salaryMaxInr: true },
+      select: {
+        jobCode: true,
+        department: true,
+        requiredOnboardingDocs: true,
+        employmentType: true,
+        trackType: true,
+        salaryMinInr: true,
+        salaryMaxInr: true,
+      },
     });
 
     const rec = await adminDb.onboardingRecord.findUnique({
@@ -216,9 +224,10 @@ export const acceptOffer = createServerFn({ method: "POST" })
 
     // Use midpoint of salary range, or min if max not set
     // BigInt arithmetic: cannot use Math.round with BigInt
-    const compensationInr = posting?.salaryMaxInr && posting?.salaryMinInr
-      ? (posting.salaryMinInr + posting.salaryMaxInr) / BigInt(2)
-      : posting?.salaryMinInr ?? null;
+    const compensationInr =
+      posting?.salaryMaxInr && posting?.salaryMinInr
+        ? (posting.salaryMinInr + posting.salaryMaxInr) / BigInt(2)
+        : (posting?.salaryMinInr ?? null);
 
     const rec = await adminDb.onboardingRecord.upsert({
       where: { applicationId: app.id },
@@ -445,7 +454,14 @@ export const submitOnboarding = createServerFn({ method: "POST" })
     const rec = await context.db.withRLS((tx) =>
       tx.onboardingRecord.findFirst({
         where: { id: data.onboarding_id, userId: context.userId },
-        select: { id: true, applicationId: true, emergencyContact: true, idAck: true, codeOfConductAck: true, status: true },
+        select: {
+          id: true,
+          applicationId: true,
+          emergencyContact: true,
+          idAck: true,
+          codeOfConductAck: true,
+          status: true,
+        },
       }),
     );
     if (!rec) throw new Error("Not found");

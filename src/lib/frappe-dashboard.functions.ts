@@ -104,7 +104,8 @@ export const getFrappeDashboardStats = createServerFn({ method: "GET" })
     // Connection Health
     const frappeBaseUrl = process.env.FRAPPE_BASE_URL || null;
     const siteName = process.env.FRAPPE_SITE_NAME || null;
-    let connectionStatus: "connected" | "disconnected" | "error" | "sync_disabled" = "sync_disabled";
+    let connectionStatus: "connected" | "disconnected" | "error" | "sync_disabled" =
+      "sync_disabled";
     let frappeVersion: string | null = null;
 
     if (syncEnabled && frappeBaseUrl) {
@@ -199,29 +200,24 @@ export const getFrappeDashboardStats = createServerFn({ method: "GET" })
     });
 
     // Integration Events Statistics
-    const [
-      totalEvents,
-      pendingEvents,
-      processingEvents,
-      succeededEvents,
-      failedEvents,
-    ] = await Promise.all([
-      adminDb.integrationEvent.count({
-        where: { eventType: { contains: "frappe" } },
-      }),
-      adminDb.integrationEvent.count({
-        where: { eventType: { contains: "frappe" }, status: "pending" },
-      }),
-      adminDb.integrationEvent.count({
-        where: { eventType: { contains: "frappe" }, status: "processing" },
-      }),
-      adminDb.integrationEvent.count({
-        where: { eventType: { contains: "frappe" }, status: "succeeded" },
-      }),
-      adminDb.integrationEvent.count({
-        where: { eventType: { contains: "frappe" }, status: "failed" },
-      }),
-    ]);
+    const [totalEvents, pendingEvents, processingEvents, succeededEvents, failedEvents] =
+      await Promise.all([
+        adminDb.integrationEvent.count({
+          where: { eventType: { contains: "frappe" } },
+        }),
+        adminDb.integrationEvent.count({
+          where: { eventType: { contains: "frappe" }, status: "pending" },
+        }),
+        adminDb.integrationEvent.count({
+          where: { eventType: { contains: "frappe" }, status: "processing" },
+        }),
+        adminDb.integrationEvent.count({
+          where: { eventType: { contains: "frappe" }, status: "succeeded" },
+        }),
+        adminDb.integrationEvent.count({
+          where: { eventType: { contains: "frappe" }, status: "failed" },
+        }),
+      ]);
 
     // Department Insights (global access for system roles)
     const applicationsWithDept = await adminDb.jobApplication.findMany({
@@ -390,7 +386,10 @@ export const getFrappeDashboardStats = createServerFn({ method: "GET" })
         applicationId: a.id,
         status: a.status,
         provisioningState: a.frappeProvisioningState,
-        reason: a.frappeProvisioningState === "needs_manual_review" ? "Requires manual verification" : "Pending provisioning",
+        reason:
+          a.frappeProvisioningState === "needs_manual_review"
+            ? "Requires manual verification"
+            : "Pending provisioning",
       })),
     };
   });

@@ -27,11 +27,11 @@ export interface FrappeProvisioningResult {
   success: boolean;
   employeeName: string | null; // HR-EMP-XXXXX format
   action:
-    | "created"             // New employee created in Frappe
+    | "created" // New employee created in Frappe
     | "already_provisioned" // Already had valid frappe_employee_name
-    | "reconciled"          // Found existing Frappe employee and persisted name
-    | "failed"              // Provisioning failed
-    | "manual_review";      // Multiple candidates found, needs manual intervention
+    | "reconciled" // Found existing Frappe employee and persisted name
+    | "failed" // Provisioning failed
+    | "manual_review"; // Multiple candidates found, needs manual intervention
   message: string;
   error?: string;
 }
@@ -40,21 +40,21 @@ export interface FrappeProvisioningResult {
  * Error classification for intelligent retry logic
  */
 export type FrappeProvisioningErrorType =
-  | "auth_failed"           // Authentication issues (401) - retryable after token refresh
-  | "validation_error"      // Invalid payload (400) - not retryable
-  | "mandatory_error"       // Missing required field - not retryable without data
+  | "auth_failed" // Authentication issues (401) - retryable after token refresh
+  | "validation_error" // Invalid payload (400) - not retryable
+  | "mandatory_error" // Missing required field - not retryable without data
   | "link_validation_error" // Invalid Link field reference - not retryable
-  | "network_error"         // Connection/timeout - retryable
-  | "server_error"          // Frappe 500 error - retryable
+  | "network_error" // Connection/timeout - retryable
+  | "server_error" // Frappe 500 error - retryable
   | "reconciliation_conflict" // Multiple matching employees - needs manual review
-  | "unknown";              // Unknown error - log and investigate
+  | "unknown"; // Unknown error - log and investigate
 
 export class FrappeProvisioningError extends Error {
   constructor(
     public type: FrappeProvisioningErrorType,
     message: string,
     public statusCode?: number,
-    public originalError?: unknown
+    public originalError?: unknown,
   ) {
     super(message);
     this.name = "FrappeProvisioningError";
@@ -119,11 +119,7 @@ export function classifyFrappeError(error: unknown): FrappeProvisioningError {
  * Determine if error is retryable
  */
 export function isFrappeRetryable(error: FrappeProvisioningError): boolean {
-  return [
-    "auth_failed",
-    "network_error",
-    "server_error"
-  ].includes(error.type);
+  return ["auth_failed", "network_error", "server_error"].includes(error.type);
 }
 
 /**
@@ -149,10 +145,7 @@ interface RequiredFieldDefaults {
   reason?: string;
 }
 
-function getRequiredFieldDefaults(
-  applicationId: string,
-  email: string
-): RequiredFieldDefaults {
+function getRequiredFieldDefaults(applicationId: string, email: string): RequiredFieldDefaults {
   // Use "Other" as neutral gender default
   const gender = "Other";
 
@@ -163,7 +156,7 @@ function getRequiredFieldDefaults(
     gender,
     date_of_birth,
     needsManualReview: true,
-    reason: "Gender and date_of_birth not collected during onboarding - placeholder values used"
+    reason: "Gender and date_of_birth not collected during onboarding - placeholder values used",
   };
 }
 
@@ -216,7 +209,7 @@ export async function provisionFrappeEmployee(
   applicationId: string,
   db: PrismaClient,
   client: FrappeClient,
-  correlationId?: string
+  correlationId?: string,
 ): Promise<FrappeProvisioningResult> {
   const logPrefix = `[frappe-provision:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting Frappe HR employee provisioning`, { correlationId });
@@ -250,10 +243,7 @@ export async function provisionFrappeEmployee(
     });
 
     // Step 2: Idempotency check - already provisioned?
-    if (
-      application.frappeEmployeeName &&
-      application.frappeProvisioningState === "succeeded"
-    ) {
+    if (application.frappeEmployeeName && application.frappeProvisioningState === "succeeded") {
       console.log(`${logPrefix} Already provisioned`, {
         employeeName: application.frappeEmployeeName,
       });
@@ -342,7 +332,7 @@ export async function provisionFrappeEmployee(
       processingFor > 60_000 // Processing for more than 1 minute - likely a crash
     ) {
       console.error(
-        `${logPrefix} CRASH RECOVERY: Application stuck in 'processing' state without employee name for ${Math.round(processingFor / 1000)}s`
+        `${logPrefix} CRASH RECOVERY: Application stuck in 'processing' state without employee name for ${Math.round(processingFor / 1000)}s`,
       );
 
       // Mark as needs_manual_review - admin must check Frappe and reconcile
@@ -362,18 +352,20 @@ export async function provisionFrappeEmployee(
           action: "FRAPPE_CRASH_RECOVERY_MANUAL_REVIEW_REQUIRED",
           targetResource: `job_applications/${applicationId}`,
           details: {
-            reason: "Application stuck in processing state without employee name - Frappe create may have succeeded",
+            reason:
+              "Application stuck in processing state without employee name - Frappe create may have succeeded",
             email: application.email,
             fullName: application.fullName,
             processingForSeconds: Math.round(processingFor / 1000),
-            instruction: "Check Frappe for employee with email, then manually set frappeEmployeeName",
+            instruction:
+              "Check Frappe for employee with email, then manually set frappeEmployeeName",
             correlationId,
           },
         },
       });
 
       console.error(
-        `${logPrefix} Marked for manual review - Frappe may have employee with email: ${application.email}`
+        `${logPrefix} Marked for manual review - Frappe may have employee with email: ${application.email}`,
       );
 
       return {
@@ -444,7 +436,7 @@ export async function provisionFrappeEmployee(
       last_name: lastName,
       gender: requiredDefaults.gender,
       date_of_birth: requiredDefaults.date_of_birth,
-      date_of_joining: new Date().toISOString().split('T')[0], // Today's date as temporary joining date
+      date_of_joining: new Date().toISOString().split("T")[0], // Today's date as temporary joining date
       company: companyName,
       personal_email: application.email,
       company_email: application.email,
@@ -465,7 +457,9 @@ export async function provisionFrappeEmployee(
       },
       data: {
         frappeEmployeeName: employee.name,
-        frappeProvisioningState: requiredDefaults.needsManualReview ? "needs_manual_review" : "succeeded",
+        frappeProvisioningState: requiredDefaults.needsManualReview
+          ? "needs_manual_review"
+          : "succeeded",
         frappeProvisioningSucceededAt: new Date(),
         frappeRecordStatus: "ACTIVE",
         lifecycleVersion: { increment: 1 },
@@ -475,7 +469,7 @@ export async function provisionFrappeEmployee(
     if (persistUpdate.count === 0) {
       // Race condition: Another worker created and persisted employee
       console.warn(
-        `${logPrefix} Failed to persist employee name (race condition), attempting reconciliation`
+        `${logPrefix} Failed to persist employee name (race condition), attempting reconciliation`,
       );
 
       // Check current state
@@ -485,7 +479,9 @@ export async function provisionFrappeEmployee(
       });
 
       if (current?.frappeEmployeeName) {
-        console.log(`${logPrefix} Another worker persisted employee name ${current.frappeEmployeeName}`);
+        console.log(
+          `${logPrefix} Another worker persisted employee name ${current.frappeEmployeeName}`,
+        );
 
         // We created employee.name but another worker persisted their name
         // This is a duplicate employee scenario - log for cleanup

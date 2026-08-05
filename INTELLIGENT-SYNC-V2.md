@@ -9,13 +9,16 @@ Replaced hardcoded keyword-matching with a hybrid approach that fetches real Fra
 ## 🎯 **Key Features**
 
 ### **1. Audit Trail Custom Fields**
+
 Added to Frappe Job Opening doctype:
+
 - `external_designation_raw` - Original job title as typed by recruiter
-- `external_department_raw` - Original department as typed by recruiter  
+- `external_department_raw` - Original department as typed by recruiter
 - `external_employment_type_raw` - Original employment type as entered
 - `mapping_confidence` - How the mapping was determined (exact_match/fuzzy_match/auto_created/held_for_review)
 
 ### **2. Live Frappe Master Data**
+
 - Fetches real Designation, Department, and Employment Type records from Frappe
 - 5-minute cache TTL to avoid hammering the API
 - **No more hardcoded mappings that drift out of sync!**
@@ -23,18 +26,21 @@ Added to Frappe Job Opening doctype:
 ### **3. Intelligent Matching Priority**
 
 #### **For Designation & Department:**
+
 1. **Exact Match** (case-insensitive) → `confidence: exact_match`
 2. **Fuzzy Match** (≥75% similarity via string-similarity library) → `confidence: fuzzy_match`
 3. **Auto-Create** (if `AUTO_CREATE_RECORDS ≠ false`) → `confidence: auto_created`
 4. **Hold for Review** (if `AUTO_CREATE_RECORDS = false`) → `confidence: held_for_review` + alert
 
 #### **For Employment Type (Closed Set):**
+
 - **ONLY Exact Match** (case-insensitive)
 - **NO fuzzy matching**
 - **NO auto-create**
 - **Sync fails with clear error listing valid options**
 
 ### **4. Never Silently Mislabels**
+
 - No more "Site Reliability Engineer" → guessed as "Engineer"
 - No more "apprenticeship" → wrongly formatted as "Apprenticeship" instead of "Apprentice"
 - Every mapping decision is logged with confidence level
@@ -55,12 +61,14 @@ Added to Frappe Job Opening doctype:
 ## 🔧 **Configuration**
 
 ### **Environment Variable**
+
 ```
 AUTO_CREATE_RECORDS=true   # Default: auto-create missing designations/departments
 AUTO_CREATE_RECORDS=false  # Hold for review, send alert to HR admin
 ```
 
 ### **Master Data Cache**
+
 - TTL: 5 minutes
 - Cleared automatically on stale data
 - Can be manually cleared via `clearMasterDataCache()`
@@ -87,6 +95,7 @@ Valid options: Full-time, Part-time, Contract, Internship, Apprentice
 Run: `node test-intelligent-matching.mjs`
 
 Tests these scenarios:
+
 1. **Site Reliability Engineer / DevOps** - Tests fuzzy matching and auto-create
 2. **Linux Administrator / Infrastructure** - Tests novel designation
 3. **Forward Deployed Engineer / Engineering** - Tests exact department match
@@ -110,16 +119,19 @@ Tests these scenarios:
 ## 📁 **Files Changed**
 
 ### **New Files:**
+
 - `src/lib/frappe-master-cache.ts` - Fetch & cache Frappe master data
 - `src/lib/frappe-field-matcher.ts` - Intelligent matching logic
 - `src/lib/frappe-job-sync-v2.ts` - New sync implementation
 - `test-intelligent-matching.mjs` - Comprehensive test suite
 
 ### **Modified Files:**
+
 - `src/lib/jobPostings.functions.ts` - Use V2 sync
 - `src/integrations/frappe/client.ts` - Added master data API methods
 
 ### **Deprecated Files:**
+
 - `src/lib/frappe-job-sync.ts` - Old hardcoded sync (kept for reference)
 
 ---

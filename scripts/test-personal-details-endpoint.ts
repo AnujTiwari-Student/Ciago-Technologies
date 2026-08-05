@@ -139,7 +139,6 @@ async function main() {
     console.log("\nConclusion:");
     console.log("  - Name enrichment: CAN be implemented via /personal-details");
     console.log("  - Contact enrichment: No available API endpoint in OrangeHRM Community v5.7\n");
-
   } catch (error: any) {
     console.error("\n❌ Test failed:", error.message);
 

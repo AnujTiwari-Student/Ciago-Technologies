@@ -11,6 +11,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "deploy": "bun run build && wrangler deploy --env production",
+    "deploy:staging": "bun run build && wrangler deploy --env staging",
+    "deploy:dev": "bun run build && wrangler deploy --env development",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -111,6 +114,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^3.90.0"
   }
 }

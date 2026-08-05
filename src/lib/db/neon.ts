@@ -54,8 +54,8 @@ export function createUserDb(databaseUrl: string, userId: string): UserPrismaCli
     // Increase max listeners to prevent warnings since multiple Prisma clients share this pool
     pool.setMaxListeners(100);
     // Also set max listeners on the error emitter to prevent warnings
-    pool.on('error', () => {});
-    pool.removeAllListeners('error');
+    pool.on("error", () => {});
+    pool.removeAllListeners("error");
     pool.setMaxListeners(100);
     globalThis.__neonUserPool = pool;
   }
@@ -96,8 +96,8 @@ export function createAdminDb(databaseUrl: string): PrismaClient {
     // Increase max listeners to prevent warnings since multiple Prisma clients share this pool
     pool.setMaxListeners(100);
     // Also set max listeners on the error emitter to prevent warnings
-    pool.on('error', () => {});
-    pool.removeAllListeners('error');
+    pool.on("error", () => {});
+    pool.removeAllListeners("error");
     pool.setMaxListeners(100);
     globalThis.__neonAdminPool = pool;
   }

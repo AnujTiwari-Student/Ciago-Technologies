@@ -46,10 +46,7 @@ export function canAccessDashboard(roles: AppRole[]): boolean {
   return roles.some((r) => DASHBOARD_ROLES.has(r));
 }
 
-export function canAccessSurface(
-  roles: AppRole[],
-  surface: DashboardSurface,
-): boolean {
+export function canAccessSurface(roles: AppRole[], surface: DashboardSurface): boolean {
   const allowed = SURFACE_ROLES[surface];
   if (!allowed) return false;
   return roles.some((r) => allowed.has(r));

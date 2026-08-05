@@ -3,6 +3,7 @@
 ## Issue: "Internal Server Error" on Frappe (localhost:8180)
 
 ### Root Cause
+
 The custom app `ciago_spark` was installed but not properly registered with the Python environment, causing a `ModuleNotFoundError`.
 
 ---
@@ -107,6 +108,7 @@ docker compose -f docker-compose.frappe.yml restart frappe-backend
 ## Verification Checklist
 
 ### ✅ Backend Service Running
+
 ```bash
 docker compose -f docker-compose.frappe.yml ps frappe-backend
 
@@ -114,6 +116,7 @@ docker compose -f docker-compose.frappe.yml ps frappe-backend
 ```
 
 ### ✅ No Errors in Logs
+
 ```bash
 docker compose -f docker-compose.frappe.yml logs frappe-backend --tail=50 | grep -i error
 
@@ -121,6 +124,7 @@ docker compose -f docker-compose.frappe.yml logs frappe-backend --tail=50 | grep
 ```
 
 ### ✅ HTTP 200 Response
+
 ```bash
 curl -I http://localhost:8180
 
@@ -128,6 +132,7 @@ curl -I http://localhost:8180
 ```
 
 ### ✅ Login Page Accessible
+
 ```
 Open browser: http://localhost:8180
 You should see the Frappe login page
@@ -142,6 +147,7 @@ You should see the Frappe login page
 **Cause:** App not installed in Python environment
 
 **Solution:**
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
   "uv pip install -e /home/frappe/frappe-bench/apps/ciago_spark --python /home/frappe/frappe-bench/env/bin/python"
@@ -156,6 +162,7 @@ docker compose -f docker-compose.frappe.yml restart
 **Cause:** App installed in site but not in bench
 
 **Solution:**
+
 ```bash
 # Check apps.txt
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
@@ -175,6 +182,7 @@ docker compose -f docker-compose.frappe.yml restart
 **Cause:** Syntax error in Python code or module import failure
 
 **Solution:**
+
 ```bash
 # Check for syntax errors
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
@@ -194,6 +202,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
 **Cause:** File permissions issue in container
 
 **Solution:**
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
   "chown -R frappe:frappe /home/frappe/frappe-bench/apps/ciago_spark"
@@ -208,6 +217,7 @@ docker compose -f docker-compose.frappe.yml restart
 **Cause:** MariaDB not ready or wrong credentials
 
 **Solution:**
+
 ```bash
 # Check database health
 docker compose -f docker-compose.frappe.yml exec frappe-db bash -c \
@@ -323,6 +333,7 @@ docker compose -f docker-compose.frappe.yml logs frappe-backend | grep -i "error
 ## Quick Reference Commands
 
 ### Check Status
+
 ```bash
 docker compose -f docker-compose.frappe.yml ps
 docker compose -f docker-compose.frappe.yml logs frappe-backend --tail=50
@@ -330,6 +341,7 @@ curl -I http://localhost:8180
 ```
 
 ### Fix Common Issues
+
 ```bash
 # Reinstall app
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
@@ -344,6 +356,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Full Restart
+
 ```bash
 docker compose -f docker-compose.frappe.yml down && \
 docker compose -f docker-compose.frappe.yml up -d && \

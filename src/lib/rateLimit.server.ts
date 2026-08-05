@@ -50,9 +50,11 @@ export async function enforceRateLimit(opts: {
     // Best-effort prune of expired rows (~1% of calls)
     if (Math.random() < 0.01) {
       const cutoff = new Date(Date.now() - 3600 * 1000);
-      await adminDb.rateLimit.deleteMany({
-        where: { occurredAt: { lt: cutoff } },
-      }).catch(() => {});
+      await adminDb.rateLimit
+        .deleteMany({
+          where: { occurredAt: { lt: cutoff } },
+        })
+        .catch(() => {});
     }
   } catch (e) {
     if (e instanceof Error && e.message.includes("Too many requests")) throw e;

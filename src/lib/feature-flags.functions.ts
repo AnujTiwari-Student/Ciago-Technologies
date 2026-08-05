@@ -31,7 +31,7 @@ export const getMyFeatureFlags = createServerFn({ method: "GET" })
 
     return getAllFeatureFlags({
       identifier: context.userId,
-      email: (context.claims?.email as string | undefined),
+      email: context.claims?.email as string | undefined,
       role,
       custom: { hasStaffAccess: role !== "user" },
     });

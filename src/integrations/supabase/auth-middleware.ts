@@ -65,9 +65,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
     if (!mapping) {
       const clerkClient = createClerkClient({ secretKey: CLERK_SECRET_KEY });
       const user = await clerkClient.users.getUser(clerkUserId);
-      const primaryEmailObj = user.emailAddresses?.find(
-        (e) => e.id === user.primaryEmailAddressId,
-      );
+      const primaryEmailObj = user.emailAddresses?.find((e) => e.id === user.primaryEmailAddressId);
       const email = primaryEmailObj?.emailAddress;
       const emailVerified = Boolean(primaryEmailObj?.verification?.status === "verified");
 
@@ -75,8 +73,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
         throw new Error("Unauthorized: Clerk user has no primary email address");
       }
 
-      const fullName =
-        [user.firstName, user.lastName].filter(Boolean).join(" ") || null;
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || null;
 
       const prov = await provisionClerkUser(adminDb, {
         clerkUserId,
@@ -87,9 +84,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
 
       if (!("authUserId" in prov)) {
         const message =
-          "kind" in prov
-            ? ("message" in prov ? prov.message : prov.kind)
-            : "provision failed";
+          "kind" in prov ? ("message" in prov ? prov.message : prov.kind) : "provision failed";
         console.error("[auth] provisioning failed", message);
         throw new Error(`Unauthorized: ${message}`);
       }

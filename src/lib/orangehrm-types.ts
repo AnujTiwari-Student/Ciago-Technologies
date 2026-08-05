@@ -151,12 +151,12 @@ export interface HiredUpsertResult {
   empNumber: number | null;
   employeeId: string | null;
   action:
-    | "updated"             // Existing employee updated with full data
-    | "reconciled"          // Found existing employee via reconciliation
-    | "provisioned"         // No employee found, centralized provisioning invoked
-    | "already_complete"    // Already processed (idempotency)
+    | "updated" // Existing employee updated with full data
+    | "reconciled" // Found existing employee via reconciliation
+    | "provisioned" // No employee found, centralized provisioning invoked
+    | "already_complete" // Already processed (idempotency)
     | "needs_manual_review" // Ambiguous state, manual intervention required
-    | "failed";             // Operation failed
+    | "failed"; // Operation failed
   message: string;
   error?: string;
 }

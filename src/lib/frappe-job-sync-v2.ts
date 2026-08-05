@@ -13,7 +13,7 @@ import { matchDesignation, matchDepartment, matchEmploymentType } from "./frappe
 export async function syncJobPostingToFrappe(
   db: PrismaClient,
   client: FrappeClient,
-  jobPostingId: string
+  jobPostingId: string,
 ): Promise<void> {
   const logPrefix = `[frappe-job-sync-v2:${jobPostingId.slice(0, 8)}]`;
 
@@ -35,7 +35,7 @@ export async function syncJobPostingToFrappe(
   });
 
   // Check if auto-create is enabled
-  const autoCreateRecords = process.env.AUTO_CREATE_RECORDS !== 'false';
+  const autoCreateRecords = process.env.AUTO_CREATE_RECORDS !== "false";
   console.log(`${logPrefix} AUTO_CREATE_RECORDS=${autoCreateRecords}`);
 
   // Fetch real Frappe master data
@@ -56,22 +56,22 @@ export async function syncJobPostingToFrappe(
       masterData.designations,
       client,
       autoCreateRecords,
-      logPrefix
+      logPrefix,
     );
 
     departmentResult = await matchDepartment(
       posting.department,
       masterData.departments,
       client,
-      'Ciago Technologies',
+      "Ciago Technologies",
       autoCreateRecords,
-      logPrefix
+      logPrefix,
     );
 
     employmentTypeResult = matchEmploymentType(
       posting.employmentType,
       masterData.employmentTypes,
-      logPrefix
+      logPrefix,
     );
   } catch (error) {
     console.error(`${logPrefix} Field matching failed:`, error);
@@ -80,20 +80,25 @@ export async function syncJobPostingToFrappe(
 
   // Check if any field is held for review
   if (
-    designationResult.confidence === 'held_for_review' ||
-    departmentResult.confidence === 'held_for_review'
+    designationResult.confidence === "held_for_review" ||
+    departmentResult.confidence === "held_for_review"
   ) {
     console.warn(`${logPrefix} Job Opening held for review - manual mapping required`);
 
     // TODO: Send alert to HR admin (Slack/email)
     // For now, just throw an error
     throw new Error(
-      `Job posting held for review: Designation "${posting.designation}" or Department "${posting.department}" requires manual mapping. AUTO_CREATE_RECORDS is disabled.`
+      `Job posting held for review: Designation "${posting.designation}" or Department "${posting.department}" requires manual mapping. AUTO_CREATE_RECORDS is disabled.`,
     );
   }
 
   // Determine overall mapping confidence (use the lowest confidence level)
-  const confidencePriority = { exact_match: 3, fuzzy_match: 2, auto_created: 1, held_for_review: 0 };
+  const confidencePriority = {
+    exact_match: 3,
+    fuzzy_match: 2,
+    auto_created: 1,
+    held_for_review: 0,
+  };
   const overallConfidence = [designationResult, departmentResult].reduce((lowest, result) => {
     return confidencePriority[result.confidence] < confidencePriority[lowest.confidence]
       ? result

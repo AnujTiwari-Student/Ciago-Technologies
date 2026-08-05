@@ -44,7 +44,9 @@ export function useMyRoles(): MyRoles {
     }
 
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading]);
 
   return {

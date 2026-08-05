@@ -343,7 +343,9 @@ function UsersPage() {
                                 <Td>
                                   {r.job_title ? (
                                     <div>
-                                      <div className="text-xs font-mono text-muted-foreground">{r.job_id?.slice(0, 8)}</div>
+                                      <div className="text-xs font-mono text-muted-foreground">
+                                        {r.job_id?.slice(0, 8)}
+                                      </div>
                                       <div className="text-sm">{r.job_title}</div>
                                     </div>
                                   ) : (
@@ -846,7 +848,6 @@ function EditUserDrawer({
                 />
               </Field>
             </TabsContent>
-
           </Tabs>
         )}
 

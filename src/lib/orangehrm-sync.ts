@@ -15,17 +15,20 @@ type OrangeHRMEmploymentStatus = { id: number; name: string };
  */
 export async function findOrCreateJobTitle(
   client: OrangeHRMClient,
-  titleName: string
+  titleName: string,
 ): Promise<number | null> {
   try {
     const jobTitles = await client.getJobTitles();
     console.log(`[orangehrm-sync] Found ${jobTitles.length} job titles in OrangeHRM`);
-    console.log("[orangehrm-sync] Available job titles:", jobTitles.map(jt => jt.title));
+    console.log(
+      "[orangehrm-sync] Available job titles:",
+      jobTitles.map((jt) => jt.title),
+    );
     console.log(`[orangehrm-sync] Looking for job title: "${titleName}"`);
 
     // Try exact match first
     const exactMatch = jobTitles.find(
-      (jt) => !jt.deleted && jt.title.toLowerCase() === titleName.toLowerCase()
+      (jt) => !jt.deleted && jt.title.toLowerCase() === titleName.toLowerCase(),
     );
     if (exactMatch) {
       console.log(`[orangehrm-sync] Exact match found: ${exactMatch.title} (ID: ${exactMatch.id})`);
@@ -34,10 +37,12 @@ export async function findOrCreateJobTitle(
 
     // Try partial match
     const partialMatch = jobTitles.find(
-      (jt) => !jt.deleted && jt.title.toLowerCase().includes(titleName.toLowerCase())
+      (jt) => !jt.deleted && jt.title.toLowerCase().includes(titleName.toLowerCase()),
     );
     if (partialMatch) {
-      console.log(`[orangehrm-sync] Partial match found: ${partialMatch.title} (ID: ${partialMatch.id})`);
+      console.log(
+        `[orangehrm-sync] Partial match found: ${partialMatch.title} (ID: ${partialMatch.id})`,
+      );
       return partialMatch.id;
     }
 
@@ -45,11 +50,15 @@ export async function findOrCreateJobTitle(
     console.log(`[orangehrm-sync] No match found, creating job title: "${titleName}"`);
     try {
       const newJobTitle = await client.createJobTitle(titleName);
-      console.log(`[orangehrm-sync] ✅ Created job title: ${newJobTitle.title} (ID: ${newJobTitle.id})`);
+      console.log(
+        `[orangehrm-sync] ✅ Created job title: ${newJobTitle.title} (ID: ${newJobTitle.id})`,
+      );
       return newJobTitle.id;
     } catch (createError: any) {
       console.error(`[orangehrm-sync] ❌ Failed to create job title:`, createError?.message);
-      console.warn("[orangehrm-sync] Please add this job title manually in OrangeHRM Admin → Job Titles");
+      console.warn(
+        "[orangehrm-sync] Please add this job title manually in OrangeHRM Admin → Job Titles",
+      );
       return null;
     }
   } catch (error: any) {
@@ -64,17 +73,20 @@ export async function findOrCreateJobTitle(
  */
 export async function findSubunit(
   client: OrangeHRMClient,
-  departmentName: string
+  departmentName: string,
 ): Promise<number | null> {
   try {
     const subunits = await client.getSubunits();
     console.log(`[orangehrm-sync] Found ${subunits.length} sub-units in OrangeHRM`);
-    console.log("[orangehrm-sync] Available sub-units:", subunits.map(su => su.name));
+    console.log(
+      "[orangehrm-sync] Available sub-units:",
+      subunits.map((su) => su.name),
+    );
     console.log(`[orangehrm-sync] Looking for sub-unit: "${departmentName}"`);
 
     // Try exact match first
     const exactMatch = subunits.find(
-      (su) => su.name.toLowerCase() === departmentName.toLowerCase()
+      (su) => su.name.toLowerCase() === departmentName.toLowerCase(),
     );
     if (exactMatch) {
       console.log(`[orangehrm-sync] Exact match found: ${exactMatch.name} (ID: ${exactMatch.id})`);
@@ -83,10 +95,12 @@ export async function findSubunit(
 
     // Try partial match
     const partialMatch = subunits.find((su) =>
-      su.name.toLowerCase().includes(departmentName.toLowerCase())
+      su.name.toLowerCase().includes(departmentName.toLowerCase()),
     );
     if (partialMatch) {
-      console.log(`[orangehrm-sync] Partial match found: ${partialMatch.name} (ID: ${partialMatch.id})`);
+      console.log(
+        `[orangehrm-sync] Partial match found: ${partialMatch.name} (ID: ${partialMatch.id})`,
+      );
       return partialMatch.id;
     }
 
@@ -94,11 +108,15 @@ export async function findSubunit(
     console.log(`[orangehrm-sync] No match found, creating sub-unit: "${departmentName}"`);
     try {
       const newSubunit = await client.createSubunit(departmentName);
-      console.log(`[orangehrm-sync] ✅ Created sub-unit: ${newSubunit.name} (ID: ${newSubunit.id})`);
+      console.log(
+        `[orangehrm-sync] ✅ Created sub-unit: ${newSubunit.name} (ID: ${newSubunit.id})`,
+      );
       return newSubunit.id;
     } catch (createError: any) {
       console.error(`[orangehrm-sync] ❌ Failed to create sub-unit:`, createError?.message);
-      console.warn("[orangehrm-sync] Please add this department manually in OrangeHRM Admin → Organization Structure");
+      console.warn(
+        "[orangehrm-sync] Please add this department manually in OrangeHRM Admin → Organization Structure",
+      );
       return null;
     }
   } catch (error: any) {
@@ -113,12 +131,15 @@ export async function findSubunit(
  */
 export async function findEmploymentStatus(
   client: OrangeHRMClient,
-  statusName: string
+  statusName: string,
 ): Promise<number | null> {
   try {
     const statuses = await client.getEmploymentStatuses();
     console.log(`[orangehrm-sync] Found ${statuses.length} employment statuses in OrangeHRM`);
-    console.log("[orangehrm-sync] Available employment statuses:", statuses.map(s => s.name));
+    console.log(
+      "[orangehrm-sync] Available employment statuses:",
+      statuses.map((s) => s.name),
+    );
     console.log(`[orangehrm-sync] Looking for employment status: "${statusName}"`);
 
     // Map our employment types to OrangeHRM status names
@@ -155,11 +176,18 @@ export async function findEmploymentStatus(
     console.log(`[orangehrm-sync] No match found, creating employment status: "${statusToCreate}"`);
     try {
       const newStatus = await client.createEmploymentStatus(statusToCreate);
-      console.log(`[orangehrm-sync] ✅ Created employment status: ${newStatus.name} (ID: ${newStatus.id})`);
+      console.log(
+        `[orangehrm-sync] ✅ Created employment status: ${newStatus.name} (ID: ${newStatus.id})`,
+      );
       return newStatus.id;
     } catch (createError: any) {
-      console.error(`[orangehrm-sync] ❌ Failed to create employment status:`, createError?.message);
-      console.warn("[orangehrm-sync] Please add employment status manually in OrangeHRM Admin → Employment Status");
+      console.error(
+        `[orangehrm-sync] ❌ Failed to create employment status:`,
+        createError?.message,
+      );
+      console.warn(
+        "[orangehrm-sync] Please add employment status manually in OrangeHRM Admin → Employment Status",
+      );
       return null;
     }
   } catch (error: any) {
@@ -180,7 +208,7 @@ export async function provisionEmployeeInOrangeHRM(
     employmentType: string;
     department?: string | null;
     startDate?: Date | null;
-  }
+  },
 ): Promise<{
   empNumber: number;
   employeeId: string;

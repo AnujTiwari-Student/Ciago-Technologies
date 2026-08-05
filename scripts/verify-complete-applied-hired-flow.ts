@@ -202,7 +202,6 @@ async function main() {
       note: "FLOW_VERIFICATION_CLEANUP",
     });
     console.log(`✅ Terminated empNumber: ${empNumber}\n`);
-
   } catch (error: any) {
     console.error("\n❌ Verification failed:", error.message);
 

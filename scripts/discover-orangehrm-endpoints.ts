@@ -21,7 +21,7 @@ interface EndpointTest {
 async function testEndpoint(
   baseUrl: string,
   token: string,
-  test: EndpointTest
+  test: EndpointTest,
 ): Promise<{ status: number; body: any; works: boolean }> {
   const url = `${baseUrl}/web/index.php/api/v2${test.path}`;
 
@@ -216,7 +216,9 @@ async function main() {
       }
 
       if (test.expectedWorking !== undefined && result.works !== test.expectedWorking) {
-        console.log(`   ⚠️  Unexpected result! Expected ${test.expectedWorking ? "success" : "failure"}`);
+        console.log(
+          `   ⚠️  Unexpected result! Expected ${test.expectedWorking ? "success" : "failure"}`,
+        );
       }
 
       console.log();
@@ -234,7 +236,7 @@ async function main() {
     const forbidden = results.filter((r) => r.result.status === 403);
     const notFound = results.filter((r) => r.result.status === 404);
     const other = results.filter(
-      (r) => !r.result.works && r.result.status !== 403 && r.result.status !== 404
+      (r) => !r.result.works && r.result.status !== 403 && r.result.status !== 404,
     );
 
     console.log("📊 Summary:\n");
@@ -264,7 +266,6 @@ async function main() {
       note: "ENDPOINT_DISCOVERY_CLEANUP",
     });
     console.log("✅ Cleanup complete\n");
-
   } catch (error: any) {
     console.error("\n❌ Discovery failed:", error.message);
 

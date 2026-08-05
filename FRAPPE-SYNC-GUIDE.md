@@ -9,18 +9,20 @@ The system now automatically handles **ANY** job posting you create, with intell
 ## 🔄 **How It Works**
 
 ### **1. Employment Type** (Fully Dynamic)
+
 Handles any format automatically:
 
-| Your Input | Mapped to Frappe |
-|------------|------------------|
-| `internship`, `INTERNSHIP`, `intern` | → Internship |
-| `full_time`, `full-time`, `FULL_TIME`, `permanent` | → Full-time |
-| `part_time`, `part-time`, `PART_TIME` | → Part-time |
-| `contract`, `contractor`, `freelance` | → Contract |
-| `temporary`, `temp` | → Contract |
-| *Any other format* | → Title-Cased with hyphens |
+| Your Input                                         | Mapped to Frappe           |
+| -------------------------------------------------- | -------------------------- |
+| `internship`, `INTERNSHIP`, `intern`               | → Internship               |
+| `full_time`, `full-time`, `FULL_TIME`, `permanent` | → Full-time                |
+| `part_time`, `part-time`, `PART_TIME`              | → Part-time                |
+| `contract`, `contractor`, `freelance`              | → Contract                 |
+| `temporary`, `temp`                                | → Contract                 |
+| _Any other format_                                 | → Title-Cased with hyphens |
 
 **Example:**
+
 - `full_time` → `Full-time` ✅
 - `FULL_TIME` → `Full-time` ✅
 - `freelance_contractor` → `Contract` ✅
@@ -28,27 +30,29 @@ Handles any format automatically:
 ---
 
 ### **2. Department** (Smart Mapping)
+
 Automatically maps common department names:
 
-| Your Input | Mapped to Frappe |
-|------------|------------------|
-| Engineering, Tech, Technology, Development, IT | → Engineering - CT |
-| HR, Human Resources, People | → Human Resources - CT |
-| Sales, Business Development | → Sales - CT |
-| Marketing | → Marketing - CT |
-| Finance, Accounting, Accounts | → Accounts - CT |
-| Operations, Ops | → Operations - CT |
-| Support, Customer Service | → Customer Service - CT |
-| Legal | → Legal - CT |
-| Management, Admin, Administration | → Management - CT |
-| Research, R&D | → Research & Development - CT |
-| Quality, QA | → Quality Management - CT |
-| Production, Manufacturing | → Production - CT |
-| Purchase, Procurement | → Purchase - CT |
-| Dispatch, Logistics | → Dispatch - CT |
-| *Any other name* | → [Name] - CT |
+| Your Input                                     | Mapped to Frappe              |
+| ---------------------------------------------- | ----------------------------- |
+| Engineering, Tech, Technology, Development, IT | → Engineering - CT            |
+| HR, Human Resources, People                    | → Human Resources - CT        |
+| Sales, Business Development                    | → Sales - CT                  |
+| Marketing                                      | → Marketing - CT              |
+| Finance, Accounting, Accounts                  | → Accounts - CT               |
+| Operations, Ops                                | → Operations - CT             |
+| Support, Customer Service                      | → Customer Service - CT       |
+| Legal                                          | → Legal - CT                  |
+| Management, Admin, Administration              | → Management - CT             |
+| Research, R&D                                  | → Research & Development - CT |
+| Quality, QA                                    | → Quality Management - CT     |
+| Production, Manufacturing                      | → Production - CT             |
+| Purchase, Procurement                          | → Purchase - CT               |
+| Dispatch, Logistics                            | → Dispatch - CT               |
+| _Any other name_                               | → [Name] - CT                 |
 
 **Example:**
+
 - `Tech` → `Engineering - CT` ✅
 - `Business Development` → `Sales - CT` ✅
 - `Custom Department` → `Custom Department - CT` ✅
@@ -56,25 +60,27 @@ Automatically maps common department names:
 ---
 
 ### **3. Designation** (Keyword-Based AI Matching)
+
 Intelligently matches job titles to Frappe designations:
 
-| Keywords in Title | Mapped to |
-|------------------|-----------|
-| engineer, developer, programmer | → Engineer |
-| analyst, data scientist | → Analyst |
-| designer, ui, ux | → Designer |
-| hr, human resource, recruiter | → HR Manager |
-| accountant, finance (without manager) | → Accountant |
-| sales, business development | → Business Development Manager |
-| marketing | → Head of Marketing and Sales |
-| manager, lead, head | → Manager |
-| executive, specialist, officer | → Executive Assistant |
-| consultant | → Consultant |
-| assistant | → Administrative Assistant |
-| intern | → Engineer |
-| *No match* | → Manager (safe fallback) |
+| Keywords in Title                     | Mapped to                      |
+| ------------------------------------- | ------------------------------ |
+| engineer, developer, programmer       | → Engineer                     |
+| analyst, data scientist               | → Analyst                      |
+| designer, ui, ux                      | → Designer                     |
+| hr, human resource, recruiter         | → HR Manager                   |
+| accountant, finance (without manager) | → Accountant                   |
+| sales, business development           | → Business Development Manager |
+| marketing                             | → Head of Marketing and Sales  |
+| manager, lead, head                   | → Manager                      |
+| executive, specialist, officer        | → Executive Assistant          |
+| consultant                            | → Consultant                   |
+| assistant                             | → Administrative Assistant     |
+| intern                                | → Engineer                     |
+| _No match_                            | → Manager (safe fallback)      |
 
 **Example:**
+
 - `Senior Full Stack Developer` → `Engineer` ✅
 - `HR Manager / HR Specialist` → `HR Manager` ✅
 - `Data Scientist` → `Analyst` ✅
@@ -86,6 +92,7 @@ Intelligently matches job titles to Frappe designations:
 ## 📋 **What Gets Synced**
 
 ### **Job Opening (Stage 1)**
+
 ✅ Job Title  
 ✅ Designation (auto-mapped)  
 ✅ Department (auto-mapped)  
@@ -102,6 +109,7 @@ Intelligently matches job titles to Frappe designations:
 ⚠️ Location (skipped - Frappe link validation issue)
 
 ### **Job Applicant (Stage 2)**
+
 ✅ Applicant Name  
 ✅ Email  
 ✅ Phone Number  
@@ -118,6 +126,7 @@ Intelligently matches job titles to Frappe designations:
 ## 🎯 **Usage**
 
 ### **Create Any Job Posting:**
+
 1. Go to http://localhost:8080/admin?tab=postings
 2. Fill in the form with **ANY** values:
    - Title: Whatever you want
@@ -127,6 +136,7 @@ Intelligently matches job titles to Frappe designations:
 3. Click "Save"
 
 **The system will:**
+
 - ✅ Automatically normalize employment type
 - ✅ Map department to Frappe format
 - ✅ Find best matching designation
@@ -134,12 +144,14 @@ Intelligently matches job titles to Frappe designations:
 - ✅ Store Frappe ID back in database
 
 ### **Apply to Job:**
+
 1. Go to http://localhost:8080/careers
 2. Find the job and click "Apply Now"
 3. Fill in application form (all fields optional except name, email, resume)
 4. Submit
 
 **The system will:**
+
 - ✅ Create Job Application in database
 - ✅ Send email notification
 - ✅ Create Job Applicant in Frappe
@@ -150,6 +162,7 @@ Intelligently matches job titles to Frappe designations:
 ## 📊 **Monitoring**
 
 Check sync logs in the dev server terminal:
+
 ```
 [frappe-job-sync:b26d8f21] Syncing to Frappe
 [frappe-job-sync:b26d8f21] Employment Type: full_time → Full-time
@@ -174,15 +187,19 @@ Check sync logs in the dev server terminal:
 ### **Common Issues:**
 
 **"Could not find Department"**
+
 - ✅ Fixed! Department now auto-maps with ` - CT` suffix
 
 **"Could not find Employment Type"**
+
 - ✅ Fixed! Employment type now auto-normalizes any format
 
 **"Could not find Designation"**
+
 - ✅ Fixed! Uses keyword matching with safe fallback
 
 **"Could not find Location"**
+
 - ℹ️ Location field is skipped (Frappe strict validation)
 
 ---
@@ -201,7 +218,7 @@ Check sync logs in the dev server terminal:
 ## 📝 **Files Modified**
 
 - `src/lib/frappe-job-sync.ts` - Dynamic Job Opening sync with smart mapping
-- `src/lib/frappe-applicant-sync.ts` - Job Applicant sync  
+- `src/lib/frappe-applicant-sync.ts` - Job Applicant sync
 - `src/lib/jobPostings.functions.ts` - Triggers Job Opening sync
 - `src/lib/applications.functions.ts` - Triggers Job Applicant sync
 - `src/integrations/frappe/client.ts` - Frappe API methods

@@ -28,7 +28,9 @@ async function main() {
       for (const user of users) {
         try {
           await clerk.users.deleteUser(user.id);
-          console.log(`   ✓ Deleted Clerk user: ${user.id} (${user.emailAddresses[0]?.emailAddress})`);
+          console.log(
+            `   ✓ Deleted Clerk user: ${user.id} (${user.emailAddresses[0]?.emailAddress})`,
+          );
         } catch (err: any) {
           console.log(`   ✗ Failed to delete ${user.id}: ${err.message}`);
         }

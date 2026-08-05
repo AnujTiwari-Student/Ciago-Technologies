@@ -93,7 +93,9 @@ function KpiCard({
   return (
     <Card className="border-border/60">
       <CardContent className="p-4">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
         <p className={`mt-2 text-2xl font-bold ${colorClass}`}>{value}</p>
       </CardContent>
     </Card>
@@ -105,8 +107,7 @@ function BgCheckSelect({ row }: { row: DirectoryRow }) {
   const updateBgFn = useServerFn(updateBgCheckStatus);
 
   const mutation = useMutation({
-    mutationFn: (status: string) =>
-      updateBgFn({ data: { user_id: row.user_id, status } }),
+    mutationFn: (status: string) => updateBgFn({ data: { user_id: row.user_id, status } }),
     onSuccess: () => {
       toast.success("Background check status updated");
       qc.invalidateQueries({ queryKey: ["directory"] });
@@ -259,7 +260,9 @@ export function UsersDirectoryPanel() {
                 </div>
               ) : error ? (
                 <div className="py-12 text-center">
-                  <p className="text-sm text-destructive">Error loading users: {(error as Error).message}</p>
+                  <p className="text-sm text-destructive">
+                    Error loading users: {(error as Error).message}
+                  </p>
                 </div>
               ) : rows.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
@@ -272,12 +275,24 @@ export function UsersDirectoryPanel() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Name</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Role</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Dept</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Designation</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Docs Status</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">BG Check</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Name
+                        </th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Role
+                        </th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Dept
+                        </th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Designation
+                        </th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          Docs Status
+                        </th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                          BG Check
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -295,9 +310,13 @@ export function UsersDirectoryPanel() {
                             </Badge>
                           </td>
                           <td className="py-3 px-2 text-muted-foreground">
-                            {r.department ? DEPT_LABEL[r.department] ?? humanize(r.department) : "—"}
+                            {r.department
+                              ? (DEPT_LABEL[r.department] ?? humanize(r.department))
+                              : "—"}
                           </td>
-                          <td className="py-3 px-2 text-muted-foreground">{r.designation || "—"}</td>
+                          <td className="py-3 px-2 text-muted-foreground">
+                            {r.designation || "—"}
+                          </td>
                           <td className="py-3 px-2">
                             <div className="flex items-center gap-2">
                               <DocStatusBadge

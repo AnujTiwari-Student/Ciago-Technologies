@@ -75,7 +75,9 @@ async function main() {
 
   // Check environment variable
   const flagEnabled = process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED === "true";
-  console.log(`\n🔧 Environment: FRAPPE_EMPLOYEE_SYNC_ENABLED=${process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED}`);
+  console.log(
+    `\n🔧 Environment: FRAPPE_EMPLOYEE_SYNC_ENABLED=${process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED}`,
+  );
 
   if (!flagEnabled) {
     console.error("\n❌ BLOCKED: FRAPPE_EMPLOYEE_SYNC_ENABLED must be 'true'");
@@ -164,18 +166,15 @@ async function main() {
     console.log("\n📊 APPLIED handler result:", appliedResult);
 
     if (appliedResult.triggered) {
-      logResult(
-        "A.1: APPLIED handler triggered",
-        "PASS",
-        "Handler executed successfully",
-        { eventId: appliedResult.eventId }
-      );
+      logResult("A.1: APPLIED handler triggered", "PASS", "Handler executed successfully", {
+        eventId: appliedResult.eventId,
+      });
     } else {
       logResult(
         "A.1: APPLIED handler triggered",
         "FAIL",
         `Handler not triggered: ${appliedResult.reason}`,
-        appliedResult
+        appliedResult,
       );
     }
 
@@ -201,31 +200,33 @@ async function main() {
         "A.2: Frappe employee name persisted",
         "PASS",
         `Employee name: ${frappeEmployeeName}`,
-        appAfterApplied
+        appAfterApplied,
       );
     } else {
       logResult(
         "A.2: Frappe employee name persisted",
         "FAIL",
         "No frappeEmployeeName in database",
-        appAfterApplied
+        appAfterApplied,
       );
     }
 
-    if (appAfterApplied?.frappeProvisioningState === "needs_manual_review" ||
-        appAfterApplied?.frappeProvisioningState === "succeeded") {
+    if (
+      appAfterApplied?.frappeProvisioningState === "needs_manual_review" ||
+      appAfterApplied?.frappeProvisioningState === "succeeded"
+    ) {
       logResult(
         "A.3: Provisioning state valid",
         "PASS",
         `State: ${appAfterApplied.frappeProvisioningState}`,
-        appAfterApplied
+        appAfterApplied,
       );
     } else {
       logResult(
         "A.3: Provisioning state valid",
         "FAIL",
         `Unexpected state: ${appAfterApplied?.frappeProvisioningState}`,
-        appAfterApplied
+        appAfterApplied,
       );
     }
 
@@ -246,14 +247,14 @@ async function main() {
               name: frappeEmployee.name,
               status: frappeEmployee.status,
               company: frappeEmployee.company,
-            }
+            },
           );
         } else {
           logResult(
             "A.4: Frappe employee exists",
             "FAIL",
             "Employee name mismatch",
-            frappeEmployee
+            frappeEmployee,
           );
         }
 
@@ -266,7 +267,7 @@ async function main() {
             {
               gender: frappeEmployee.gender,
               date_of_birth: frappeEmployee.date_of_birth,
-            }
+            },
           );
         } else {
           logResult(
@@ -276,7 +277,7 @@ async function main() {
             {
               gender: frappeEmployee.gender,
               date_of_birth: frappeEmployee.date_of_birth,
-            }
+            },
           );
         }
       } catch (error) {
@@ -284,7 +285,7 @@ async function main() {
           "A.4: Frappe employee exists",
           "FAIL",
           `Frappe API error: ${error instanceof Error ? error.message : String(error)}`,
-          { error }
+          { error },
         );
       }
     }
@@ -312,14 +313,14 @@ async function main() {
         "B.1: Idempotency working",
         "PASS",
         "Duplicate APPLIED correctly skipped",
-        appliedRetry
+        appliedRetry,
       );
     } else {
       logResult(
         "B.1: Idempotency working",
         "FAIL",
         `Expected already_completed, got: ${appliedRetry.reason}`,
-        appliedRetry
+        appliedRetry,
       );
     }
 
@@ -334,14 +335,14 @@ async function main() {
             "B.2: No duplicate employee",
             "PASS",
             "Exactly 1 employee found with matching name",
-            { count: employeeSearch.length, name: employeeSearch[0].name }
+            { count: employeeSearch.length, name: employeeSearch[0].name },
           );
         } else {
           logResult(
             "B.2: No duplicate employee",
             "FAIL",
             `Found ${employeeSearch.length} employees, expected 1`,
-            employeeSearch
+            employeeSearch,
           );
         }
       } catch (error) {
@@ -397,7 +398,8 @@ async function main() {
     });
 
     // Trigger the HIRED handler
-    const { handleFrappeApplicationHired } = await import("../src/lib/frappe-hired-handler-orchestration");
+    const { handleFrappeApplicationHired } =
+      await import("../src/lib/frappe-hired-handler-orchestration");
 
     const hiredResult = await handleFrappeApplicationHired({
       db,
@@ -410,18 +412,15 @@ async function main() {
     console.log("\n📊 HIRED handler result:", hiredResult);
 
     if (hiredResult.triggered) {
-      logResult(
-        "C.1: HIRED handler triggered",
-        "PASS",
-        "Handler executed successfully",
-        { eventId: hiredResult.eventId }
-      );
+      logResult("C.1: HIRED handler triggered", "PASS", "Handler executed successfully", {
+        eventId: hiredResult.eventId,
+      });
     } else {
       logResult(
         "C.1: HIRED handler triggered",
         "FAIL",
         `Handler not triggered: ${hiredResult.reason}`,
-        hiredResult
+        hiredResult,
       );
     }
 
@@ -436,18 +435,15 @@ async function main() {
         console.log("\n📊 Enriched Frappe employee:", enrichedEmployee);
 
         if (enrichedEmployee.date_of_joining === "2026-09-01") {
-          logResult(
-            "C.2: Date of joining updated",
-            "PASS",
-            "DOJ enriched correctly: 2026-09-01",
-            { date_of_joining: enrichedEmployee.date_of_joining }
-          );
+          logResult("C.2: Date of joining updated", "PASS", "DOJ enriched correctly: 2026-09-01", {
+            date_of_joining: enrichedEmployee.date_of_joining,
+          });
         } else {
           logResult(
             "C.2: Date of joining updated",
             "FAIL",
             `Expected 2026-09-01, got: ${enrichedEmployee.date_of_joining}`,
-            { date_of_joining: enrichedEmployee.date_of_joining }
+            { date_of_joining: enrichedEmployee.date_of_joining },
           );
         }
 
@@ -457,14 +453,14 @@ async function main() {
             "C.3: No duplicate on HIRED",
             "PASS",
             "Same employee name (updated, not created)",
-            { name: enrichedEmployee.name }
+            { name: enrichedEmployee.name },
           );
         } else {
           logResult(
             "C.3: No duplicate on HIRED",
             "FAIL",
             "Employee name changed (possible duplicate)",
-            enrichedEmployee
+            enrichedEmployee,
           );
         }
       } catch (error) {
@@ -472,7 +468,7 @@ async function main() {
           "C.2: Enrichment verified",
           "FAIL",
           `Frappe API error: ${error instanceof Error ? error.message : String(error)}`,
-          { error }
+          { error },
         );
       }
     }
@@ -500,7 +496,7 @@ async function main() {
       "D.1: OrangeHRM independence",
       "PASS",
       "OrangeHRM fields remain independent (not tested in this scenario)",
-      appOrangeHRM
+      appOrangeHRM,
     );
 
     // ============================================================================
@@ -521,14 +517,14 @@ async function main() {
             "Cleanup.1: Frappe employee terminated",
             "PASS",
             `Employee ${frappeEmployeeName} status=Left`,
-            { status: terminated.status }
+            { status: terminated.status },
           );
         } else {
           logResult(
             "Cleanup.1: Frappe employee terminated",
             "FAIL",
             `Expected status=Left, got: ${terminated.status}`,
-            terminated
+            terminated,
           );
         }
       } catch (error) {
@@ -537,7 +533,7 @@ async function main() {
           "Cleanup.1: Frappe employee terminated",
           "FAIL",
           `Termination error: ${error instanceof Error ? error.message : String(error)}`,
-          { error }
+          { error },
         );
       }
     }
@@ -566,7 +562,6 @@ async function main() {
     }
 
     logResult("Cleanup.2: Test data deleted", "PASS", "All test data removed", null);
-
   } catch (error) {
     console.error("\n❌ TEST FAILED:", error);
     throw error;

@@ -35,9 +35,15 @@ async function main() {
     console.log("=".repeat(60));
 
     console.log("\n📁 Master Data:");
-    console.log(`   Departments: ${results.departments.created} created, ${results.departments.existed} existed`);
-    console.log(`   Employment Statuses: ${results.employmentStatuses.created} created, ${results.employmentStatuses.existed} existed`);
-    console.log(`   Job Titles: ${results.jobTitles.created} created, ${results.jobTitles.existed} existed`);
+    console.log(
+      `   Departments: ${results.departments.created} created, ${results.departments.existed} existed`,
+    );
+    console.log(
+      `   Employment Statuses: ${results.employmentStatuses.created} created, ${results.employmentStatuses.existed} existed`,
+    );
+    console.log(
+      `   Job Titles: ${results.jobTitles.created} created, ${results.jobTitles.existed} existed`,
+    );
 
     console.log("\n📋 Job Postings:");
     console.log(`   Created: ${jobResults.created}`);

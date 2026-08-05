@@ -11,10 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  upsertOrangeHRMEmployeeAtHired,
-  extractOnboardingData,
-} from "../orangehrm-provisioning";
+import { upsertOrangeHRMEmployeeAtHired, extractOnboardingData } from "../orangehrm-provisioning";
 import type { OnboardingDataSources } from "../orangehrm-types";
 
 // Mock PrismaClient
@@ -198,7 +195,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
       "user-1",
       onboardingData,
       mockDb,
-      mockClient
+      mockClient,
     );
 
     expect(result.success).toBe(false);
@@ -209,7 +206,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
         data: expect.objectContaining({
           action: "HIRED_UPSERT_ABORTED_STATUS_CHANGED",
         }),
-      })
+      }),
     );
   });
 
@@ -262,7 +259,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
       "user-1",
       onboardingData,
       mockDb,
-      mockClient
+      mockClient,
     );
 
     expect(result.success).toBe(true);
@@ -274,7 +271,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
     expect(mockClient.updateEmployeeContactDetails).toHaveBeenCalled();
     expect(mockClient.updateEmployeeJobDetails).toHaveBeenCalledWith(
       42,
-      expect.objectContaining({ joinedDate: "2026-09-01" })
+      expect.objectContaining({ joinedDate: "2026-09-01" }),
     );
   });
 
@@ -338,7 +335,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
       "user-1",
       onboardingData,
       mockDb,
-      mockClient
+      mockClient,
     );
 
     // Should NOT reuse terminated employee
@@ -348,7 +345,7 @@ describe("upsertOrangeHRMEmployeeAtHired", () => {
         data: expect.objectContaining({
           action: "HIRED_REHIRE_TERMINATED_EMPLOYEE_BLOCKED",
         }),
-      })
+      }),
     );
   });
 });

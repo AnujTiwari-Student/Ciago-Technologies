@@ -104,7 +104,6 @@ async function main() {
       note: "INSPECTION_TEST_CLEANUP",
     });
     console.log("✅ Cleanup complete\n");
-
   } catch (error: any) {
     console.error("\n❌ Inspection failed:", error.message);
 

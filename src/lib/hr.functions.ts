@@ -220,9 +220,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
       }
 
       // Check if this is a re-upload (version > 1 AND status changed from changes_requested/rejected to pending)
-      const isReupload = (d.version ?? 1) > 1 &&
-                        d.status === "pending" &&
-                        d.reviewedAt !== null; // has been reviewed before
+      const isReupload = (d.version ?? 1) > 1 && d.status === "pending" && d.reviewedAt !== null; // has been reviewed before
 
       documents.push({
         id: d.id,
@@ -506,7 +504,7 @@ export const updateOnboardingVerificationStatus = createServerFn({ method: "POST
         applicationId: true,
         userId: true,
         roleTitle: true,
-        verificationStatus: true
+        verificationStatus: true,
       },
     });
     if (!rec) throw new Error("Onboarding record not found");
@@ -556,13 +554,14 @@ export const updateOnboardingVerificationStatus = createServerFn({ method: "POST
     }
 
     // Send notification
-    const statusLabel = data.verification_status === "approved"
-      ? "Approved"
-      : data.verification_status === "changes_requested"
-      ? "Changes Requested"
-      : data.verification_status === "rejected"
-      ? "Rejected"
-      : "Under Review";
+    const statusLabel =
+      data.verification_status === "approved"
+        ? "Approved"
+        : data.verification_status === "changes_requested"
+          ? "Changes Requested"
+          : data.verification_status === "rejected"
+            ? "Rejected"
+            : "Under Review";
 
     if (rec.userId) {
       await adminDb.inAppNotification.create({
@@ -570,30 +569,40 @@ export const updateOnboardingVerificationStatus = createServerFn({ method: "POST
           userId: rec.userId,
           applicationId: rec.applicationId,
           title: `Onboarding Status: ${statusLabel}`,
-          body: data.rejection_feedback || `Your onboarding verification status has been updated to ${statusLabel.toLowerCase()}.`,
+          body:
+            data.rejection_feedback ||
+            `Your onboarding verification status has been updated to ${statusLabel.toLowerCase()}.`,
           link: "/onboarding",
         },
       });
     }
 
-    if (app?.email && (data.verification_status === "approved" || data.verification_status === "rejected" || data.verification_status === "changes_requested")) {
+    if (
+      app?.email &&
+      (data.verification_status === "approved" ||
+        data.verification_status === "rejected" ||
+        data.verification_status === "changes_requested")
+    ) {
       try {
         const { sendResendEmail } = await import("@/lib/notifications.server");
-        const subject = data.verification_status === "approved"
-          ? `[${rec.roleTitle}] Onboarding Approved - Welcome to Ciago!`
-          : data.verification_status === "rejected"
-          ? `[${rec.roleTitle}] Onboarding Rejected - Action Required`
-          : `[${rec.roleTitle}] Onboarding Changes Required`;
+        const subject =
+          data.verification_status === "approved"
+            ? `[${rec.roleTitle}] Onboarding Approved - Welcome to Ciago!`
+            : data.verification_status === "rejected"
+              ? `[${rec.roleTitle}] Onboarding Rejected - Action Required`
+              : `[${rec.roleTitle}] Onboarding Changes Required`;
 
-        const intro = data.verification_status === "approved"
-          ? "Great news! Your onboarding documents have been approved by our HR team."
-          : data.verification_status === "rejected"
-          ? "Our HR team has reviewed your onboarding and unfortunately it has been rejected. Please review the feedback below and re-submit your documents."
-          : "Our HR team has reviewed your onboarding submission and requested some changes. Please review the feedback below and re-upload the necessary documents.";
+        const intro =
+          data.verification_status === "approved"
+            ? "Great news! Your onboarding documents have been approved by our HR team."
+            : data.verification_status === "rejected"
+              ? "Our HR team has reviewed your onboarding and unfortunately it has been rejected. Please review the feedback below and re-submit your documents."
+              : "Our HR team has reviewed your onboarding submission and requested some changes. Please review the feedback below and re-upload the necessary documents.";
 
-        const actionText = data.verification_status === "approved"
-          ? "You're all set! Your Date of Joining will be confirmed shortly."
-          : "Please visit your onboarding page to review the specific documents that need attention and re-upload them.";
+        const actionText =
+          data.verification_status === "approved"
+            ? "You're all set! Your Date of Joining will be confirmed shortly."
+            : "Please visit your onboarding page to review the specific documents that need attention and re-upload them.";
 
         const feedbackBlock = data.rejection_feedback
           ? `<div style="margin:18px 0;padding:14px 16px;background:#f8fafc;border-left:3px solid #0d9488;border-radius:6px;font-size:14px;color:#334155">${data.rejection_feedback.replace(/</g, "&lt;")}</div>`
@@ -712,8 +721,7 @@ export const bulkReviewOnboardingDocuments = createServerFn({ method: "POST" })
             feedback: data.feedback ?? null,
             document_ids: list.map((d) => d.id),
             doc_keys: list.map((d) => d.docKey),
-            candidate_email:
-              appMap.get(recMap.get(onbId)?.applicationId ?? "")?.email ?? null,
+            candidate_email: appMap.get(recMap.get(onbId)?.applicationId ?? "")?.email ?? null,
           },
         },
       });
@@ -845,11 +853,7 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
       },
     });
 
-    const content = dojEmail(
-      app?.fullName ?? "",
-      rec.roleTitle ?? "your role",
-      data.doj,
-    );
+    const content = dojEmail(app?.fullName ?? "", rec.roleTitle ?? "your role", data.doj);
     if (rec.userId) {
       await adminDb.inAppNotification.create({
         data: {
@@ -895,7 +899,13 @@ export const setOnboardingVerification = createServerFn({ method: "POST" })
 
     const rec = await adminDb.onboardingRecord.findUnique({
       where: { id: data.onboarding_id },
-      select: { id: true, userId: true, applicationId: true, roleTitle: true, verificationStatus: true },
+      select: {
+        id: true,
+        userId: true,
+        applicationId: true,
+        roleTitle: true,
+        verificationStatus: true,
+      },
     });
     if (!rec) throw new Error("Not found");
 

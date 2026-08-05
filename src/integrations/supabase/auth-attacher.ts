@@ -13,11 +13,11 @@ function readClerkToken(): string | undefined {
   return v;
 }
 
-export const attachSupabaseAuth = createMiddleware({ type: "function" }).client(
-  (async ({ next }: any) => {
-    const token = readClerkToken();
-    return next({
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-  }) as any,
-);
+export const attachSupabaseAuth = createMiddleware({ type: "function" }).client((async ({
+  next,
+}: any) => {
+  const token = readClerkToken();
+  return next({
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}) as any);

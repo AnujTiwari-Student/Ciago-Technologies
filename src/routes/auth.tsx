@@ -33,8 +33,7 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign In — Ciago Technologies" },
       {
         name: "description",
-        content:
-          "Sign in to track applications or access the Ciago Technologies admin dashboard.",
+        content: "Sign in to track applications or access the Ciago Technologies admin dashboard.",
       },
       { property: "og:title", content: "Sign In — Ciago Technologies" },
       {
@@ -174,9 +173,7 @@ function AuthPage() {
         </p>
 
         <div className="mt-8 w-full rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <p className="mb-4 text-xs text-muted-foreground">
-            Sign in to access your account
-          </p>
+          <p className="mb-4 text-xs text-muted-foreground">Sign in to access your account</p>
           <CandidateForms
             redirectTo={redirectTo}
             clerkAuthEnabled={clerkAuthEnabled}

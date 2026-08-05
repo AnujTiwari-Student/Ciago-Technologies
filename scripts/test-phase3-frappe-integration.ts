@@ -37,7 +37,13 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
-function logTest(name: string, status: TestResult["status"], message: string, error?: string, data?: any) {
+function logTest(
+  name: string,
+  status: TestResult["status"],
+  message: string,
+  error?: string,
+  data?: any,
+) {
   const result: TestResult = { name, status, message, error, data };
   results.push(result);
 
@@ -57,9 +63,9 @@ function logTest(name: string, status: TestResult["status"], message: string, er
 }
 
 function printSummary() {
-  const passed = results.filter(r => r.status === "PASS").length;
-  const failed = results.filter(r => r.status === "FAIL").length;
-  const skipped = results.filter(r => r.status === "SKIP").length;
+  const passed = results.filter((r) => r.status === "PASS").length;
+  const failed = results.filter((r) => r.status === "FAIL").length;
+  const skipped = results.filter((r) => r.status === "SKIP").length;
   const total = results.length;
 
   console.log("\n" + "=".repeat(60));
@@ -134,14 +140,14 @@ async function main() {
           "PASS",
           "Frappe integration correctly disabled when flag is OFF",
           undefined,
-          { triggered: result.triggered, reason: result.reason }
+          { triggered: result.triggered, reason: result.reason },
         );
       } else {
         logTest(
           "Test 1: Flag OFF",
           "FAIL",
           "Frappe integration should not trigger when flag is OFF",
-          `Unexpected result: ${JSON.stringify(result)}`
+          `Unexpected result: ${JSON.stringify(result)}`,
         );
       }
     } catch (error) {
@@ -149,7 +155,7 @@ async function main() {
         "Test 1: Flag OFF",
         "FAIL",
         "Flag OFF test failed with error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -176,14 +182,14 @@ async function main() {
           {
             employeeName: testEmployeeName,
             action: result.provisioningResult.action,
-          }
+          },
         );
       } else {
         logTest(
           "Test 2: APPLIED",
           "FAIL",
           "Failed to create Frappe employee",
-          result.provisioningResult?.error || "Unknown error"
+          result.provisioningResult?.error || "Unknown error",
         );
       }
     } catch (error) {
@@ -191,7 +197,7 @@ async function main() {
         "Test 2: APPLIED",
         "FAIL",
         "APPLIED test failed with error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -211,7 +217,7 @@ async function main() {
           "PASS",
           "Duplicate APPLIED correctly detected (idempotent)",
           undefined,
-          { reason: result.reason }
+          { reason: result.reason },
         );
       } else if (result.provisioningResult?.action === "already_provisioned") {
         logTest(
@@ -219,14 +225,14 @@ async function main() {
           "PASS",
           "Duplicate provisioning correctly handled",
           undefined,
-          { action: result.provisioningResult.action }
+          { action: result.provisioningResult.action },
         );
       } else {
         logTest(
           "Test 3: Duplicate APPLIED",
           "FAIL",
           "Duplicate APPLIED should not create another employee",
-          `Unexpected result: ${JSON.stringify(result)}`
+          `Unexpected result: ${JSON.stringify(result)}`,
         );
       }
     } catch (error) {
@@ -234,7 +240,7 @@ async function main() {
         "Test 3: Duplicate APPLIED",
         "FAIL",
         "Duplicate APPLIED test failed",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -270,14 +276,14 @@ async function main() {
           {
             employeeName: result.upsertResult.employeeName,
             action: result.upsertResult.action,
-          }
+          },
         );
       } else {
         logTest(
           "Test 4: HIRED",
           "FAIL",
           "Failed to enrich Frappe employee",
-          result.upsertResult?.error || "Unknown error"
+          result.upsertResult?.error || "Unknown error",
         );
       }
     } catch (error) {
@@ -285,7 +291,7 @@ async function main() {
         "Test 4: HIRED",
         "FAIL",
         "HIRED test failed with error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -309,7 +315,7 @@ async function main() {
           {
             action: result.upsertResult.action,
             employeeName: result.upsertResult.employeeName,
-          }
+          },
         );
       } else if (!result.triggered && result.reason === "already_completed") {
         logTest(
@@ -317,14 +323,14 @@ async function main() {
           "PASS",
           "Duplicate HIRED event detected (already completed)",
           undefined,
-          { reason: result.reason }
+          { reason: result.reason },
         );
       } else {
         logTest(
           "Test 5: Duplicate HIRED",
           "FAIL",
           "Duplicate HIRED should not fail",
-          result.upsertResult?.error || "Unknown error"
+          result.upsertResult?.error || "Unknown error",
         );
       }
     } catch (error) {
@@ -332,7 +338,7 @@ async function main() {
         "Test 5: Duplicate HIRED",
         "FAIL",
         "Duplicate HIRED test failed",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -348,9 +354,12 @@ async function main() {
         },
       });
 
-      if (application?.frappeEmployeeName === testEmployeeName &&
-          (application.frappeProvisioningState === "succeeded" || application.frappeProvisioningState === "needs_manual_review") &&
-          application.frappeRecordStatus === "ACTIVE") {
+      if (
+        application?.frappeEmployeeName === testEmployeeName &&
+        (application.frappeProvisioningState === "succeeded" ||
+          application.frappeProvisioningState === "needs_manual_review") &&
+        application.frappeRecordStatus === "ACTIVE"
+      ) {
         logTest(
           "Test 6: Database State",
           "PASS",
@@ -360,14 +369,14 @@ async function main() {
             frappeEmployeeName: application.frappeEmployeeName,
             frappeProvisioningState: application.frappeProvisioningState,
             frappeRecordStatus: application.frappeRecordStatus,
-          }
+          },
         );
       } else {
         logTest(
           "Test 6: Database State",
           "FAIL",
           "Database state incorrect",
-          `Expected ${testEmployeeName}, got ${application?.frappeEmployeeName}`
+          `Expected ${testEmployeeName}, got ${application?.frappeEmployeeName}`,
         );
       }
     } catch (error) {
@@ -375,10 +384,9 @@ async function main() {
         "Test 6: Database State",
         "FAIL",
         "Database verification failed",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
-
   } catch (error) {
     console.error("Test setup failed:", error);
   } finally {
@@ -386,7 +394,7 @@ async function main() {
     console.log("Cleanup: Removing test data");
     try {
       if (testEmployeeName) {
-        await client.terminateEmployee(testEmployeeName, new Date().toISOString().split('T')[0]);
+        await client.terminateEmployee(testEmployeeName, new Date().toISOString().split("T")[0]);
         console.log(`✓ Marked Frappe employee ${testEmployeeName} as Left`);
       }
 

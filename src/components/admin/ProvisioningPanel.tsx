@@ -109,7 +109,11 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
   };
 
   const handleDeprovision = () => {
-    if (confirm(`Are you sure you want to deprovision all service accounts for ${employeeName}? This will revoke access to GitHub, Teams, ClickUp, and OrangeHRM ESS.`)) {
+    if (
+      confirm(
+        `Are you sure you want to deprovision all service accounts for ${employeeName}? This will revoke access to GitHub, Teams, ClickUp, and OrangeHRM ESS.`,
+      )
+    ) {
       deprovisionMutation.mutate();
     }
   };
@@ -143,7 +147,9 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open("https://github.com/orgs/Ciago-Technologies/people", "_blank")}
+              onClick={() =>
+                window.open("https://github.com/orgs/Ciago-Technologies/people", "_blank")
+              }
             >
               <ExternalLink className="h-4 w-4" />
             </Button>
@@ -195,9 +201,7 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
               <ExternalLink className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Will send invitation to join workspace
-          </p>
+          <p className="text-xs text-muted-foreground">Will send invitation to join workspace</p>
         </div>
 
         {/* Actions */}
@@ -250,7 +254,12 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
                   ) : githubUsername ? (
                     <XCircle className="h-4 w-4 text-red-600" />
                   ) : null}
-                  <span>GitHub: {provisionMutation.data.github.success ? "Invited" : provisionMutation.data.github.error || "Not configured"}</span>
+                  <span>
+                    GitHub:{" "}
+                    {provisionMutation.data.github.success
+                      ? "Invited"
+                      : provisionMutation.data.github.error || "Not configured"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {provisionMutation.data.teams.success ? (
@@ -258,7 +267,12 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
                   ) : teamsEmail ? (
                     <XCircle className="h-4 w-4 text-red-600" />
                   ) : null}
-                  <span>Teams: {provisionMutation.data.teams.success ? "Added" : provisionMutation.data.teams.error || "Not configured"}</span>
+                  <span>
+                    Teams:{" "}
+                    {provisionMutation.data.teams.success
+                      ? "Added"
+                      : provisionMutation.data.teams.error || "Not configured"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {provisionMutation.data.clickup.success ? (
@@ -266,7 +280,12 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
                   ) : clickupEmail ? (
                     <XCircle className="h-4 w-4 text-red-600" />
                   ) : null}
-                  <span>ClickUp: {provisionMutation.data.clickup.success ? "Invited" : provisionMutation.data.clickup.error || "Not configured"}</span>
+                  <span>
+                    ClickUp:{" "}
+                    {provisionMutation.data.clickup.success
+                      ? "Invited"
+                      : provisionMutation.data.clickup.error || "Not configured"}
+                  </span>
                 </div>
               </div>
             </AlertDescription>
@@ -275,8 +294,8 @@ export function ProvisioningPanel({ employeeId, employeeName }: ProvisioningPane
 
         <Alert>
           <AlertDescription className="text-xs">
-            <strong>Note:</strong> OrangeHRM ESS accounts are created automatically when an employee is hired.
-            This panel is for provisioning access to external collaboration tools.
+            <strong>Note:</strong> OrangeHRM ESS accounts are created automatically when an employee
+            is hired. This panel is for provisioning access to external collaboration tools.
           </AlertDescription>
         </Alert>
       </CardContent>

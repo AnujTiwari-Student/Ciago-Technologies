@@ -37,11 +37,7 @@ export class R2StorageAdapter implements StorageAdapter {
     });
   }
 
-  async createSignedUrl(
-    bucket: string,
-    path: string,
-    expiresIn: number,
-  ): Promise<SignedUrlResult> {
+  async createSignedUrl(bucket: string, path: string, expiresIn: number): Promise<SignedUrlResult> {
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucketName,

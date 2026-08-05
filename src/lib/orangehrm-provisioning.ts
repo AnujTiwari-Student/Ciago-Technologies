@@ -23,11 +23,11 @@ export interface ProvisioningResult {
   empNumber: number | null;
   employeeId: string | null;
   action:
-    | "created"             // New employee created in OrangeHRM
+    | "created" // New employee created in OrangeHRM
     | "already_provisioned" // Already had valid orangehrm_employee_id
-    | "reconciled"          // Found existing OrangeHRM employee and persisted ID
-    | "failed"              // Provisioning failed
-    | "manual_review";      // Multiple candidates found, needs manual intervention
+    | "reconciled" // Found existing OrangeHRM employee and persisted ID
+    | "failed" // Provisioning failed
+    | "manual_review"; // Multiple candidates found, needs manual intervention
   message: string;
   error?: string;
 }
@@ -36,21 +36,21 @@ export interface ProvisioningResult {
  * Error classification for intelligent retry logic
  */
 export type ProvisioningErrorType =
-  | "auth_failed"           // OAuth token issues (401) - retryable after token refresh
-  | "validation_error"      // Invalid payload (400) - not retryable
-  | "conflict"              // Duplicate/conflict (409) - needs reconciliation
-  | "rate_limit"            // Too many requests (429) - retryable with backoff
-  | "network_error"         // Connection/timeout - retryable
-  | "server_error"          // OrangeHRM 500 error - retryable
+  | "auth_failed" // OAuth token issues (401) - retryable after token refresh
+  | "validation_error" // Invalid payload (400) - not retryable
+  | "conflict" // Duplicate/conflict (409) - needs reconciliation
+  | "rate_limit" // Too many requests (429) - retryable with backoff
+  | "network_error" // Connection/timeout - retryable
+  | "server_error" // OrangeHRM 500 error - retryable
   | "reconciliation_conflict" // Multiple matching employees - needs manual review
-  | "unknown";              // Unknown error - log and investigate
+  | "unknown"; // Unknown error - log and investigate
 
 export class ProvisioningError extends Error {
   constructor(
     public type: ProvisioningErrorType,
     message: string,
     public statusCode?: number,
-    public originalError?: unknown
+    public originalError?: unknown,
   ) {
     super(message);
     this.name = "ProvisioningError";
@@ -115,12 +115,7 @@ export function classifyError(error: unknown): ProvisioningError {
  * Determine if error is retryable
  */
 export function isRetryable(error: ProvisioningError): boolean {
-  return [
-    "auth_failed",
-    "rate_limit",
-    "network_error",
-    "server_error"
-  ].includes(error.type);
+  return ["auth_failed", "rate_limit", "network_error", "server_error"].includes(error.type);
 }
 
 /**
@@ -148,7 +143,7 @@ export async function provisionOrangeHRMEmployee(
   applicationId: string,
   db: PrismaClient,
   client: OrangeHRMClient,
-  correlationId?: string
+  correlationId?: string,
 ): Promise<ProvisioningResult> {
   const logPrefix = `[orangehrm-provision:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting OrangeHRM employee provisioning`, { correlationId });
@@ -182,10 +177,7 @@ export async function provisionOrangeHRMEmployee(
     });
 
     // Step 2: Idempotency check - already provisioned?
-    if (
-      application.orangehrmEmployeeId &&
-      application.orangehrmProvisioningState === "succeeded"
-    ) {
+    if (application.orangehrmEmployeeId && application.orangehrmProvisioningState === "succeeded") {
       console.log(`${logPrefix} Already provisioned`, {
         empNumber: application.orangehrmEmployeeId,
       });
@@ -261,7 +253,9 @@ export async function provisionOrangeHRMEmployee(
       }
 
       // Employee ID exists but employee not found in OrangeHRM - needs reconciliation
-      console.warn(`${logPrefix} Employee ${application.orangehrmEmployeeId} not found in OrangeHRM`);
+      console.warn(
+        `${logPrefix} Employee ${application.orangehrmEmployeeId} not found in OrangeHRM`,
+      );
     }
 
     // Step 3a: CRITICAL CRASH RECOVERY - check if we're in "processing" state without employee ID
@@ -278,7 +272,7 @@ export async function provisionOrangeHRMEmployee(
       processingFor > 60_000 // Processing for more than 1 minute - likely a crash
     ) {
       console.error(
-        `${logPrefix} CRASH RECOVERY: Application stuck in 'processing' state without employee ID for ${Math.round(processingFor / 1000)}s`
+        `${logPrefix} CRASH RECOVERY: Application stuck in 'processing' state without employee ID for ${Math.round(processingFor / 1000)}s`,
       );
 
       // Generate the deterministic employeeId we would have used
@@ -301,19 +295,21 @@ export async function provisionOrangeHRMEmployee(
           action: "ORANGEHRM_CRASH_RECOVERY_MANUAL_REVIEW_REQUIRED",
           targetResource: `job_applications/${applicationId}`,
           details: {
-            reason: "Application stuck in processing state without employee ID - OrangeHRM create may have succeeded",
+            reason:
+              "Application stuck in processing state without employee ID - OrangeHRM create may have succeeded",
             deterministicEmployeeId,
             email: application.email,
             fullName: application.fullName,
             processingForSeconds: Math.round(processingFor / 1000),
-            instruction: "Check OrangeHRM for employee with employeeId or email, then manually set orangehrmEmployeeId",
+            instruction:
+              "Check OrangeHRM for employee with employeeId or email, then manually set orangehrmEmployeeId",
             correlationId,
           },
         },
       });
 
       console.error(
-        `${logPrefix} Marked for manual review - OrangeHRM may have employee with employeeId: ${deterministicEmployeeId}`
+        `${logPrefix} Marked for manual review - OrangeHRM may have employee with employeeId: ${deterministicEmployeeId}`,
       );
 
       return {
@@ -345,7 +341,9 @@ export async function provisionOrangeHRMEmployee(
       return {
         success: true,
         empNumber: application.orangehrmEmployeeId,
-        employeeId: application.orangehrmEmployeeId ? `EMP-${application.orangehrmEmployeeId}` : null,
+        employeeId: application.orangehrmEmployeeId
+          ? `EMP-${application.orangehrmEmployeeId}`
+          : null,
         action: "already_provisioned",
         message: "Another worker is processing this application",
       };
@@ -410,7 +408,7 @@ export async function provisionOrangeHRMEmployee(
       // Race condition: Another worker created and persisted employee
       // Reconcile by checking if an employee was created
       console.warn(
-        `${logPrefix} Failed to persist empNumber (race condition), attempting reconciliation`
+        `${logPrefix} Failed to persist empNumber (race condition), attempting reconciliation`,
       );
 
       // Check current state
@@ -420,7 +418,9 @@ export async function provisionOrangeHRMEmployee(
       });
 
       if (current?.orangehrmEmployeeId) {
-        console.log(`${logPrefix} Another worker persisted empNumber ${current.orangehrmEmployeeId}`);
+        console.log(
+          `${logPrefix} Another worker persisted empNumber ${current.orangehrmEmployeeId}`,
+        );
 
         // We created employee.empNumber but another worker persisted their ID
         // This is a duplicate employee scenario - log for cleanup
@@ -538,11 +538,7 @@ export async function provisionOrangeHRMEmployee(
  * 9. Crash recovery: deterministic where possible, manual review otherwise
  */
 
-import type {
-  OnboardingData,
-  OnboardingDataSources,
-  HiredUpsertResult,
-} from "./orangehrm-types";
+import type { OnboardingData, OnboardingDataSources, HiredUpsertResult } from "./orangehrm-types";
 
 /**
  * Extract onboarding data from Ciago database entities
@@ -569,12 +565,9 @@ export function extractOnboardingData(sources: OnboardingDataSources): Onboardin
       sources.onboardingRecord?.startDate ||
       null,
     startDate: sources.onboardingRecord?.startDate || null,
-    workLocation:
-      sources.employee?.workLocation || sources.jobPosting?.location || null,
+    workLocation: sources.employee?.workLocation || sources.jobPosting?.location || null,
     workModel:
-      sources.employee?.workModel ||
-      (sources.jobPosting?.isRemote ? "remote" : "office") ||
-      null,
+      sources.employee?.workModel || (sources.jobPosting?.isRemote ? "remote" : "office") || null,
 
     // Compensation
     compensationInr: sources.onboardingRecord?.compensationInr || null,
@@ -611,7 +604,7 @@ async function enrichOrangeHRMEmployee(
   empNumber: number,
   onboardingData: OnboardingData,
   client: OrangeHRMClient,
-  logPrefix: string
+  logPrefix: string,
 ): Promise<void> {
   console.log(`${logPrefix} Enriching OrangeHRM employee ${empNumber} with onboarding data`);
 
@@ -653,7 +646,9 @@ async function enrichOrangeHRMEmployee(
       });
       console.log(`${logPrefix} Updated contact details`);
     } catch (error) {
-      console.warn(`${logPrefix} Failed to update contact details (404 Not Found - known OrangeHRM Community limitation)`);
+      console.warn(
+        `${logPrefix} Failed to update contact details (404 Not Found - known OrangeHRM Community limitation)`,
+      );
       // Non-critical, continue
     }
   }
@@ -712,7 +707,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
   onboardingData: OnboardingData,
   db: PrismaClient,
   client: OrangeHRMClient,
-  correlationId?: string
+  correlationId?: string,
 ): Promise<HiredUpsertResult> {
   const logPrefix = `[orangehrm-hired:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting HIRED upsert/reconciliation`, { correlationId });
@@ -741,7 +736,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
     // CRITICAL: Verify status is still HIRED (race protection)
     if (application.status !== "hired") {
       console.warn(
-        `${logPrefix} Application status is ${application.status}, not hired - aborting upsert`
+        `${logPrefix} Application status is ${application.status}, not hired - aborting upsert`,
       );
 
       await db.auditLog.create({
@@ -774,17 +769,14 @@ export async function upsertOrangeHRMEmployeeAtHired(
     });
 
     // Step 2: Check if already fully processed (idempotency)
-    if (
-      application.orangehrmEmployeeId &&
-      application.orangehrmProvisioningState === "succeeded"
-    ) {
+    if (application.orangehrmEmployeeId && application.orangehrmProvisioningState === "succeeded") {
       // Verify employee still exists in OrangeHRM
       try {
         const existing = await client.getEmployee(application.orangehrmEmployeeId);
 
         if (existing) {
           console.log(
-            `${logPrefix} Already processed - employee ${application.orangehrmEmployeeId} exists and is mapped`
+            `${logPrefix} Already processed - employee ${application.orangehrmEmployeeId} exists and is mapped`,
           );
 
           // Idempotent enrichment: re-apply onboarding data (safe operation)
@@ -792,7 +784,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
             application.orangehrmEmployeeId,
             onboardingData,
             client,
-            logPrefix
+            logPrefix,
           );
 
           return {
@@ -806,7 +798,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
 
         // Employee deleted externally - continue to reconciliation
         console.warn(
-          `${logPrefix} Employee ${application.orangehrmEmployeeId} was deleted from OrangeHRM`
+          `${logPrefix} Employee ${application.orangehrmEmployeeId} was deleted from OrangeHRM`,
         );
       } catch (error) {
         console.error(`${logPrefix} Failed to verify existing employee:`, error);
@@ -817,7 +809,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
     // Step 3: Reconcile from job_applications.orangehrm_employee_id
     if (application.orangehrmEmployeeId) {
       console.log(
-        `${logPrefix} Reconciling existing empNumber ${application.orangehrmEmployeeId} from job_applications`
+        `${logPrefix} Reconciling existing empNumber ${application.orangehrmEmployeeId} from job_applications`,
       );
 
       try {
@@ -825,12 +817,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
 
         if (existing) {
           // Enrich with onboarding data
-          await enrichOrangeHRMEmployee(
-            existing.empNumber,
-            onboardingData,
-            client,
-            logPrefix
-          );
+          await enrichOrangeHRMEmployee(existing.empNumber, onboardingData, client, logPrefix);
 
           // Update provisioning state
           await db.jobApplication.updateMany({
@@ -870,7 +857,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
         }
 
         console.warn(
-          `${logPrefix} Employee ${application.orangehrmEmployeeId} not found in OrangeHRM - attempting employees table reconciliation`
+          `${logPrefix} Employee ${application.orangehrmEmployeeId} not found in OrangeHRM - attempting employees table reconciliation`,
         );
       } catch (error) {
         console.error(`${logPrefix} Reconciliation from job_applications failed:`, error);
@@ -890,13 +877,13 @@ export async function upsertOrangeHRMEmployeeAtHired(
 
     if (employee?.orangehrmEmployeeId) {
       console.log(
-        `${logPrefix} Found existing mapping in employees table: empNumber ${employee.orangehrmEmployeeId}`
+        `${logPrefix} Found existing mapping in employees table: empNumber ${employee.orangehrmEmployeeId}`,
       );
 
       // Check if employee was terminated (rejection/offboarding)
       if (employee.orangehrmRecordStatus === "TERMINATED") {
         console.warn(
-          `${logPrefix} Employee ${employee.orangehrmEmployeeId} is TERMINATED - cannot reuse for rehire`
+          `${logPrefix} Employee ${employee.orangehrmEmployeeId} is TERMINATED - cannot reuse for rehire`,
         );
 
         await db.auditLog.create({
@@ -906,8 +893,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
             details: {
               empNumber: employee.orangehrmEmployeeId,
               recordStatus: employee.orangehrmRecordStatus,
-              reason:
-                "Cannot reuse terminated employee for rehire - requires explicit rehire flow",
+              reason: "Cannot reuse terminated employee for rehire - requires explicit rehire flow",
               correlationId,
             },
           },
@@ -935,12 +921,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
             });
 
             // Enrich with onboarding data
-            await enrichOrangeHRMEmployee(
-              existing.empNumber,
-              onboardingData,
-              client,
-              logPrefix
-            );
+            await enrichOrangeHRMEmployee(existing.empNumber, onboardingData, client, logPrefix);
 
             await db.auditLog.create({
               data: {
@@ -956,7 +937,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
             });
 
             console.log(
-              `${logPrefix} Reconciled from employees table and enriched empNumber ${existing.empNumber}`
+              `${logPrefix} Reconciled from employees table and enriched empNumber ${existing.empNumber}`,
             );
 
             return {
@@ -968,24 +949,21 @@ export async function upsertOrangeHRMEmployeeAtHired(
             };
           }
         } catch (error) {
-          console.error(
-            `${logPrefix} Failed to reconcile from employees table:`,
-            error
-          );
+          console.error(`${logPrefix} Failed to reconcile from employees table:`, error);
         }
       }
     }
 
     // Step 5: No mapping exists - invoke centralized provisioning
     console.log(
-      `${logPrefix} No existing mapping found - invoking centralized provisioning for HIRED fallback`
+      `${logPrefix} No existing mapping found - invoking centralized provisioning for HIRED fallback`,
     );
 
     const provisioningResult = await provisionOrangeHRMEmployee(
       applicationId,
       db,
       client,
-      correlationId || `hired-fallback-${applicationId}`
+      correlationId || `hired-fallback-${applicationId}`,
     );
 
     if (!provisioningResult.success) {
@@ -1002,7 +980,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
     }
 
     console.log(
-      `${logPrefix} Centralized provisioning succeeded: empNumber ${provisioningResult.empNumber}`
+      `${logPrefix} Centralized provisioning succeeded: empNumber ${provisioningResult.empNumber}`,
     );
 
     // Enrich newly provisioned employee with onboarding data
@@ -1011,7 +989,7 @@ export async function upsertOrangeHRMEmployeeAtHired(
         provisioningResult.empNumber,
         onboardingData,
         client,
-        logPrefix
+        logPrefix,
       );
 
       await db.auditLog.create({

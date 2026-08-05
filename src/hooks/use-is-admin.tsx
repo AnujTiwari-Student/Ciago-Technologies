@@ -29,7 +29,9 @@ export function useIsAdmin() {
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading]);
 
   return { isAdmin, checked, loading };

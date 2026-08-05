@@ -65,19 +65,21 @@ async function main() {
 
   console.log("📦 Seeding departments...");
   for (const dept of DEPARTMENTS) {
-    await pool.query(
-      `INSERT INTO departments (code, name, description) VALUES ($1, $2, $3)`,
-      [dept.code, dept.name, dept.description]
-    );
+    await pool.query(`INSERT INTO departments (code, name, description) VALUES ($1, $2, $3)`, [
+      dept.code,
+      dept.name,
+      dept.description,
+    ]);
     console.log(`  ✓ ${dept.name}`);
   }
 
   console.log("\n📦 Seeding employment types...");
   for (const empType of EMPLOYMENT_TYPES) {
-    await pool.query(
-      `INSERT INTO employment_types (code, label, sort_order) VALUES ($1, $2, $3)`,
-      [empType.code, empType.label, empType.sortOrder]
-    );
+    await pool.query(`INSERT INTO employment_types (code, label, sort_order) VALUES ($1, $2, $3)`, [
+      empType.code,
+      empType.label,
+      empType.sortOrder,
+    ]);
     console.log(`  ✓ ${empType.label}`);
   }
 
@@ -85,7 +87,7 @@ async function main() {
   for (const status of STATUS_OPTIONS) {
     await pool.query(
       `INSERT INTO status_options (kind, code, label, sort_order) VALUES ($1, $2, $3, $4)`,
-      [status.kind, status.code, status.label, status.sortOrder]
+      [status.kind, status.code, status.label, status.sortOrder],
     );
     console.log(`  ✓ ${status.label}`);
   }

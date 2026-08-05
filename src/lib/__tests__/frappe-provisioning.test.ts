@@ -41,7 +41,10 @@ const createMockDb = () => {
         if (!app) return { count: 0 };
 
         // Simulate optimistic locking
-        if (where.lifecycleVersion !== undefined && app.lifecycleVersion !== where.lifecycleVersion) {
+        if (
+          where.lifecycleVersion !== undefined &&
+          app.lifecycleVersion !== where.lifecycleVersion
+        ) {
           return { count: 0 }; // Race condition - version mismatch
         }
 
@@ -104,7 +107,7 @@ const createMockFrappeClient = () => {
     }),
     searchEmployeesByEmail: vi.fn(async (email) => {
       return Array.from(employees.values()).filter(
-        (e) => e.personal_email === email || e.company_email === email
+        (e) => e.personal_email === email || e.company_email === email,
       );
     }),
     _employees: employees,
@@ -153,7 +156,9 @@ describe("provisionFrappeEmployee", () => {
 
     // Verify audit log
     expect(dbStore.auditLogs.length).toBeGreaterThan(0);
-    const createdLog = dbStore.auditLogs.find((l: any) => l.action === "FRAPPE_EMPLOYEE_CREATED_AT_APPLIED");
+    const createdLog = dbStore.auditLogs.find(
+      (l: any) => l.action === "FRAPPE_EMPLOYEE_CREATED_AT_APPLIED",
+    );
     expect(createdLog).toBeDefined();
     expect(createdLog.details.employeeName).toBe(result.employeeName);
   });
@@ -287,7 +292,9 @@ describe("provisionFrappeEmployee", () => {
     expect(app.frappeProvisioningState).toBe("needs_manual_review");
 
     // Should log crash recovery
-    const crashLog = dbStore.auditLogs.find((l: any) => l.action === "FRAPPE_CRASH_RECOVERY_MANUAL_REVIEW_REQUIRED");
+    const crashLog = dbStore.auditLogs.find(
+      (l: any) => l.action === "FRAPPE_CRASH_RECOVERY_MANUAL_REVIEW_REQUIRED",
+    );
     expect(crashLog).toBeDefined();
   });
 
@@ -319,7 +326,9 @@ describe("provisionFrappeEmployee", () => {
     expect(app.frappeProvisioningState).toBe("needs_manual_review");
 
     // Verify audit log documents placeholder usage
-    const createdLog = dbStore.auditLogs.find((l: any) => l.action === "FRAPPE_EMPLOYEE_CREATED_AT_APPLIED");
+    const createdLog = dbStore.auditLogs.find(
+      (l: any) => l.action === "FRAPPE_EMPLOYEE_CREATED_AT_APPLIED",
+    );
     expect(createdLog.details.usedPlaceholderValues).toBe(true);
     expect(createdLog.details.placeholderReason).toContain("Gender and date_of_birth");
   });

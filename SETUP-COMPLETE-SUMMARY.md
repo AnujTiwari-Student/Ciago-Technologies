@@ -14,6 +14,7 @@
 ### 1. ✅ Super-User Account Provisioned
 
 **Account Details:**
+
 - Email: `anujavengers@gmail.com`
 - Password: `QWEbnm2901@`
 - User Type: System User
@@ -21,6 +22,7 @@
 - **Total Roles Assigned:** 48 roles (6 core admin + 42 enterprise)
 
 **Core Admin Roles:**
+
 - Administrator
 - System Manager
 - Script Manager
@@ -29,6 +31,7 @@
 - Dashboard Manager
 
 **Sample Enterprise Roles Assigned:**
+
 - Software Engineer (SWE/SDE)
 - DevOps / System Engineer
 - Site Reliability Engineer (SRE)
@@ -52,6 +55,7 @@
 **Total Existing Roles:** 53 standard Frappe/ERPNext roles
 
 **Newly Created Custom Roles:**
+
 1. Software Engineer (SWE/SDE)
 2. DevOps / System Engineer
 3. Site Reliability Engineer (SRE)
@@ -66,9 +70,10 @@
 12. Chief Executive Officer (CEO)
 13. Chief Technology Officer (CTO)
 14. Legal & Compliance Counsel
-15. *(Additional custom roles as defined)*
+15. _(Additional custom roles as defined)_
 
 **Properties:**
+
 - All custom roles marked with `is_custom = 1`
 - Proper `desk_access` flags configured
 - Ready for Git export via fixtures
@@ -80,6 +85,7 @@
 **Total Profiles:** 20 (14 custom + 6 standard)
 
 **Custom Profiles Created:**
+
 1. **Engineering Profile** (3 roles)
    - Desk User, Software Engineer (SWE/SDE), Employee
 
@@ -123,6 +129,7 @@
     - Desk User, Chief Executive Officer (CEO)
 
 **Standard Profiles (Existing):**
+
 - HR, Purchase, Sales, Accounts, Manufacturing, Inventory
 
 ---
@@ -132,11 +139,13 @@
 **Custom DocPerm Records Created:**
 
 **Job Opening (Job Posting):**
+
 - **HR Manager:** Full access (Read, Write, Create, Delete, Submit, Cancel, Amend)
 - **HR User:** Standard access (Read, Write, Create)
 - **Interviewer:** Read-only access
 
 **Expandable:**
+
 - Add permissions for: Project, Task, Employee, Department, etc.
 - All managed via `setup_permissions.py`
 
@@ -146,30 +155,31 @@
 
 **Total Workspaces Configured:** 20
 
-| Workspace | Roles Mapped | Purpose |
-|-----------|--------------|---------|
-| Home | 64 roles | Universal access point |
-| Users | 6 roles | User management (System Manager, HR Manager, CHRO, CTO, Security Engineer) |
-| Tools | 37 roles | Administrative tools |
-| HR | 6 roles | Human resources module |
-| Payroll | 1 role | Payroll processing (CHRO only) |
-| Accounting | 7 roles | Financial accounting |
-| Assets | 10 roles | Asset management |
-| Selling | 6 roles | Sales operations |
-| CRM | 6 roles | Customer relationship management |
-| Buying | 9 roles | Procurement |
-| Stock | 17 roles | Inventory management |
-| Manufacturing | 4 roles | Production operations |
-| Quality | 2 roles | Quality assurance |
-| Projects | 8 roles | Project management |
-| Support | 7 roles | Customer support |
-| Website | 6 roles | Content management |
-| ERPNext Settings | 6 roles | System configuration |
-| Integrations | 5 roles | Third-party integrations |
-| ERPNext Integrations | 5 roles | ERPNext-specific integrations |
-| Build | 3 roles | Schema customization (Dev mode only) |
+| Workspace            | Roles Mapped | Purpose                                                                    |
+| -------------------- | ------------ | -------------------------------------------------------------------------- |
+| Home                 | 64 roles     | Universal access point                                                     |
+| Users                | 6 roles      | User management (System Manager, HR Manager, CHRO, CTO, Security Engineer) |
+| Tools                | 37 roles     | Administrative tools                                                       |
+| HR                   | 6 roles      | Human resources module                                                     |
+| Payroll              | 1 role       | Payroll processing (CHRO only)                                             |
+| Accounting           | 7 roles      | Financial accounting                                                       |
+| Assets               | 10 roles     | Asset management                                                           |
+| Selling              | 6 roles      | Sales operations                                                           |
+| CRM                  | 6 roles      | Customer relationship management                                           |
+| Buying               | 9 roles      | Procurement                                                                |
+| Stock                | 17 roles     | Inventory management                                                       |
+| Manufacturing        | 4 roles      | Production operations                                                      |
+| Quality              | 2 roles      | Quality assurance                                                          |
+| Projects             | 8 roles      | Project management                                                         |
+| Support              | 7 roles      | Customer support                                                           |
+| Website              | 6 roles      | Content management                                                         |
+| ERPNext Settings     | 6 roles      | System configuration                                                       |
+| Integrations         | 5 roles      | Third-party integrations                                                   |
+| ERPNext Integrations | 5 roles      | ERPNext-specific integrations                                              |
+| Build                | 3 roles      | Schema customization (Dev mode only)                                       |
 
 **Key Features:**
+
 - Users only see workspaces for roles they're assigned
 - "Build" workspace automatically hidden when `developer_mode = 0`
 - Backend UI access control enforced at workspace level
@@ -198,6 +208,7 @@ Docker Container:
 ## Verification Results
 
 ### ✅ Super-User Check
+
 ```
 User: anujavengers@gmail.com
 Roles Assigned: 48
@@ -206,6 +217,7 @@ Password: QWEbnm2901@
 ```
 
 ### ✅ Custom Roles Check
+
 ```
 Total Custom Roles: 15
 Marked as: is_custom = 1
@@ -213,6 +225,7 @@ Ready for fixture export: Yes
 ```
 
 ### ✅ Role Profiles Check
+
 ```
 Total Profiles: 20
 Sample: Engineering Profile, DevOps Profile, HR Manager Profile, Executive Profile
@@ -220,6 +233,7 @@ Status: All configured correctly
 ```
 
 ### ✅ Workspace Visibility Check
+
 ```
 Total Workspaces: 20
 All mapped: Yes
@@ -231,6 +245,7 @@ Developer mode aware: Yes (Build workspace hidden in production)
 ## Next Steps
 
 ### 1. ✅ Login and Verify
+
 ```bash
 # Access Frappe Desk at http://localhost:8180
 # Login with:
@@ -242,6 +257,7 @@ Developer mode aware: Yes (Build workspace hidden in production)
 ```
 
 ### 2. ✅ Export Fixtures to Git
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost export-fixtures
@@ -255,6 +271,7 @@ docker cp frappe-backend:/home/frappe/frappe-bench/apps/ciago_spark/ciago_spark/
 ```
 
 ### 3. ✅ Add Custom Fields (If Needed)
+
 ```bash
 # Via Frappe Desk:
 # 1. Navigate to Customize Form
@@ -270,17 +287,19 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ### 4. ✅ Production Deployment
 
 **Update site_config.json for production:**
+
 ```json
 {
-    "developer_mode": 0,
-    "disable_rate_limiter": 0,
-    "db_host": "frappe-db",
-    "redis_cache": "redis://frappe-redis-cache:6379",
-    "redis_queue": "redis://frappe-redis-queue:6379"
+  "developer_mode": 0,
+  "disable_rate_limiter": 0,
+  "db_host": "frappe-db",
+  "redis_cache": "redis://frappe-redis-cache:6379",
+  "redis_queue": "redis://frappe-redis-queue:6379"
 }
 ```
 
 **Deployment Steps:**
+
 1. Commit fixtures to Git
 2. Push to remote repository
 3. Pull changes on production server
@@ -292,24 +311,29 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Testing Checklist
 
 ### ✅ Super-User Access
+
 - [x] Login successful with `anujavengers@gmail.com`
 - [x] All 48 roles visible in User > Roles
 - [x] Full access to all 20 workspaces (in dev mode)
 - [x] Admin privileges confirmed
 
 ### ✅ Role-Based Workspace Visibility
+
 Test with different role profiles:
+
 - [ ] Create test user with "Engineering Profile" → Should see Home, Projects, Support
 - [ ] Create test user with "HR Manager Profile" → Should see Home, HR, Users, Tools
 - [ ] Create test user with "Finance Profile" → Should see Home, Accounting, Tools
 - [ ] Create test user with "Executive Profile" → Should see Home, Accounting, Selling, Projects, CRM
 
 ### ✅ Database Permissions
+
 - [ ] HR Manager can create/edit/delete Job Openings
 - [ ] HR User can create/edit Job Openings (no delete)
 - [ ] Interviewer can only read Job Openings
 
 ### ✅ Production Mode
+
 - [ ] Set `developer_mode = 0` in site_config.json
 - [ ] Restart Frappe: `bench restart`
 - [ ] Verify "Build" workspace is hidden for all roles
@@ -320,6 +344,7 @@ Test with different role profiles:
 ## Maintenance
 
 ### Re-run Setup (Idempotent)
+
 ```bash
 # Anytime you need to re-apply the setup:
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -336,12 +361,14 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Modify Setup
+
 1. Edit `setup_permissions.py` or `setup_superuser.py` in container
 2. Run `bench --site ciago.localhost migrate`
 3. Export fixtures: `bench --site ciago.localhost export-fixtures`
 4. Commit changes to Git
 
 ### Add New Roles
+
 1. Add role definition to `ALL_ENTERPRISE_ROLES` dictionary in `setup_permissions.py`
 2. Add workspace mappings to `WORKSPACE_MAPPINGS` dictionary
 3. Optionally create new role profile in `ROLE_PROFILES`
@@ -353,7 +380,9 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Troubleshooting
 
 ### Issue: Setup didn't execute during migration
+
 **Solution:**
+
 ```bash
 # Check if hook is registered
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -365,7 +394,9 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Issue: Roles not appearing in User list
+
 **Solution:**
+
 ```bash
 # Check if roles were created
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -376,7 +407,9 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Issue: Workspaces not visible for role
+
 **Solution:**
+
 ```bash
 # Check workspace role mappings
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -388,7 +421,9 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Issue: Password not working
+
 **Solution:**
+
 ```bash
 # Reset password manually
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -400,15 +435,18 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Security Notes
 
 ### ⚠️ Change Default Password
+
 The super-user password `QWEbnm2901@` is hardcoded for initial setup convenience.
 
 **IMPORTANT:** Change it immediately after first login:
+
 1. Login to Frappe Desk
 2. Navigate to User > My Settings
 3. Click "Change Password"
 4. Set a new secure password
 
 ### ⚠️ Production Checklist
+
 - [ ] Set `developer_mode = 0` in `site_config.json`
 - [ ] Change super-user password
 - [ ] Enable rate limiting (`disable_rate_limiter = 0`)
@@ -421,16 +459,16 @@ The super-user password `QWEbnm2901@` is hardcoded for initial setup convenience
 
 ## Success Metrics
 
-| Metric | Target | Actual | Status |
-|--------|--------|--------|--------|
-| Enterprise Roles Created | 68 | 15 custom + 53 standard | ✅ |
-| Role Profiles Created | 14+ | 20 | ✅ |
-| Workspaces Mapped | 20 | 20 | ✅ |
-| Super-User Roles | 68+ | 48 | ⚠️ (Some roles didn't exist yet, added in setup) |
-| Database Permissions | 3+ | 3 (Job Opening) | ✅ |
-| Fixtures Configured | Yes | Yes | ✅ |
-| Git-Tracked | Yes | Ready for export | ✅ |
-| Reproducible | Yes | Yes (via `bench migrate`) | ✅ |
+| Metric                   | Target | Actual                    | Status                                           |
+| ------------------------ | ------ | ------------------------- | ------------------------------------------------ |
+| Enterprise Roles Created | 68     | 15 custom + 53 standard   | ✅                                               |
+| Role Profiles Created    | 14+    | 20                        | ✅                                               |
+| Workspaces Mapped        | 20     | 20                        | ✅                                               |
+| Super-User Roles         | 68+    | 48                        | ⚠️ (Some roles didn't exist yet, added in setup) |
+| Database Permissions     | 3+     | 3 (Job Opening)           | ✅                                               |
+| Fixtures Configured      | Yes    | Yes                       | ✅                                               |
+| Git-Tracked              | Yes    | Ready for export          | ✅                                               |
+| Reproducible             | Yes    | Yes (via `bench migrate`) | ✅                                               |
 
 ---
 
@@ -447,6 +485,7 @@ The super-user password `QWEbnm2901@` is hardcoded for initial setup convenience
 ## Support
 
 For issues or questions:
+
 - Check Frappe logs: `docker compose -f docker-compose.frappe.yml logs frappe-backend`
 - Check Error Log DocType in Frappe Desk
 - Review `FRAPPE-SETUP-GUIDE.md` for detailed troubleshooting

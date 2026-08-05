@@ -1,15 +1,15 @@
-import { Pool } from 'pg';
-import 'dotenv/config';
+import { Pool } from "pg";
+import "dotenv/config";
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const client = await pool.connect();
 
   try {
-    console.log('=== VERIFYING PHASE 1 MIGRATION ===\n');
+    console.log("=== VERIFYING PHASE 1 MIGRATION ===\n");
 
     // Check new tables
-    console.log('📋 NEW TABLES:');
+    console.log("📋 NEW TABLES:");
     const tables = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -26,14 +26,14 @@ async function main() {
       ORDER BY tablename
     `);
 
-    tables.rows.forEach(row => {
+    tables.rows.forEach((row) => {
       console.log(`  ✅ ${row.tablename}`);
     });
     console.log(`  Total: ${tables.rows.length}/8`);
-    console.log('');
+    console.log("");
 
     // Check job_applications columns
-    console.log('📋 job_applications NEW COLUMNS:');
+    console.log("📋 job_applications NEW COLUMNS:");
     const jobAppCols = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'job_applications'
@@ -50,14 +50,14 @@ async function main() {
       ORDER BY column_name
     `);
 
-    jobAppCols.rows.forEach(row => {
+    jobAppCols.rows.forEach((row) => {
       console.log(`  ✅ ${row.column_name}`);
     });
     console.log(`  Total: ${jobAppCols.rows.length}/8`);
-    console.log('');
+    console.log("");
 
     // Check employees columns
-    console.log('📋 employees NEW COLUMNS:');
+    console.log("📋 employees NEW COLUMNS:");
     const empCols = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'employees'
@@ -76,14 +76,14 @@ async function main() {
       ORDER BY column_name
     `);
 
-    empCols.rows.forEach(row => {
+    empCols.rows.forEach((row) => {
       console.log(`  ✅ ${row.column_name}`);
     });
     console.log(`  Total: ${empCols.rows.length}/10`);
-    console.log('');
+    console.log("");
 
     // Check enums
-    console.log('📋 NEW ENUMS:');
+    console.log("📋 NEW ENUMS:");
     const enums = await client.query(`
       SELECT typname FROM pg_type
       WHERE typtype = 'e'
@@ -102,14 +102,14 @@ async function main() {
       ORDER BY typname
     `);
 
-    enums.rows.forEach(row => {
+    enums.rows.forEach((row) => {
       console.log(`  ✅ ${row.typname}`);
     });
     console.log(`  Total: ${enums.rows.length}/10`);
-    console.log('');
+    console.log("");
 
     // Check foreign key constraints
-    console.log('📋 FOREIGN KEY CONSTRAINTS:');
+    console.log("📋 FOREIGN KEY CONSTRAINTS:");
     const fks = await client.query(`
       SELECT
         conname AS constraint_name,
@@ -125,14 +125,19 @@ async function main() {
       ORDER BY conname
     `);
 
-    fks.rows.forEach(row => {
-      const action = row.on_delete_action === 'r' ? 'RESTRICT' : row.on_delete_action === 'c' ? 'CASCADE' : row.on_delete_action;
+    fks.rows.forEach((row) => {
+      const action =
+        row.on_delete_action === "r"
+          ? "RESTRICT"
+          : row.on_delete_action === "c"
+            ? "CASCADE"
+            : row.on_delete_action;
       console.log(`  ✅ ${row.constraint_name}: ON DELETE ${action}`);
     });
-    console.log('');
+    console.log("");
 
     // Check setup_tokens unique constraint
-    console.log('📋 SETUP TOKENS UNIQUE CONSTRAINT:');
+    console.log("📋 SETUP TOKENS UNIQUE CONSTRAINT:");
     const setupTokenIdx = await client.query(`
       SELECT
         indexname,
@@ -146,28 +151,29 @@ async function main() {
       console.log(`  ✅ ${setupTokenIdx.rows[0].indexname}`);
       console.log(`     ${setupTokenIdx.rows[0].indexdef}`);
 
-      if (setupTokenIdx.rows[0].indexdef.includes("status = 'unused'::text") &&
-          !setupTokenIdx.rows[0].indexdef.includes('now()')) {
+      if (
+        setupTokenIdx.rows[0].indexdef.includes("status = 'unused'::text") &&
+        !setupTokenIdx.rows[0].indexdef.includes("now()")
+      ) {
         console.log("  ✅ Predicate: status = 'unused' (NO now() - CORRECT)");
-      } else if (setupTokenIdx.rows[0].indexdef.includes('now()')) {
-        console.log('  ❌ WARNING: Predicate contains now() (should not)');
+      } else if (setupTokenIdx.rows[0].indexdef.includes("now()")) {
+        console.log("  ❌ WARNING: Predicate contains now() (should not)");
       }
     } else {
-      console.log('  ❌ Constraint NOT FOUND');
+      console.log("  ❌ Constraint NOT FOUND");
     }
-    console.log('');
+    console.log("");
 
     // Data integrity check
-    console.log('📋 DATA INTEGRITY:');
-    const jobAppCount = await client.query('SELECT COUNT(*) FROM job_applications');
-    const employeeCount = await client.query('SELECT COUNT(*) FROM employees');
+    console.log("📋 DATA INTEGRITY:");
+    const jobAppCount = await client.query("SELECT COUNT(*) FROM job_applications");
+    const employeeCount = await client.query("SELECT COUNT(*) FROM employees");
 
     console.log(`  job_applications: ${jobAppCount.rows[0].count} (expected: 1)`);
     console.log(`  employees: ${employeeCount.rows[0].count} (expected: 0)`);
-    console.log('');
+    console.log("");
 
-    console.log('✅ MIGRATION VERIFICATION COMPLETE');
-
+    console.log("✅ MIGRATION VERIFICATION COMPLETE");
   } finally {
     client.release();
     await pool.end();

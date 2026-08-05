@@ -124,9 +124,7 @@ function DocumentVerificationPanel() {
                       </span>
                     )}
                     {row.submitted_at && (
-                      <span>
-                        Submitted {new Date(row.submitted_at).toLocaleDateString()}
-                      </span>
+                      <span>Submitted {new Date(row.submitted_at).toLocaleDateString()}</span>
                     )}
                   </div>
                 </div>

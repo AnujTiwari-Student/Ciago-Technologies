@@ -319,7 +319,9 @@ function AvatarCard({ profile, loading }: { profile: ProfileRow | undefined; loa
       const path = `${user.id}/avatar-${Date.now()}.${ext}`;
       const buf = await file.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      await uploadFn({ data: { bucket: "avatars", path, base64, contentType: file.type, upsert: true } });
+      await uploadFn({
+        data: { bucket: "avatars", path, base64, contentType: file.type, upsert: true },
+      });
       await saveProfile({ data: { avatar_path: path } as any });
       toast.success("Avatar updated");
       qc.invalidateQueries({ queryKey: ["my-profile"] });

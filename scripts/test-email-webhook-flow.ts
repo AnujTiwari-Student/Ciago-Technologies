@@ -74,7 +74,7 @@ async function testEmailWebhookFlow() {
   // Step 3: Verify database updated
   console.log("\n3️⃣  Verifying database update...");
 
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Brief pause
+  await new Promise((resolve) => setTimeout(resolve, 1000)); // Brief pause
 
   const verifyResult = await sql`
     SELECT id, resend_id, status, delivered_at, updated_at
@@ -117,7 +117,7 @@ async function testEmailWebhookFlow() {
   const openedResult = await openedResponse.json();
   console.log(`   ✅ Webhook responded: ${openedResponse.status}`);
 
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   const openedCheck = await sql`
     SELECT status, opened_at

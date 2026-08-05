@@ -25,8 +25,10 @@ async function main() {
     const updated = await adminDb.jobPosting.update({
       where: { id: existing.id },
       data: {
-        summary: "We're looking for an experienced backend engineer to join our growing team and help build scalable systems.",
-        description: "As a Senior Backend Engineer, you will design and implement robust, scalable backend services. You'll work closely with product teams to deliver high-quality features and mentor junior engineers.",
+        summary:
+          "We're looking for an experienced backend engineer to join our growing team and help build scalable systems.",
+        description:
+          "As a Senior Backend Engineer, you will design and implement robust, scalable backend services. You'll work closely with product teams to deliver high-quality features and mentor junior engineers.",
         requirements: [
           "5+ years of experience with Node.js and TypeScript",
           "Strong understanding of microservices architecture",
@@ -47,7 +49,12 @@ async function main() {
     console.log("   ID:", updated.id);
     console.log("   Title:", updated.title);
     console.log("   Status:", updated.status);
-    console.log("   Salary: ₹" + updated.salaryMinInr?.toLocaleString("en-IN") + " - ₹" + updated.salaryMaxInr?.toLocaleString("en-IN"));
+    console.log(
+      "   Salary: ₹" +
+        updated.salaryMinInr?.toLocaleString("en-IN") +
+        " - ₹" +
+        updated.salaryMaxInr?.toLocaleString("en-IN"),
+    );
     console.log("   Location:", updated.location, "(Remote:", updated.isRemote + ")");
     console.log("   Department:", updated.department);
     console.log("   Requirements:", updated.requirements.length);
@@ -56,8 +63,10 @@ async function main() {
     const job = await adminDb.jobPosting.create({
       data: {
         title: "Senior Backend Engineer - Test",
-        summary: "We're looking for an experienced backend engineer to join our growing team and help build scalable systems.",
-        description: "As a Senior Backend Engineer, you will design and implement robust, scalable backend services. You'll work closely with product teams to deliver high-quality features and mentor junior engineers.",
+        summary:
+          "We're looking for an experienced backend engineer to join our growing team and help build scalable systems.",
+        description:
+          "As a Senior Backend Engineer, you will design and implement robust, scalable backend services. You'll work closely with product teams to deliver high-quality features and mentor junior engineers.",
         department: "Engineering",
         employmentType: "full_time",
         location: "Bangalore",
@@ -83,7 +92,12 @@ async function main() {
     console.log("   ID:", job.id);
     console.log("   Title:", job.title);
     console.log("   Status:", job.status);
-    console.log("   Salary: ₹" + job.salaryMinInr?.toLocaleString("en-IN") + " - ₹" + job.salaryMaxInr?.toLocaleString("en-IN"));
+    console.log(
+      "   Salary: ₹" +
+        job.salaryMinInr?.toLocaleString("en-IN") +
+        " - ₹" +
+        job.salaryMaxInr?.toLocaleString("en-IN"),
+    );
     console.log("   Location:", job.location, "(Remote:", job.isRemote + ")");
     console.log("   Department:", job.department);
     console.log("   Requirements:", job.requirements.length);

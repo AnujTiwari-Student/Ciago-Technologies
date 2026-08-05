@@ -29,7 +29,9 @@ export function useIsEmployee() {
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading]);
 
   return { isEmployee, checked, loading };

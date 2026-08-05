@@ -43,7 +43,7 @@ async function cleanupDatabase() {
   // Get admin user ID
   const adminUserResult = await pool.query(
     `SELECT auth_user_id FROM clerk_user_map WHERE email = $1`,
-    [ADMIN_EMAIL]
+    [ADMIN_EMAIL],
   );
 
   if (adminUserResult.rows.length === 0) {
@@ -56,12 +56,12 @@ async function cleanupDatabase() {
 
   // Get job postings that should be kept (published ones)
   const jobPostingsResult = await pool.query(
-    `SELECT id, title FROM job_postings WHERE status = 'published' OR status = 'draft'`
+    `SELECT id, title FROM job_postings WHERE status = 'published' OR status = 'draft'`,
   );
   const keepJobPostingIds = jobPostingsResult.rows.map((r) => r.id);
   console.log(
     `✓ Found ${keepJobPostingIds.length} job postings to keep:`,
-    jobPostingsResult.rows.map((r) => r.title).join(", ") || "none"
+    jobPostingsResult.rows.map((r) => r.title).join(", ") || "none",
   );
   console.log();
 
@@ -74,7 +74,11 @@ async function cleanupDatabase() {
       params: [adminUserId],
     },
     { name: "external_access_provisions", where: `employee_id != $1`, params: [adminUserId] },
-    { name: "offboarding_tasks", where: `offboarding_id IN (SELECT id FROM offboarding_records WHERE user_id != $1)`, params: [adminUserId] },
+    {
+      name: "offboarding_tasks",
+      where: `offboarding_id IN (SELECT id FROM offboarding_records WHERE user_id != $1)`,
+      params: [adminUserId],
+    },
     { name: "offboarding_records", where: `user_id != $1`, params: [adminUserId] },
     { name: "background_verifications", where: `user_id != $1`, params: [adminUserId] },
     { name: "setup_tokens", where: `user_id != $1`, params: [adminUserId] },
@@ -88,9 +92,10 @@ async function cleanupDatabase() {
     { name: "onboarding_records", where: `user_id != $1`, params: [adminUserId] },
     {
       name: "job_applications",
-      where: keepJobPostingIds.length > 0
-        ? `user_id != $1 OR role_id NOT IN (${keepJobPostingIds.map((_, i) => `$${i + 2}`).join(",")})`
-        : `user_id != $1`,
+      where:
+        keepJobPostingIds.length > 0
+          ? `user_id != $1 OR role_id NOT IN (${keepJobPostingIds.map((_, i) => `$${i + 2}`).join(",")})`
+          : `user_id != $1`,
       params: keepJobPostingIds.length > 0 ? [adminUserId, ...keepJobPostingIds] : [adminUserId],
     },
     { name: "salary_slips", where: `user_id != $1`, params: [adminUserId] },
@@ -115,7 +120,7 @@ async function cleanupDatabase() {
     try {
       const result = await pool.query(
         `DELETE FROM ${table.name} WHERE ${table.where}`,
-        table.params
+        table.params,
       );
       console.log(`✓ Cleaned ${table.name}: deleted ${result.rowCount} rows`);
     } catch (error: any) {
@@ -167,7 +172,7 @@ async function cleanupFrappe() {
       `SELECT frappe_employee_name FROM employees WHERE user_id = (
          SELECT auth_user_id FROM clerk_user_map WHERE email = $1
        )`,
-      [ADMIN_EMAIL]
+      [ADMIN_EMAIL],
     );
 
     const adminEmployeeName = adminEmployeeResult.rows[0]?.frappe_employee_name;
@@ -176,7 +181,7 @@ async function cleanupFrappe() {
     // Get job postings that should be kept
     const jobPostingsResult = await pool.query(
       `SELECT frappe_job_opening_name FROM job_postings
-       WHERE frappe_job_opening_name IS NOT NULL`
+       WHERE frappe_job_opening_name IS NOT NULL`,
     );
     const keepJobOpenings = jobPostingsResult.rows
       .map((r) => r.frappe_job_opening_name)
@@ -195,10 +200,7 @@ async function cleanupFrappe() {
           const fullEmp = await frappeClient.getEmployee(emp.name);
           if (fullEmp) {
             // Mark as Left instead of deleting (safer)
-            await frappeClient.terminateEmployee(
-              emp.name,
-              new Date().toISOString().split("T")[0]
-            );
+            await frappeClient.terminateEmployee(emp.name, new Date().toISOString().split("T")[0]);
             console.log(`   ✓ Terminated: ${emp.name}`);
             deletedEmployees++;
           }

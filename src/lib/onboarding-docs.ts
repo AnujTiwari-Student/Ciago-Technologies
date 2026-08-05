@@ -81,17 +81,28 @@ export function computeDocRequirements(
   }
 
   const type = (employmentType ?? "").toLowerCase().replace(/[\s-]+/g, "_");
-  const isInternOrPartTime = type === "internship" || type === "intern" || type === "part_time" || type === "parttime";
+  const isInternOrPartTime =
+    type === "internship" || type === "intern" || type === "part_time" || type === "parttime";
 
   // Helper: check if any degree document is already configured
-  const degreeDocKeys = ["ug_degree", "pg_degree", "degree_final", "degree_provisional", "degree_certificate"];
-  const hasDegreeDoc = Array.from(configured).some(key =>
-    degreeDocKeys.includes(key) || key.includes("degree")
+  const degreeDocKeys = [
+    "ug_degree",
+    "pg_degree",
+    "degree_final",
+    "degree_provisional",
+    "degree_certificate",
+  ];
+  const hasDegreeDoc = Array.from(configured).some(
+    (key) => degreeDocKeys.includes(key) || key.includes("degree"),
   );
 
   // 12th/Diploma is mandatory for all
   if (!configured.has("marksheet_12") && !configured.has("diploma_marksheet")) {
-    out.push({ key: "marksheet_12", mandatory: true, reason: "12th Marksheet or Diploma Certificate required" });
+    out.push({
+      key: "marksheet_12",
+      mandatory: true,
+      reason: "12th Marksheet or Diploma Certificate required",
+    });
   }
 
   if (isInternOrPartTime) {
@@ -101,7 +112,7 @@ export function computeDocRequirements(
       out.push({
         key: "semester_results",
         mandatory: true,
-        reason: "Required for interns/part-time - all semesters combined in one PDF"
+        reason: "Required for interns/part-time - all semesters combined in one PDF",
       });
     }
 
@@ -110,7 +121,7 @@ export function computeDocRequirements(
       out.push({
         key: "ug_degree",
         mandatory: false,
-        reason: "Optional for interns/part-time (may be pursuing)"
+        reason: "Optional for interns/part-time (may be pursuing)",
       });
     }
 
@@ -118,7 +129,7 @@ export function computeDocRequirements(
       out.push({
         key: "pg_degree",
         mandatory: false,
-        reason: "Optional for interns/part-time"
+        reason: "Optional for interns/part-time",
       });
     }
   } else {
@@ -128,7 +139,7 @@ export function computeDocRequirements(
       out.push({
         key: "ug_degree",
         mandatory: true,
-        reason: "Required for full-time/contract employees"
+        reason: "Required for full-time/contract employees",
       });
     }
 
@@ -137,7 +148,7 @@ export function computeDocRequirements(
       out.push({
         key: "pg_degree",
         mandatory: false,
-        reason: "Optional - PG Degree if applicable"
+        reason: "Optional - PG Degree if applicable",
       });
     }
 
@@ -146,7 +157,7 @@ export function computeDocRequirements(
       out.push({
         key: "pg_marksheet",
         mandatory: false,
-        reason: "Optional - PG consolidated marksheet"
+        reason: "Optional - PG consolidated marksheet",
       });
     }
 
@@ -156,7 +167,7 @@ export function computeDocRequirements(
         out.push({
           key: "address_proof",
           mandatory: false,
-          reason: "Optional - Address proof for full-time employees"
+          reason: "Optional - Address proof for full-time employees",
         });
       }
     }
@@ -166,7 +177,7 @@ export function computeDocRequirements(
         out.push({
           key: "past_employment_proof",
           mandatory: false,
-          reason: "Optional - Past employment proof for contract roles"
+          reason: "Optional - Past employment proof for contract roles",
         });
       }
     }
@@ -174,7 +185,7 @@ export function computeDocRequirements(
 
   // Remove duplicates by key (keep first occurrence)
   const seen = new Set<string>();
-  return out.filter(d => {
+  return out.filter((d) => {
     if (seen.has(d.key)) return false;
     seen.add(d.key);
     return true;

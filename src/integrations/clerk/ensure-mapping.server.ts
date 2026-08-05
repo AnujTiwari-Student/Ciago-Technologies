@@ -71,10 +71,7 @@ export const ensureClerkMapping = createServerFn({ method: "POST" })
       emailVerified,
       fullName: null,
     };
-    const result: ProvisionResult | ProvisionError = await provisionClerkUser(
-      adminDb,
-      identity,
-    );
+    const result: ProvisionResult | ProvisionError = await provisionClerkUser(adminDb, identity);
     if ("authUserId" in result) {
       // Ensure user has at least a default role
       const existingRole = await adminDb.userRole.findFirst({

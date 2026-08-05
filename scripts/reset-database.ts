@@ -173,7 +173,7 @@ async function main() {
     await pool.query(
       `INSERT INTO departments (code, name, description) VALUES ($1, $2, $3)
        ON CONFLICT (code) DO UPDATE SET name = $2, description = $3`,
-      [dept.code, dept.name, dept.description]
+      [dept.code, dept.name, dept.description],
     );
   }
   console.log(`✓ Created ${DEPARTMENTS.length} departments\n`);
@@ -184,7 +184,7 @@ async function main() {
     await pool.query(
       `INSERT INTO employment_types (code, label, sort_order) VALUES ($1, $2, $3)
        ON CONFLICT (code) DO UPDATE SET label = $2, sort_order = $3`,
-      [empType.code, empType.label, empType.sortOrder]
+      [empType.code, empType.label, empType.sortOrder],
     );
   }
   console.log(`✓ Created ${EMPLOYMENT_TYPES.length} employment types\n`);
@@ -195,7 +195,7 @@ async function main() {
     await pool.query(
       `INSERT INTO status_options (kind, code, label, sort_order) VALUES ($1, $2, $3, $4)
        ON CONFLICT (kind, code) DO UPDATE SET label = $3, sort_order = $4`,
-      [status.kind, status.code, status.label, status.sortOrder]
+      [status.kind, status.code, status.label, status.sortOrder],
     );
   }
   console.log(`✓ Created ${STATUS_OPTIONS.length} status options\n`);

@@ -102,7 +102,8 @@ describe("provisionClerkUser (Neon/Prisma)", () => {
     const newAuthUserId = "new-auth-uuid-456";
     (mockPrisma.$transaction as any).mockImplementationOnce(async (fn: any) => {
       return fn({
-        $queryRaw: vi.fn()
+        $queryRaw: vi
+          .fn()
           .mockResolvedValueOnce([]) // No existing user by email
           .mockResolvedValueOnce([{ id: newAuthUserId }]), // New user created
         clerkUserMap: {
@@ -133,7 +134,8 @@ describe("provisionClerkUser (Neon/Prisma)", () => {
 
     (mockPrisma.$transaction as any).mockImplementationOnce(async (fn: any) => {
       return fn({
-        $queryRaw: vi.fn()
+        $queryRaw: vi
+          .fn()
           .mockResolvedValueOnce([]) // No existing user by email
           .mockResolvedValueOnce([{ id: newAuthUserId }]), // New user created
         clerkUserMap: {

@@ -52,11 +52,7 @@ export class TeamsClient {
     this.tokenExpiry = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
   }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     await this.ensureToken();
 
     const url = `https://graph.microsoft.com/v1.0${path}`;

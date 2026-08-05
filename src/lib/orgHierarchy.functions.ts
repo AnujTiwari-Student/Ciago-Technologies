@@ -71,7 +71,9 @@ export const listStaffUsers = createServerFn({ method: "GET" })
     ]);
 
     const deptMap = new Map(depts.map((d) => [d.id, d.name]));
-    const emailMap = new Map(mappings.map((m) => [m.authUserId, { email: m.email, createdAt: m.createdAt }]));
+    const emailMap = new Map(
+      mappings.map((m) => [m.authUserId, { email: m.email, createdAt: m.createdAt }]),
+    );
     const nameMap = new Map(profiles.map((p) => [p.userId, p.fullName]));
 
     const bestByUser = new Map<string, { role: string; department_id: string | null }>();

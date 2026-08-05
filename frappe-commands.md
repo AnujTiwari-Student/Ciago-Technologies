@@ -3,11 +3,13 @@
 ## Initial Setup Commands
 
 ### 1. Start Frappe Stack
+
 ```bash
 docker compose -f docker-compose.frappe.yml up -d
 ```
 
 ### 2. Create Site (First Time Only)
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench new-site ciago.localhost \
@@ -24,6 +26,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### 3. Run Migration (Triggers Setup Automation)
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost migrate
@@ -34,6 +37,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Daily Operations
 
 ### Access Frappe Desk
+
 ```
 URL: http://localhost:8180
 Email: anujavengers@gmail.com
@@ -41,6 +45,7 @@ Password: QWEbnm2901@
 ```
 
 ### View Logs
+
 ```bash
 # Real-time logs
 docker compose -f docker-compose.frappe.yml logs -f frappe-backend
@@ -51,6 +56,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Restart Services
+
 ```bash
 # Restart all containers
 docker compose -f docker-compose.frappe.yml restart
@@ -68,12 +74,14 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Setup Management
 
 ### Re-run Setup Automation
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost migrate
 ```
 
 ### Manual Setup Execution
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -89,18 +97,21 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Fixture Management
 
 ### Export All Fixtures
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost export-fixtures
 ```
 
 ### Copy Fixtures to Host (for Git)
+
 ```bash
 docker cp frappe-backend:/home/frappe/frappe-bench/apps/ciago_spark/ciago_spark/fixtures/ \
   ./ciago_spark_fixtures/
 ```
 
 ### Import Fixtures (Production)
+
 ```bash
 # Fixtures are automatically imported during migration
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -112,6 +123,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## User Management
 
 ### Reset Password
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost set-password <email> <new-password>
@@ -122,6 +134,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### List All Users
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -130,6 +143,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Check User Roles
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -143,6 +157,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Role & Permission Management
 
 ### List All Custom Roles
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -151,6 +166,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### List All Role Profiles
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -159,6 +175,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Check Workspace Mappings
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
@@ -173,6 +190,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Database Management
 
 ### Backup Database
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost backup --with-files
@@ -181,12 +199,14 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Restore Database
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost restore /path/to/backup.sql.gz
 ```
 
 ### Database Console
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost mariadb
@@ -201,6 +221,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-db \
 ## Development Mode
 
 ### Enable Developer Mode
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost set-config developer_mode 1
@@ -209,6 +230,7 @@ docker compose -f docker-compose.frappe.yml restart frappe-backend
 ```
 
 ### Disable Developer Mode (Production)
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost set-config developer_mode 0
@@ -217,6 +239,7 @@ docker compose -f docker-compose.frappe.yml restart frappe-backend
 ```
 
 ### Check Current Config
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   cat /home/frappe/frappe-bench/sites/ciago.localhost/site_config.json
@@ -227,6 +250,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Custom App Management
 
 ### Edit Setup Files (Inside Container)
+
 ```bash
 # Access container shell
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash
@@ -245,6 +269,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Copy Files from Host to Container
+
 ```bash
 # Copy updated setup file
 docker cp C:\Ciago Spark\setup_permissions.py \
@@ -260,36 +285,42 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Troubleshooting
 
 ### Clear Cache
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost clear-cache
 ```
 
 ### Rebuild Assets
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench build --app ciago_spark
 ```
 
 ### Check Bench Version
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench version
 ```
 
 ### List Installed Apps
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost list-apps
 ```
 
 ### Console Access (Python)
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console
 ```
 
 ### Error Logs
+
 ```bash
 # View Error Log DocType via Frappe Desk:
 # Navigate to: Tools > Error Log
@@ -306,22 +337,26 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Maintenance
 
 ### Stop All Services
+
 ```bash
 docker compose -f docker-compose.frappe.yml down
 ```
 
 ### Stop and Remove Volumes (CAUTION: Data Loss)
+
 ```bash
 docker compose -f docker-compose.frappe.yml down -v
 ```
 
 ### Update Docker Images
+
 ```bash
 docker compose -f docker-compose.frappe.yml pull
 docker compose -f docker-compose.frappe.yml up -d
 ```
 
 ### Clean Docker Resources
+
 ```bash
 docker system prune -a
 ```
@@ -331,6 +366,7 @@ docker system prune -a
 ## Production Deployment
 
 ### Set Production Config
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash
 
@@ -350,6 +386,7 @@ docker compose -f docker-compose.frappe.yml restart
 ```
 
 ### Enable HTTPS (via Reverse Proxy)
+
 ```nginx
 # Example Nginx config (external to Docker)
 server {
@@ -381,6 +418,7 @@ server {
 ## Quick Verification
 
 ### Check Setup Status
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console << 'EOF'
@@ -410,6 +448,7 @@ EOF
 ## Emergency Commands
 
 ### Rollback Migration
+
 ```bash
 # Not directly supported - restore from backup
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -417,12 +456,14 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Force Kill Container
+
 ```bash
 docker kill frappe-backend
 docker compose -f docker-compose.frappe.yml up -d
 ```
 
 ### Access Database Directly
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-db \
   mariadb -u root -p -D ciago_localhost
@@ -433,6 +474,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-db \
 ## Useful Shortcuts
 
 ### Complete Restart
+
 ```bash
 docker compose -f docker-compose.frappe.yml down && \
 docker compose -f docker-compose.frappe.yml up -d && \
@@ -440,12 +482,14 @@ docker compose -f docker-compose.frappe.yml logs -f frappe-backend
 ```
 
 ### Quick Migrate + Export
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend bash -c \
   "bench --site ciago.localhost migrate && bench --site ciago.localhost export-fixtures"
 ```
 
 ### Full Setup Verification
+
 ```bash
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
   bench --site ciago.localhost console << 'EOF'

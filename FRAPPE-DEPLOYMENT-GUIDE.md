@@ -3,6 +3,7 @@
 ## Overview
 
 This guide covers:
+
 1. ✅ **Initial Production Deployment** - Deploy your Frappe setup from scratch
 2. ✅ **Development Workflow** - Make changes in dev and deploy to prod
 3. ✅ **CI/CD Pipeline** - Automate deployments with GitHub Actions
@@ -61,6 +62,7 @@ This guide covers:
 ### Prerequisites
 
 **Production Server Requirements:**
+
 - Ubuntu 22.04+ / Debian 11+ (recommended)
 - 4 GB RAM minimum (8 GB recommended)
 - 2 CPU cores minimum (4 cores recommended)
@@ -328,7 +330,7 @@ services:
       SOCKETIO: frappe-websocket-prod:9000
       FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
     ports:
-      - "127.0.0.1:8180:8080"  # Only localhost access (Nginx proxy will handle external)
+      - "127.0.0.1:8180:8080" # Only localhost access (Nginx proxy will handle external)
     volumes:
       - frappe-sites:/home/frappe/frappe-bench/sites
     networks:
@@ -390,6 +392,7 @@ docker compose -f docker-compose.production.yml exec frappe-backend \
 ```
 
 **This will automatically:**
+
 - ✅ Create all 68 enterprise roles
 - ✅ Provision super-user account
 - ✅ Configure role profiles
@@ -834,20 +837,20 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
           ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
-      
+
       - name: Add production server to known hosts
         run: |
           ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
-      
+
       - name: Deploy to production
         env:
           PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
@@ -886,7 +889,7 @@ jobs:
             
             echo "=== Deployment complete ==="
           ENDSSH
-      
+
       - name: Health check
         env:
           PROD_URL: ${{ secrets.FRAPPE_PRODUCTION_URL }}
@@ -894,13 +897,13 @@ jobs:
           sleep 10
           curl -f ${PROD_URL}/api/method/ping || exit 1
           echo "✓ Production site is healthy"
-      
+
       - name: Notify deployment
         if: always()
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
-          text: 'Frappe production deployment: ${{ job.status }}'
+          text: "Frappe production deployment: ${{ job.status }}"
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
@@ -1069,6 +1072,7 @@ docker compose -f docker-compose.production.yml exec frappe-backend \
 ## Summary Checklist
 
 ### Initial Deployment ✅
+
 - [ ] Production server provisioned
 - [ ] Docker & Docker Compose installed
 - [ ] Repository cloned
@@ -1080,6 +1084,7 @@ docker compose -f docker-compose.production.yml exec frappe-backend \
 - [ ] Automated backups setup
 
 ### Regular Deployment ✅
+
 - [ ] Changes tested in development
 - [ ] Fixtures exported (if applicable)
 - [ ] Code committed and pushed to Git
@@ -1091,6 +1096,7 @@ docker compose -f docker-compose.production.yml exec frappe-backend \
 - [ ] Health check passed
 
 ### Monitoring ✅
+
 - [ ] Daily backups verified
 - [ ] Disk space monitored
 - [ ] Error logs checked weekly

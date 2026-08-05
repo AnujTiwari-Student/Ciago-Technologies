@@ -65,16 +65,12 @@ async function testFlagOffSafety() {
     const flagEnabled = await isFrappeEmployeeSyncEnabled();
 
     if (flagEnabled === false) {
-      logTest(
-        "Test 1: Feature flag OFF",
-        "PASS",
-        `Flag correctly returns false (env=${envValue})`
-      );
+      logTest("Test 1: Feature flag OFF", "PASS", `Flag correctly returns false (env=${envValue})`);
     } else {
       logTest(
         "Test 1: Feature flag OFF",
         "FAIL",
-        `Flag returned true when it should be false (env=${envValue})`
+        `Flag returned true when it should be false (env=${envValue})`,
       );
     }
   } catch (error) {
@@ -82,7 +78,7 @@ async function testFlagOffSafety() {
       "Test 1: Feature flag OFF",
       "FAIL",
       "Failed to check flag status",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 
@@ -114,14 +110,14 @@ async function testFlagOffSafety() {
     logTest(
       "Test 2: Mock application created",
       "PASS",
-      `Application ${testApplicationId.slice(0, 8)} created (status: applied)`
+      `Application ${testApplicationId.slice(0, 8)} created (status: applied)`,
     );
   } catch (error) {
     logTest(
       "Test 2: Mock application created",
       "FAIL",
       "Failed to create mock application",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
     process.exit(1);
   }
@@ -139,13 +135,13 @@ async function testFlagOffSafety() {
       logTest(
         "Test 3: APPLIED handler with flag OFF",
         "PASS",
-        "Handler correctly skipped (triggered=false, reason=feature_flag_disabled)"
+        "Handler correctly skipped (triggered=false, reason=feature_flag_disabled)",
       );
     } else {
       logTest(
         "Test 3: APPLIED handler with flag OFF",
         "FAIL",
-        `Handler should not trigger with flag OFF (triggered=${result.triggered}, reason=${result.reason})`
+        `Handler should not trigger with flag OFF (triggered=${result.triggered}, reason=${result.reason})`,
       );
     }
 
@@ -161,13 +157,13 @@ async function testFlagOffSafety() {
       logTest(
         "Test 3a: No APPLIED integration event created",
         "PASS",
-        "No Frappe provisioning events found (correct)"
+        "No Frappe provisioning events found (correct)",
       );
     } else {
       logTest(
         "Test 3a: No APPLIED integration event created",
         "FAIL",
-        `Found ${events.length} Frappe provisioning events (should be 0)`
+        `Found ${events.length} Frappe provisioning events (should be 0)`,
       );
     }
   } catch (error) {
@@ -175,7 +171,7 @@ async function testFlagOffSafety() {
       "Test 3: APPLIED handler with flag OFF",
       "FAIL",
       "Handler threw unexpected error",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 
@@ -199,13 +195,13 @@ async function testFlagOffSafety() {
       logTest(
         "Test 4: HIRED handler with flag OFF",
         "PASS",
-        "Handler correctly skipped (triggered=false, reason=feature_flag_disabled)"
+        "Handler correctly skipped (triggered=false, reason=feature_flag_disabled)",
       );
     } else {
       logTest(
         "Test 4: HIRED handler with flag OFF",
         "FAIL",
-        `Handler should not trigger with flag OFF (triggered=${result.triggered}, reason=${result.reason})`
+        `Handler should not trigger with flag OFF (triggered=${result.triggered}, reason=${result.reason})`,
       );
     }
 
@@ -221,13 +217,13 @@ async function testFlagOffSafety() {
       logTest(
         "Test 4a: No HIRED integration event created",
         "PASS",
-        "No Frappe upsert events found (correct)"
+        "No Frappe upsert events found (correct)",
       );
     } else {
       logTest(
         "Test 4a: No HIRED integration event created",
         "FAIL",
-        `Found ${events.length} Frappe upsert events (should be 0)`
+        `Found ${events.length} Frappe upsert events (should be 0)`,
       );
     }
   } catch (error) {
@@ -235,7 +231,7 @@ async function testFlagOffSafety() {
       "Test 4: HIRED handler with flag OFF",
       "FAIL",
       "Handler threw unexpected error",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 
@@ -258,13 +254,13 @@ async function testFlagOffSafety() {
       logTest(
         "Test 5: Application state unchanged",
         "PASS",
-        "No Frappe fields modified (all null/not_started)"
+        "No Frappe fields modified (all null/not_started)",
       );
     } else {
       logTest(
         "Test 5: Application state unchanged",
         "FAIL",
-        `Frappe fields should be unchanged (employeeName=${app?.frappeEmployeeName}, state=${app?.frappeProvisioningState})`
+        `Frappe fields should be unchanged (employeeName=${app?.frappeEmployeeName}, state=${app?.frappeProvisioningState})`,
       );
     }
   } catch (error) {
@@ -272,7 +268,7 @@ async function testFlagOffSafety() {
       "Test 5: Application state unchanged",
       "FAIL",
       "Failed to check application state",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 

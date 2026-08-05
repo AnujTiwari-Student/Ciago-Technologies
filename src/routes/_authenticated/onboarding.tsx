@@ -3,7 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { CheckCircle2, FileSignature, MessageSquareWarning, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  FileSignature,
+  MessageSquareWarning,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
@@ -474,15 +481,15 @@ function OnboardingPage() {
             </CardContent>
           </Card>
         ) : offer.onboarding?.status === "submitted" &&
-           offer.onboarding?.verification_status !== "changes_requested" &&
-           offer.onboarding?.verification_status !== "rejected" ? (
+          offer.onboarding?.verification_status !== "changes_requested" &&
+          offer.onboarding?.verification_status !== "rejected" ? (
           <Card className="mt-10 border-emerald-500/40 bg-emerald-500/5">
             <CardContent className="flex flex-col items-center p-10 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               <h2 className="mt-4 text-xl font-bold">Onboarding submitted</h2>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                Your documents are with the Admin team for verification. You'll get an email once your
-                Date of Joining is confirmed.
+                Your documents are with the Admin team for verification. You'll get an email once
+                your Date of Joining is confirmed.
               </p>
               <Button asChild className="mt-6 bg-brand text-brand-foreground hover:bg-brand-glow">
                 <Link to="/my-applications">View My Applications</Link>
@@ -504,9 +511,12 @@ function OnboardingPage() {
                   <div className="flex items-start gap-3">
                     <MessageSquareWarning className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                     <div className="flex-1">
-                      <h3 className="font-semibold text-amber-900 dark:text-amber-200">Changes Requested</h3>
+                      <h3 className="font-semibold text-amber-900 dark:text-amber-200">
+                        Changes Requested
+                      </h3>
                       <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                        HR has requested changes to your onboarding documents. Please review the feedback below and re-upload the necessary documents.
+                        HR has requested changes to your onboarding documents. Please review the
+                        feedback below and re-upload the necessary documents.
                       </p>
                       {offer.onboarding.rejection_feedback && (
                         <p className="mt-2 text-sm text-amber-900 dark:text-amber-100 font-medium">
@@ -524,9 +534,12 @@ function OnboardingPage() {
                   <div className="flex items-start gap-3">
                     <XCircle className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
                     <div className="flex-1">
-                      <h3 className="font-semibold text-rose-900 dark:text-rose-200">Onboarding Rejected</h3>
+                      <h3 className="font-semibold text-rose-900 dark:text-rose-200">
+                        Onboarding Rejected
+                      </h3>
                       <p className="mt-1 text-sm text-rose-800 dark:text-rose-300">
-                        Your onboarding submission has been rejected. Please review the feedback below, update your documents, and re-submit.
+                        Your onboarding submission has been rejected. Please review the feedback
+                        below, update your documents, and re-submit.
                       </p>
                       {offer.onboarding.rejection_feedback && (
                         <p className="mt-2 text-sm text-rose-900 dark:text-rose-100 font-medium">
@@ -624,7 +637,8 @@ function OnboardingPage() {
                             ⚠️ Action Required
                           </p>
                           <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
-                            HR has requested changes. Please review the feedback on each document below and re-upload the corrected files.
+                            HR has requested changes. Please review the feedback on each document
+                            below and re-upload the corrected files.
                           </p>
                         </div>
                       )}
@@ -997,7 +1011,9 @@ function OnboardingPage() {
                     </section>
 
                     <section className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
-                      <h3 className="text-sm font-semibold mb-2">Terms, policies & acknowledgements</h3>
+                      <h3 className="text-sm font-semibold mb-2">
+                        Terms, policies & acknowledgements
+                      </h3>
                       <label className="flex items-start gap-3">
                         <Checkbox
                           checked={idAck}
@@ -1015,8 +1031,7 @@ function OnboardingPage() {
                           className="mt-1"
                         />
                         <span className="text-sm">
-                          I have read and agree to abide by the{" "}
-                          <strong>Code of Conduct</strong> and{" "}
+                          I have read and agree to abide by the <strong>Code of Conduct</strong> and{" "}
                           <strong>Information Security policies</strong> of Ciago Technologies.
                         </span>
                       </label>
@@ -1027,8 +1042,8 @@ function OnboardingPage() {
                           className="mt-1"
                         />
                         <span className="text-sm">
-                          I accept the <strong>Terms of Employment</strong> and understand my
-                          rights and obligations as outlined in the Employee Handbook.
+                          I accept the <strong>Terms of Employment</strong> and understand my rights
+                          and obligations as outlined in the Employee Handbook.
                         </span>
                       </label>
                       <label className="flex items-start gap-3">
@@ -1085,19 +1100,32 @@ function OnboardingPage() {
                     {!canSavePaperwork && (
                       <div className="space-y-1 text-xs text-muted-foreground">
                         {missingDocs.length > 0 && (
-                          <p>• Missing documents: {missingDocs.map((k) => docLabel(k)).join(", ")}</p>
+                          <p>
+                            • Missing documents: {missingDocs.map((k) => docLabel(k)).join(", ")}
+                          </p>
                         )}
                         {!personalEmail.trim() && <p>• Personal email is required</p>}
-                        {personalPhone.trim().length < 10 && <p>• Valid mobile number is required</p>}
+                        {personalPhone.trim().length < 10 && (
+                          <p>• Valid mobile number is required</p>
+                        )}
                         {!dateOfBirth && <p>• Date of birth is required</p>}
                         {bankName.trim().length < 2 && <p>• Bank name is required</p>}
-                        {accountNumber.trim().length < 8 && <p>• Valid account number is required</p>}
-                        {ifscCode.trim().length !== 11 && <p>• Valid 11-character IFSC code is required</p>}
-                        {panNumber.trim().length !== 10 && <p>• Valid 10-character PAN number is required</p>}
-                        {eSignature.trim().length < 2 && <p>• Electronic signature is required</p>}
-                        {(!idAck || !codeAck || !termsAck || !privacyAck || !dataProcessingAck || !backgroundCheckAck) && (
-                          <p>• All acknowledgements must be accepted</p>
+                        {accountNumber.trim().length < 8 && (
+                          <p>• Valid account number is required</p>
                         )}
+                        {ifscCode.trim().length !== 11 && (
+                          <p>• Valid 11-character IFSC code is required</p>
+                        )}
+                        {panNumber.trim().length !== 10 && (
+                          <p>• Valid 10-character PAN number is required</p>
+                        )}
+                        {eSignature.trim().length < 2 && <p>• Electronic signature is required</p>}
+                        {(!idAck ||
+                          !codeAck ||
+                          !termsAck ||
+                          !privacyAck ||
+                          !dataProcessingAck ||
+                          !backgroundCheckAck) && <p>• All acknowledgements must be accepted</p>}
                       </div>
                     )}
                   </div>
@@ -1112,8 +1140,8 @@ function OnboardingPage() {
                       <div className="mt-4">
                         <h2 className="text-xl font-bold">Final review</h2>
                         <p className="mt-2 text-sm text-muted-foreground">
-                          Please review your information before submitting. This will be sent to Admin
-                          for document verification and Date of Joining assignment.
+                          Please review your information before submitting. This will be sent to
+                          Admin for document verification and Date of Joining assignment.
                         </p>
                       </div>
                     </div>

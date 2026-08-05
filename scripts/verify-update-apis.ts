@@ -52,11 +52,15 @@ async function main() {
     } catch (error: any) {
       console.error(`❌ updateEmployee() FAILED`);
       console.error(`   Error: ${error.message}`);
-      console.error(`   This suggests PUT /pim/employees/{empNumber} is NOT supported or requires different permissions\n`);
+      console.error(
+        `   This suggests PUT /pim/employees/{empNumber} is NOT supported or requires different permissions\n`,
+      );
     }
 
     // Step 4: Test updateEmployeeContactDetails()
-    console.log("[4/5] Testing updateEmployeeContactDetails() - PUT /pim/employees/{empNumber}/contact-details");
+    console.log(
+      "[4/5] Testing updateEmployeeContactDetails() - PUT /pim/employees/{empNumber}/contact-details",
+    );
     try {
       await client.updateEmployeeContactDetails(testEmpNumber, {
         workEmail: `api.test.${Date.now()}@example.invalid`,
@@ -67,11 +71,15 @@ async function main() {
     } catch (error: any) {
       console.error(`❌ updateEmployeeContactDetails() FAILED`);
       console.error(`   Error: ${error.message}`);
-      console.error(`   This suggests PUT /pim/employees/{empNumber}/contact-details endpoint does NOT exist in OrangeHRM Community v5.7\n`);
+      console.error(
+        `   This suggests PUT /pim/employees/{empNumber}/contact-details endpoint does NOT exist in OrangeHRM Community v5.7\n`,
+      );
     }
 
     // Step 5: Test updateEmployeeJobDetails() - known to work
-    console.log("[5/5] Testing updateEmployeeJobDetails() - PUT /pim/employees/{empNumber}/job-details");
+    console.log(
+      "[5/5] Testing updateEmployeeJobDetails() - PUT /pim/employees/{empNumber}/job-details",
+    );
     try {
       await client.updateEmployeeJobDetails(testEmpNumber, {
         joinedDate: "2026-09-01",
@@ -99,7 +107,6 @@ async function main() {
     console.log("  updateEmployeeContactDetails()   ❓ CHECK OUTPUT ABOVE");
     console.log("  updateEmployeeJobDetails()       ✅ WORKS");
     console.log("  terminateEmployee()              ✅ WORKS\n");
-
   } catch (error: any) {
     console.error("\n=== Verification Failed ===");
     console.error(`Error: ${error.message}\n`);

@@ -104,30 +104,34 @@ export const listDirectory = createServerFn({ method: "GET" })
 
     // Fetch document counts for all onboarding records
     const onboardingIds = onboardingRecords.map((o) => o.id);
-    const documents = onboardingIds.length > 0
-      ? await adminDb.onboardingDocument.findMany({
-          where: {
-            onboardingId: { in: onboardingIds },
-            supersededAt: null, // Only current versions (not superseded)
-          },
-          select: {
-            onboardingId: true,
-            status: true,
-          },
-        })
-      : [];
+    const documents =
+      onboardingIds.length > 0
+        ? await adminDb.onboardingDocument.findMany({
+            where: {
+              onboardingId: { in: onboardingIds },
+              supersededAt: null, // Only current versions (not superseded)
+            },
+            select: {
+              onboardingId: true,
+              status: true,
+            },
+          })
+        : [];
 
     // Group documents by onboarding ID
-    const docsByOnboarding = documents.reduce((acc, doc) => {
-      if (!acc[doc.onboardingId]) {
-        acc[doc.onboardingId] = { total: 0, approved: 0 };
-      }
-      acc[doc.onboardingId].total++;
-      if (doc.status === "approved") {
-        acc[doc.onboardingId].approved++;
-      }
-      return acc;
-    }, {} as Record<string, { total: number; approved: number }>);
+    const docsByOnboarding = documents.reduce(
+      (acc, doc) => {
+        if (!acc[doc.onboardingId]) {
+          acc[doc.onboardingId] = { total: 0, approved: 0 };
+        }
+        acc[doc.onboardingId].total++;
+        if (doc.status === "approved") {
+          acc[doc.onboardingId].approved++;
+        }
+        return acc;
+      },
+      {} as Record<string, { total: number; approved: number }>,
+    );
 
     const rows: DirectoryRow[] = users.map((u) => {
       const profile = profileMap.get(u.authUserId);
@@ -150,7 +154,10 @@ export const listDirectory = createServerFn({ method: "GET" })
         docVerificationStatus = "verified";
       } else if (onboarding?.verificationStatus === "rejected") {
         docVerificationStatus = "rejected";
-      } else if (onboarding?.verificationStatus === "pending" || onboarding?.verificationStatus === "changes_requested") {
+      } else if (
+        onboarding?.verificationStatus === "pending" ||
+        onboarding?.verificationStatus === "changes_requested"
+      ) {
         docVerificationStatus = "pending";
       }
 
@@ -188,10 +195,12 @@ export const listDirectory = createServerFn({ method: "GET" })
 export const updateBgCheckStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: unknown) =>
-    z.object({
-      user_id: z.string().uuid(),
-      status: z.enum(["not_started", "in_progress", "cleared", "flagged"]),
-    }).parse(d)
+    z
+      .object({
+        user_id: z.string().uuid(),
+        status: z.enum(["not_started", "in_progress", "cleared", "flagged"]),
+      })
+      .parse(d),
   )
   .handler(async ({ data, context }) => {
     const actor = await getActorRoles(null, context.userId);
@@ -246,7 +255,7 @@ export const getUserDetail = createServerFn({ method: "GET" })
     ]);
 
     // Storage: signed URLs for identity docs (R2) — non-fatal if storage fails
-    let signedDocs: Array<typeof docs[number] & { signed_url: string | null }> = [];
+    let signedDocs: Array<(typeof docs)[number] & { signed_url: string | null }> = [];
     try {
       const { getStorage } = await import("@/lib/storage");
       const storage = getStorage();
@@ -269,7 +278,11 @@ export const getUserDetail = createServerFn({ method: "GET" })
     return {
       employee: emp,
       profile: profile
-        ? { user_id: profile.userId, full_name: profile.fullName, public_email: profile.publicEmail }
+        ? {
+            user_id: profile.userId,
+            full_name: profile.fullName,
+            public_email: profile.publicEmail,
+          }
         : null,
       roles: roles.map((r) => r.role as AppRole),
       is_admin_target: !!targetAdminRole,
@@ -289,7 +302,11 @@ const employeeSchema = z.object({
   designation: z.string().trim().max(160).optional().nullable(),
   reporting_manager_id: z.string().uuid().optional().nullable(),
   reporting_hr_id: z.string().uuid().optional().nullable(),
-  doj: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  doj: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
   employment_type: z.enum(EMPLOYMENT_TYPES).optional().nullable(),
   base_salary: z.number().nonnegative().max(999999999).optional().nullable(),
   salary_currency: z.string().trim().min(1).max(6).default("INR").optional(),

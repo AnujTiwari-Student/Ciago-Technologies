@@ -60,7 +60,7 @@ export function generateIdempotencyKey(
   eventType: string,
   entityType: string,
   entityId: string,
-  suffix?: string
+  suffix?: string,
 ): string {
   const parts = [eventType, entityType, entityId];
   if (suffix) parts.push(suffix);
@@ -89,7 +89,7 @@ export function getWorkerId(): string {
  */
 export async function createIntegrationEvent(
   db: PrismaClient,
-  payload: CreateIntegrationEventPayload
+  payload: CreateIntegrationEventPayload,
 ): Promise<IntegrationEventResult> {
   const idempotencyKey =
     payload.idempotencyKey ||
@@ -188,7 +188,7 @@ export async function getEventByIdempotencyKey(db: PrismaClient, idempotencyKey:
 export async function claimEvent(
   db: PrismaClient,
   eventId: string,
-  workerId?: string
+  workerId?: string,
 ): Promise<ClaimEventResult> {
   const actualWorkerId = workerId || getWorkerId();
   const logPrefix = `[claim-event:${eventId.slice(0, 8)}]`;
@@ -312,7 +312,7 @@ export async function claimEvent(
 export async function updateEventStatus(
   db: PrismaClient,
   eventId: string,
-  payload: UpdateEventStatusPayload
+  payload: UpdateEventStatusPayload,
 ): Promise<void> {
   const logPrefix = `[update-event:${eventId.slice(0, 8)}]`;
 
@@ -355,7 +355,7 @@ export async function updateEventStatus(
 export async function markEventSucceeded(
   db: PrismaClient,
   eventId: string,
-  resultData?: unknown
+  resultData?: unknown,
 ): Promise<void> {
   await updateEventStatus(db, eventId, {
     status: "succeeded",
@@ -369,7 +369,7 @@ export async function markEventSucceeded(
 export async function markEventFailed(
   db: PrismaClient,
   eventId: string,
-  error: { message: string; code?: string; retryable?: boolean }
+  error: { message: string; code?: string; retryable?: boolean },
 ): Promise<void> {
   const nextRetryAt = error.retryable
     ? new Date(Date.now() + 60_000) // Retry in 1 minute

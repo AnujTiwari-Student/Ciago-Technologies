@@ -21,11 +21,11 @@
 
 ### Mapping Results
 
-| Field | Input | Result | Confidence |
-|-------|-------|--------|------------|
-| **Designation** | "Site Reliability Engineer" | Would auto-create | `auto_created` |
-| **Department** | "Engineering" | "Engineering - CT" | `fuzzy_match` (0.87) |
-| **Employment Type** | "full_time" | ❌ **FAILED** | N/A |
+| Field               | Input                       | Result             | Confidence           |
+| ------------------- | --------------------------- | ------------------ | -------------------- |
+| **Designation**     | "Site Reliability Engineer" | Would auto-create  | `auto_created`       |
+| **Department**      | "Engineering"               | "Engineering - CT" | `fuzzy_match` (0.87) |
+| **Employment Type** | "full_time"                 | ❌ **FAILED**      | N/A                  |
 
 ### HR Admin Alert
 
@@ -131,6 +131,7 @@ export function matchEmploymentType(
 ### Current State
 
 **V2 System (Active):**
+
 - ✅ Fetches real Designation, Department, Employment Type from Frappe
 - ✅ Uses fuzzy matching with string-similarity library
 - ✅ Auto-creates missing records (if enabled)
@@ -138,6 +139,7 @@ export function matchEmploymentType(
 - ✅ NO job-specific hardcoded strings
 
 **V1 System (Deprecated, not imported):**
+
 - ❌ Has hardcoded employment type map
 - ❌ Has hardcoded department map
 - ❌ Has hardcoded designation keywords
@@ -159,12 +161,13 @@ export function matchEmploymentType(
 ### Test Cases (To Run After Server Restart)
 
 1. **Site Reliability Engineer** / DevOps / full_time
-2. **Linux Administrator** / Infrastructure / contract  
+2. **Linux Administrator** / Infrastructure / contract
 3. **Platform Engineer** / Cloud Operations / full-time
 
 ### Expected Results
 
 Each should:
+
 1. ✅ Sync successfully to Frappe
 2. ✅ Appear in http://localhost:8180/app/job-opening?status=Open
 3. ✅ Have valid Designation (exact/fuzzy/auto-created)
@@ -180,8 +183,8 @@ Each should:
 
 ```bash
 # Check database sync status
-SELECT title, designation, department, employment_type, frappe_job_opening_name 
-FROM job_postings 
+SELECT title, designation, department, employment_type, frappe_job_opening_name
+FROM job_postings
 WHERE created_at > NOW() - INTERVAL '1 hour';
 
 # Check Frappe via API
@@ -196,8 +199,9 @@ curl -H "Authorization: token API_KEY:API_SECRET" \
 ### Previously Working Cases (Must Still Work)
 
 From original hybrid-sync spec:
+
 1. ✅ Forward Deployed Engineer / Engineering / full-time
-2. ✅ Engineer Apprenticeship / Engineering / apprentice  
+2. ✅ Engineer Apprenticeship / Engineering / apprentice
 3. ✅ Operational Intern / Operations / Internship
 4. ✅ DevOps Engineer Trainee / Engineering / apprenticeship (already synced)
 5. ✅ HR Manager / HR Specialist / full_time (already synced)
@@ -215,6 +219,7 @@ From original hybrid-sync spec:
 **Hardcoding**: ✅ Removed in V2 system (V1 deprecated but not deleted yet)
 
 **Next Steps**:
+
 1. Restart dev server to load fix
 2. Re-sync SRE job posting
 3. Run verification tests

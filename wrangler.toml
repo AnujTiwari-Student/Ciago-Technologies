@@ -1,0 +1,42 @@
+name = "ciagotech"
+type = "javascript"
+account_id = ""
+workers_dev = true
+route = ""
+zone_id = ""
+
+# Set environment-specific variables via environment sections
+[env.production]
+name = "ciagotech-production"
+routes = [
+  { pattern = "ciagotech.com/*", zone_name = "ciagotech.com" }
+]
+vars = { ENVIRONMENT = "production" }
+
+[env.staging]
+name = "ciagotech-staging"
+routes = [
+  { pattern = "staging.ciagotech.com/*", zone_name = "ciagotech.com" }
+]
+vars = { ENVIRONMENT = "staging" }
+
+[env.development]
+name = "ciagotech-development"
+workers_dev = true
+vars = { ENVIRONMENT = "development" }
+
+# D1 Database binding (if needed in the future)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ciagotech"
+# database_id = ""
+
+# KV namespace bindings
+# [[kv_namespaces]]
+# binding = "KV"
+# id = ""
+# preview_id = ""
+
+# Environment variable bindings (reference .env or secrets)
+# [env.production.vars]
+# DATABASE_URL = "your_database_url"

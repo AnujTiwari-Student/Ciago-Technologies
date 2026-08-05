@@ -53,9 +53,9 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("=" .repeat(60));
+  console.log("=".repeat(60));
   console.log("E2E: Role Mapping Validation Against Live Frappe");
-  console.log("=" .repeat(60));
+  console.log("=".repeat(60));
 
   let passed = 0;
   let failed = 0;
@@ -106,9 +106,8 @@ async function main() {
       // HIRED: enrich + provision User
       await db.jobApplication.update({ where: { id: app.id }, data: { status: "hired" } });
 
-      const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } = await import(
-        "../src/lib/frappe-hired-handler"
-      );
+      const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } =
+        await import("../src/lib/frappe-hired-handler");
 
       const onboardingData = extractFrappeOnboardingData({
         application: { id: app.id, userId, fullName, email, roleTitle: "Test", status: "hired" },
@@ -159,8 +158,13 @@ async function main() {
       failed++;
 
       // Attempt cleanup
-      try { if (empName) await client.terminateEmployee(empName, new Date().toISOString().split("T")[0]); } catch {}
-      try { await db.userRole.deleteMany({ where: { userId } }); } catch {}
+      try {
+        if (empName)
+          await client.terminateEmployee(empName, new Date().toISOString().split("T")[0]);
+      } catch {}
+      try {
+        await db.userRole.deleteMany({ where: { userId } });
+      } catch {}
     }
   }
 

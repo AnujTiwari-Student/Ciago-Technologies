@@ -46,9 +46,9 @@ async function main() {
   const db = getAdminDb();
   const frappeClient = createFrappeClient();
 
-  console.log("=" .repeat(70));
+  console.log("=".repeat(70));
   console.log("E2E TEST: APPLIED → HIRED → Frappe User Provisioning");
-  console.log("=" .repeat(70));
+  console.log("=".repeat(70));
   console.log(`Test email: ${TEST_EMAIL}`);
   console.log(`Frappe: ${process.env.FRAPPE_BASE_URL}`);
   console.log("");
@@ -140,9 +140,8 @@ async function main() {
       data: { status: "hired" },
     });
 
-    const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } = await import(
-      "../src/lib/frappe-hired-handler"
-    );
+    const { upsertFrappeEmployeeAtHired, extractFrappeOnboardingData } =
+      await import("../src/lib/frappe-hired-handler");
 
     const onboardingData = extractFrappeOnboardingData({
       application: {
@@ -170,11 +169,15 @@ async function main() {
       onboardingData,
       db,
       frappeClient,
-      `e2e-hired-${testApplicationId}`
+      `e2e-hired-${testApplicationId}`,
     );
 
     if (hiredResult.success) {
-      log("2.1 HIRED enrichment", "PASS", `action=${hiredResult.action} emp=${hiredResult.employeeName}`);
+      log(
+        "2.1 HIRED enrichment",
+        "PASS",
+        `action=${hiredResult.action} emp=${hiredResult.employeeName}`,
+      );
     } else {
       log("2.1 HIRED enrichment", "FAIL", hiredResult.message);
     }
@@ -185,7 +188,11 @@ async function main() {
     const frappeUser = await frappeClient.getUser(TEST_EMAIL);
 
     if (frappeUser) {
-      log("3.1 Frappe User exists", "PASS", `email=${frappeUser.email} enabled=${frappeUser.enabled}`);
+      log(
+        "3.1 Frappe User exists",
+        "PASS",
+        `email=${frappeUser.email} enabled=${frappeUser.enabled}`,
+      );
     } else {
       log("3.1 Frappe User exists", "FAIL", "User NOT found in Frappe");
     }
@@ -208,7 +215,11 @@ async function main() {
       if (hasEmployee && hasESS && noAdmin) {
         log("3.3 Roles correct", "PASS", `roles=[${roleNames.join(", ")}]`);
       } else {
-        log("3.3 Roles correct", "FAIL", `roles=[${roleNames.join(", ")}] hasEmployee=${hasEmployee} hasESS=${hasESS} noAdmin=${noAdmin}`);
+        log(
+          "3.3 Roles correct",
+          "FAIL",
+          `roles=[${roleNames.join(", ")}] hasEmployee=${hasEmployee} hasESS=${hasESS} noAdmin=${noAdmin}`,
+        );
       }
 
       if (noAdmin) {
@@ -233,7 +244,7 @@ async function main() {
       onboardingData,
       db,
       frappeClient,
-      `e2e-idempotent-${testApplicationId}`
+      `e2e-idempotent-${testApplicationId}`,
     );
 
     if (hiredResult2.success && hiredResult2.action === "already_complete") {
@@ -254,7 +265,11 @@ async function main() {
 
     // ===== PHASE 5: Non-blocking failure test =====
     console.log("\n--- PHASE 5: Non-blocking failure behavior ---");
-    log("5.1 Non-blocking design", "PASS", "provisionUserAfterEnrichment uses try/catch — failure cannot break enrichment");
+    log(
+      "5.1 Non-blocking design",
+      "PASS",
+      "provisionUserAfterEnrichment uses try/catch — failure cannot break enrichment",
+    );
 
     // ===== PHASE 6: Verify Employee enrichment data =====
     console.log("\n--- PHASE 6: Employee enrichment data ---");
@@ -270,10 +285,12 @@ async function main() {
         log("6.1 Email enriched", "FAIL", `personal_email=${finalEmployee.personal_email}`);
       }
 
-      log("6.2 Employee still Active", finalEmployee.status === "Active" ? "PASS" : "FAIL",
-        `status=${finalEmployee.status}`);
+      log(
+        "6.2 Employee still Active",
+        finalEmployee.status === "Active" ? "PASS" : "FAIL",
+        `status=${finalEmployee.status}`,
+      );
     }
-
   } catch (error) {
     console.error("\n\nFATAL ERROR:", error);
     log("FATAL", "FAIL", error instanceof Error ? error.message : String(error));
@@ -295,10 +312,15 @@ async function main() {
     // Terminate Employee in Frappe
     if (frappeEmployeeName) {
       try {
-        await frappeClient.terminateEmployee(frappeEmployeeName, new Date().toISOString().split("T")[0]);
+        await frappeClient.terminateEmployee(
+          frappeEmployeeName,
+          new Date().toISOString().split("T")[0],
+        );
         console.log(`Cleanup: Terminated Frappe Employee ${frappeEmployeeName}`);
       } catch (e) {
-        console.log(`Cleanup: Employee terminate skipped (${e instanceof Error ? e.message : "error"})`);
+        console.log(
+          `Cleanup: Employee terminate skipped (${e instanceof Error ? e.message : "error"})`,
+        );
       }
     }
 
@@ -306,7 +328,9 @@ async function main() {
     if (testApplicationId) {
       try {
         await db.integrationEvent.deleteMany({ where: { entityId: testApplicationId } });
-        await db.auditLog.deleteMany({ where: { targetResource: `job_applications/${testApplicationId}` } });
+        await db.auditLog.deleteMany({
+          where: { targetResource: `job_applications/${testApplicationId}` },
+        });
         await db.jobApplication.delete({ where: { id: testApplicationId } });
         console.log(`Cleanup: Deleted CiagoTech test application`);
       } catch (e) {
@@ -336,7 +360,9 @@ async function main() {
       console.log(`  ${icon} ${r.scenario}: ${r.evidence}`);
     }
 
-    console.log(`\nTotal: ${results.length} | Pass: ${passed} | Fail: ${failed} | Skip: ${skipped}`);
+    console.log(
+      `\nTotal: ${results.length} | Pass: ${passed} | Fail: ${failed} | Skip: ${skipped}`,
+    );
 
     if (failed > 0) {
       console.log("\n⚠️  SOME TESTS FAILED — review output above");

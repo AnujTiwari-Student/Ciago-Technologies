@@ -62,24 +62,108 @@ const EMPLOYMENT_TYPES = [
 // ─────────────────────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
   // Job posting statuses
-  { kind: "job_posting", code: "draft", label: "Draft", description: "Not visible to candidates", sort_order: 10 },
-  { kind: "job_posting", code: "published", label: "Published", description: "Visible on public careers page", sort_order: 20 },
-  { kind: "job_posting", code: "internal_only", label: "Internal only", description: "Visible to employees on internal mobility", sort_order: 30 },
-  { kind: "job_posting", code: "closed", label: "Closed", description: "No longer accepting applications", sort_order: 40 },
-  { kind: "job_posting", code: "archived", label: "Archived", description: "Hidden from all listings", sort_order: 50 },
+  {
+    kind: "job_posting",
+    code: "draft",
+    label: "Draft",
+    description: "Not visible to candidates",
+    sort_order: 10,
+  },
+  {
+    kind: "job_posting",
+    code: "published",
+    label: "Published",
+    description: "Visible on public careers page",
+    sort_order: 20,
+  },
+  {
+    kind: "job_posting",
+    code: "internal_only",
+    label: "Internal only",
+    description: "Visible to employees on internal mobility",
+    sort_order: 30,
+  },
+  {
+    kind: "job_posting",
+    code: "closed",
+    label: "Closed",
+    description: "No longer accepting applications",
+    sort_order: 40,
+  },
+  {
+    kind: "job_posting",
+    code: "archived",
+    label: "Archived",
+    description: "Hidden from all listings",
+    sort_order: 50,
+  },
 
   // Application statuses
-  { kind: "application", code: "applied", label: "Applied", description: "Candidate has submitted an application", sort_order: 10 },
-  { kind: "application", code: "screening", label: "Screening", description: "Recruiter reviewing profile", sort_order: 20 },
-  { kind: "application", code: "interviewing", label: "Interviewing", description: "Interviews in progress", sort_order: 30 },
-  { kind: "application", code: "offered", label: "Offered", description: "Offer extended to candidate", sort_order: 40 },
-  { kind: "application", code: "hired", label: "Hired", description: "Candidate accepted and onboarded", sort_order: 50 },
-  { kind: "application", code: "rejected", label: "Rejected", description: "Application not moving forward", sort_order: 60 },
+  {
+    kind: "application",
+    code: "applied",
+    label: "Applied",
+    description: "Candidate has submitted an application",
+    sort_order: 10,
+  },
+  {
+    kind: "application",
+    code: "screening",
+    label: "Screening",
+    description: "Recruiter reviewing profile",
+    sort_order: 20,
+  },
+  {
+    kind: "application",
+    code: "interviewing",
+    label: "Interviewing",
+    description: "Interviews in progress",
+    sort_order: 30,
+  },
+  {
+    kind: "application",
+    code: "offered",
+    label: "Offered",
+    description: "Offer extended to candidate",
+    sort_order: 40,
+  },
+  {
+    kind: "application",
+    code: "hired",
+    label: "Hired",
+    description: "Candidate accepted and onboarded",
+    sort_order: 50,
+  },
+  {
+    kind: "application",
+    code: "rejected",
+    label: "Rejected",
+    description: "Application not moving forward",
+    sort_order: 60,
+  },
 
   // User account statuses
-  { kind: "user_account", code: "active", label: "Active", description: "Account can sign in and use the app", sort_order: 10 },
-  { kind: "user_account", code: "inactive", label: "Inactive", description: "Account temporarily disabled", sort_order: 20 },
-  { kind: "user_account", code: "suspended", label: "Suspended", description: "Account suspended by administrator", sort_order: 30 },
+  {
+    kind: "user_account",
+    code: "active",
+    label: "Active",
+    description: "Account can sign in and use the app",
+    sort_order: 10,
+  },
+  {
+    kind: "user_account",
+    code: "inactive",
+    label: "Inactive",
+    description: "Account temporarily disabled",
+    sort_order: 20,
+  },
+  {
+    kind: "user_account",
+    code: "suspended",
+    label: "Suspended",
+    description: "Account suspended by administrator",
+    sort_order: 30,
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +197,7 @@ async function main() {
       `INSERT INTO departments (code, name, description)
        VALUES ($1, $2, $3)
        ON CONFLICT (code) DO UPDATE SET name = $2, description = $3`,
-      [dept.code, dept.name, dept.description]
+      [dept.code, dept.name, dept.description],
     );
   }
   console.log(`✓ departments: ${DEPARTMENTS.length} rows`);
@@ -124,7 +208,7 @@ async function main() {
       `INSERT INTO employment_types (code, label, sort_order)
        VALUES ($1, $2, $3)
        ON CONFLICT (code) DO UPDATE SET label = $2, sort_order = $3`,
-      [et.code, et.label, et.sort_order]
+      [et.code, et.label, et.sort_order],
     );
   }
   console.log(`✓ employment_types: ${EMPLOYMENT_TYPES.length} rows`);
@@ -135,7 +219,7 @@ async function main() {
       `INSERT INTO status_options (kind, code, label, description, sort_order)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (kind, code) DO UPDATE SET label = $3, description = $4, sort_order = $5`,
-      [so.kind, so.code, so.label, so.description, so.sort_order]
+      [so.kind, so.code, so.label, so.description, so.sort_order],
     );
   }
   console.log(`✓ status_options: ${STATUS_OPTIONS.length} rows`);
@@ -146,19 +230,20 @@ async function main() {
     // Look up user_id from clerk_user_map by email
     const userResult = await client.query(
       `SELECT auth_user_id FROM clerk_user_map WHERE lower(email) = lower($1)`,
-      [devUser.email]
+      [devUser.email],
     );
     if (userResult.rows.length === 0) {
-      console.log(`  ⚠ skipping ${devUser.email} — not in clerk_user_map (user has not signed up yet)`);
+      console.log(
+        `  ⚠ skipping ${devUser.email} — not in clerk_user_map (user has not signed up yet)`,
+      );
       continue;
     }
     const userId = userResult.rows[0].auth_user_id;
 
     // Look up department_id
-    const deptResult = await client.query(
-      `SELECT id FROM departments WHERE code = $1`,
-      [devUser.department_code]
-    );
+    const deptResult = await client.query(`SELECT id FROM departments WHERE code = $1`, [
+      devUser.department_code,
+    ]);
     const departmentId = deptResult.rows[0]?.id ?? null;
 
     for (const role of devUser.roles) {
@@ -166,7 +251,7 @@ async function main() {
         `INSERT INTO user_roles (id, user_id, role, department_id)
          VALUES (gen_random_uuid(), $1, $2::app_role, $3)
          ON CONFLICT (user_id, role) DO UPDATE SET department_id = COALESCE($3, user_roles.department_id)`,
-        [userId, role, departmentId]
+        [userId, role, departmentId],
       );
       devRolesAssigned++;
     }
@@ -178,8 +263,9 @@ async function main() {
 
 try {
   await main();
-} catch (err: any) {
-  console.error("❌ Seed failed:", err.message);
+} catch (err: Error | unknown) {
+  const error = err instanceof Error ? err : new Error(String(err));
+  console.error("❌ Seed failed:", error.message);
   process.exit(1);
 } finally {
   client.release();

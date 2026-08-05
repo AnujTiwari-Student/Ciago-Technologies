@@ -101,7 +101,7 @@ async function main() {
   console.log("📦 Step 4: Verifying auth.users entry...");
   const authUser = await pool.query(
     "SELECT id, email, email_confirmed_at FROM auth.users WHERE id = $1",
-    [result.authUserId]
+    [result.authUserId],
   );
 
   if (authUser.rowCount === 0) {
@@ -113,7 +113,7 @@ async function main() {
   console.log("✓ auth.users entry exists");
   console.log(`   id: ${authUser.rows[0].id}`);
   console.log(`   email: ${authUser.rows[0].email}`);
-  console.log(`   confirmed: ${authUser.rows[0].email_confirmed_at ? 'yes' : 'no'}\n`);
+  console.log(`   confirmed: ${authUser.rows[0].email_confirmed_at ? "yes" : "no"}\n`);
 
   // Step 5: Test idempotency (provision same user again)
   console.log("📦 Step 5: Testing idempotency...");
@@ -183,12 +183,13 @@ async function cleanup(clerkUserId: string, authUserId: string) {
     where: { userId: authUserId },
   });
 
-  await prisma.clerkUserMap.delete({
-    where: { clerkUserId },
-  }).catch(() => {}); // Ignore if not found
-
-  await pool.query("DELETE FROM auth.users WHERE id = $1", [authUserId])
+  await prisma.clerkUserMap
+    .delete({
+      where: { clerkUserId },
+    })
     .catch(() => {}); // Ignore if not found
+
+  await pool.query("DELETE FROM auth.users WHERE id = $1", [authUserId]).catch(() => {}); // Ignore if not found
 
   console.log("✓ Test data cleaned up\n");
 }

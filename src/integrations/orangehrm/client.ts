@@ -271,7 +271,7 @@ export class OrangeHRMClient {
       maritalStatus?: string;
       birthday?: string;
       nationalityId?: number;
-    }
+    },
   ) {
     return this.request("PUT", `/pim/employees/${empNumber}/personal-details`, payload);
   }
@@ -296,7 +296,7 @@ export class OrangeHRMClient {
   async getJobTitles() {
     const result = await this.request<Array<{ id: number; title: string; deleted: boolean }>>(
       "GET",
-      "/admin/job-titles"
+      "/admin/job-titles",
     );
     return result.data;
   }
@@ -307,7 +307,7 @@ export class OrangeHRMClient {
   async getEmploymentStatuses() {
     const result = await this.request<Array<{ id: number; name: string }>>(
       "GET",
-      "/admin/employment-statuses"
+      "/admin/employment-statuses",
     );
     return result.data;
   }
@@ -318,7 +318,7 @@ export class OrangeHRMClient {
   async getSubunits() {
     const result = await this.request<Array<{ id: number; name: string; unitId: string }>>(
       "GET",
-      "/admin/subunits"
+      "/admin/subunits",
     );
     return result.data;
   }
@@ -330,7 +330,7 @@ export class OrangeHRMClient {
     const result = await this.request<{ id: number; title: string; deleted: boolean }>(
       "POST",
       "/admin/job-titles",
-      { title }
+      { title },
     );
     return result.data;
   }
@@ -342,7 +342,7 @@ export class OrangeHRMClient {
     const result = await this.request<{ id: number; name: string }>(
       "POST",
       "/admin/employment-statuses",
-      { name }
+      { name },
     );
     return result.data;
   }
@@ -356,8 +356,8 @@ export class OrangeHRMClient {
       "/admin/subunits",
       {
         name,
-        parentId: parentId || null
-      }
+        parentId: parentId || null,
+      },
     );
     return result.data;
   }
@@ -400,7 +400,7 @@ export class OrangeHRMClient {
     const result = await this.request<JobVacancy>(
       "PUT",
       `/recruitment/vacancies/${vacancyId}`,
-      payload
+      payload,
     );
     return result.data;
   }
@@ -451,7 +451,7 @@ export class OrangeHRMClient {
       date: string; // YYYY-MM-DD format
       terminationReasonId: number;
       note: string;
-    }
+    },
   ): Promise<void> {
     await this.request("POST", `/pim/employees/${empNumber}/terminations`, payload);
   }

@@ -84,7 +84,7 @@ async function main() {
           const emp = await client.getEmployee(i);
           if (emp) {
             console.log(
-              `Employee #${emp.empNumber}: ${emp.firstName} ${emp.lastName} (ID: ${emp.employeeId})`
+              `Employee #${emp.empNumber}: ${emp.firstName} ${emp.lastName} (ID: ${emp.employeeId})`,
             );
             foundCount++;
           }

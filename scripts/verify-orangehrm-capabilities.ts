@@ -43,7 +43,9 @@ function recordResult(result: Omit<CapabilityResult, "timestamp">) {
     NOT_SAFE_TO_PROBE: "⚠️",
   }[result.status];
 
-  console.log(`${statusEmoji} ${result.capability}: ${result.status}${result.notes ? ` (${result.notes})` : ""}`);
+  console.log(
+    `${statusEmoji} ${result.capability}: ${result.status}${result.notes ? ` (${result.notes})` : ""}`,
+  );
 }
 
 async function main() {
@@ -139,7 +141,6 @@ async function main() {
       workEmail: "capability-test@example.invalid",
       otherEmail: "DO_NOT_USE@example.invalid",
     });
-
   } catch (error) {
     console.error("❌ Failed to create test employee:", error);
     console.log("\n⚠️ Cannot proceed with destructive capability tests without test employee.\n");
@@ -365,7 +366,8 @@ async function main() {
     httpMethod: "PUT",
     tested: false,
     destructive: true,
-    notes: "Cannot safely test password change without risking test user access; mark as UNKNOWN for manual verification",
+    notes:
+      "Cannot safely test password change without risking test user access; mark as UNKNOWN for manual verification",
   });
 
   // ============================================================
@@ -388,8 +390,12 @@ async function main() {
   // ============================================================
   if (testEmployeeId) {
     console.log(`\n🧹 Cleaning up test employee ${testEmployeeId}...\n`);
-    console.log("⚠️ Test employee still exists. Manual cleanup required if DELETE API unsupported.\n");
-    console.log(`   Navigate to OrangeHRM Admin → PIM → Employees → empNumber=${testEmployeeId} and delete manually.\n`);
+    console.log(
+      "⚠️ Test employee still exists. Manual cleanup required if DELETE API unsupported.\n",
+    );
+    console.log(
+      `   Navigate to OrangeHRM Admin → PIM → Employees → empNumber=${testEmployeeId} and delete manually.\n`,
+    );
   }
 
   // ============================================================

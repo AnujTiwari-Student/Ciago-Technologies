@@ -51,7 +51,10 @@ const createMockDb = () => {
         if (!app) return { count: 0 };
 
         // Simulate optimistic locking - CHECK BEFORE UPDATE
-        if (where.lifecycleVersion !== undefined && app.lifecycleVersion !== where.lifecycleVersion) {
+        if (
+          where.lifecycleVersion !== undefined &&
+          app.lifecycleVersion !== where.lifecycleVersion
+        ) {
           return { count: 0 }; // Race condition - version mismatch
         }
 
@@ -81,7 +84,7 @@ const createMockDb = () => {
         if (where.id) return store.integrationEvents.get(where.id);
         if (where.idempotencyKey) {
           return Array.from(store.integrationEvents.values()).find(
-            (e: any) => e.idempotencyKey === where.idempotencyKey
+            (e: any) => e.idempotencyKey === where.idempotencyKey,
           );
         }
         return null;
@@ -122,7 +125,11 @@ const createMockDb = () => {
               orMatches = true;
               break;
             }
-            if (condition.claimedAt?.lt && event.claimedAt && new Date(event.claimedAt) < condition.claimedAt.lt) {
+            if (
+              condition.claimedAt?.lt &&
+              event.claimedAt &&
+              new Date(event.claimedAt) < condition.claimedAt.lt
+            ) {
               orMatches = true;
               break;
             }
@@ -291,7 +298,7 @@ describe("OrangeHRM Provisioning - Idempotency", () => {
     const idempotencyKey = generateIdempotencyKey(
       "orangehrm_employee_provision",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     // Create event twice
@@ -321,7 +328,7 @@ describe("OrangeHRM Provisioning - Idempotency", () => {
     const idempotencyKey = generateIdempotencyKey(
       "orangehrm_employee_provision",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     const eventResult = await createIntegrationEvent(db, {

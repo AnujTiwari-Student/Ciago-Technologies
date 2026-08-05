@@ -47,10 +47,7 @@ import {
   classifyError,
   isRetryable,
 } from "@/lib/orangehrm-provisioning";
-import type {
-  HiredUpsertResult,
-  OnboardingDataSources,
-} from "@/lib/orangehrm-types";
+import type { HiredUpsertResult, OnboardingDataSources } from "@/lib/orangehrm-types";
 
 export interface HandleApplicationHiredOptions {
   db: PrismaClient;
@@ -81,7 +78,7 @@ export interface ApplicationHiredResult {
  * - Already upserted/enriched → no-op (handled by upsertOrangeHRMEmployeeAtHired)
  */
 export async function handleApplicationHired(
-  options: HandleApplicationHiredOptions
+  options: HandleApplicationHiredOptions,
 ): Promise<ApplicationHiredResult> {
   const { db, client, applicationId, candidateId, correlationId, workerId } = options;
   const logPrefix = `[hired-handler:${applicationId.slice(0, 8)}]`;
@@ -127,7 +124,7 @@ export async function handleApplicationHired(
     // Verify status is HIRED (early check before expensive queries)
     if (application.status !== "hired") {
       console.warn(
-        `${logPrefix} Application status is ${application.status}, not hired - aborting handler`
+        `${logPrefix} Application status is ${application.status}, not hired - aborting handler`,
       );
       return {
         triggered: false,
@@ -246,7 +243,7 @@ export async function handleApplicationHired(
     const idempotencyKey = generateIdempotencyKey(
       "orangehrm_employee_upsert",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     const eventResult = await createIntegrationEvent(db, {
@@ -297,7 +294,7 @@ export async function handleApplicationHired(
       onboardingData,
       db,
       client,
-      correlationId || eventId
+      correlationId || eventId,
     );
 
     console.log(`${logPrefix} Upsert completed`, {

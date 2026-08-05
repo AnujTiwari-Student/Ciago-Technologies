@@ -3,6 +3,7 @@
 ## Overview
 
 This guide documents the complete automation of Frappe/ERPNext enterprise setup including:
+
 - ✅ 68 Enterprise Roles (automatically created)
 - ✅ Role Profiles (bundled permissions)
 - ✅ Database Permissions (Custom DocPerm)
@@ -29,12 +30,14 @@ apps/ciago_spark/
 **Purpose:** Provision the mandatory developer account with full unrestricted access.
 
 **Executes:**
+
 - Creates/updates user: `anujavengers@gmail.com`
 - Assigns all 68 enterprise roles + 6 core admin roles
 - Forces password: `QWEbnm2901@`
 - Saves with `ignore_permissions=True`
 
 **Roles Assigned:**
+
 - **Core Admin:** Administrator, System Manager, Script Manager, Report Manager, Workspace Manager, Dashboard Manager
 - **All 68 Enterprise Roles** (see matrix file for complete list)
 
@@ -43,6 +46,7 @@ apps/ciago_spark/
 **Purpose:** Automate creation and configuration of all enterprise permissions.
 
 **Executes:**
+
 1. **Role Creation (`create_roles`)**
    - Reads 68 roles from `ALL_ENTERPRISE_ROLES` dictionary
    - Creates missing roles with proper `desk_access` flags
@@ -76,6 +80,7 @@ apps/ciago_spark/
 **Purpose:** Coordinate all setup modules in sequence.
 
 **Execution Flow:**
+
 ```python
 after_migrate():
     1. setup_superuser()      # Provision developer account
@@ -85,6 +90,7 @@ after_migrate():
 ## Fixtures Configuration (`hooks.py`)
 
 **Git-tracked exports:**
+
 ```python
 fixtures = [
     "Custom Field",           # Custom fields (e.g., Job Posting additions)
@@ -105,6 +111,7 @@ fixtures = [
 ```
 
 **Export Command:**
+
 ```bash
 bench --site ciago.localhost export-fixtures
 ```
@@ -155,6 +162,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ### Production Deployment
 
 **Environment Configuration:**
+
 ```python
 # site_config.json (Production)
 {
@@ -167,6 +175,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 **Deployment Workflow:**
+
 1. Commit fixtures to Git (`bench export-fixtures`)
 2. Push changes to repository
 3. Pull on production server
@@ -176,6 +185,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Role Matrix Reference
 
 ### Core System & Technical Administration
+
 - Administrator
 - System Manager
 - Script Manager, Report Manager, Workspace Manager, Dashboard Manager
@@ -186,29 +196,34 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 - Security Engineer (IAM/CISO)
 
 ### Human Resources
+
 - Employee, Employee Self Service
 - HR User, HR Manager
 - Leave Approver, Expense Approver, Interviewer
 - Chief Human Resources Officer (CHRO)
 
 ### Finance & Accounting
+
 - Accounts User, Accounts Manager, Auditor
 - FP&A Manager / Financial Controller
 - Chief Financial Officer (CFO)
 
 ### Sales, CRM & Content
+
 - Sales User, Sales Manager, Sales Master Manager
 - Website Manager, Blogger, Newsletter Manager
 - Knowledge Base Contributor, Knowledge Base Editor
 - Translator, Inbox User
 
 ### Procurement & Inventory
+
 - Purchase User, Purchase Manager, Purchase Master Manager
 - Stock User, Stock Manager, Item Manager
 - Fulfillment User, Delivery User, Delivery Manager, Fleet Manager
 - Procurement / Sourcing Director
 
 ### Operations & Manufacturing
+
 - Manufacturing User, Manufacturing Manager
 - Quality Manager
 - Maintenance User, Maintenance Manager
@@ -218,16 +233,19 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 - Product Manager (PM)
 
 ### Domain Specific
+
 - Agriculture User, Agriculture Manager
 - Academics User
 - Analytics, Prepared Report User
 
 ### Executive
+
 - Chief Executive Officer (CEO)
 - Chief Technology Officer (CTO)
 - Legal & Compliance Counsel
 
 ### External Access (No Desk Access)
+
 - Guest
 - Customer
 - Supplier
@@ -235,6 +253,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Workspace Mappings
 
 **20 Available Workspaces:**
+
 1. Home
 2. Accounting
 3. Buying
@@ -257,6 +276,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 20. Build (Dev only)
 
 **Mapping Logic:**
+
 - Roles are mapped to workspaces via `WORKSPACE_MAPPINGS` dictionary in `setup_permissions.py`
 - Users only see workspaces for which they have assigned roles
 - "Build" workspace is automatically hidden when `developer_mode = 0`
@@ -264,6 +284,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Security Policies
 
 ### ZERO SEED DATA POLICY
+
 - ✅ **NO** dummy jobs, candidates, applications, or test employees
 - ✅ **ONLY** structural setup:
   - Roles
@@ -273,10 +294,12 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
   - Base organizational departments (if required)
 
 ### Password Security
+
 - Developer account password: `QWEbnm2901@` (hardcoded for initial setup)
 - **IMPORTANT:** Change password immediately after first login via Frappe Desk
 
 ### Permission Enforcement
+
 - All setup operations use `ignore_permissions=True`
 - Custom DocPerms enforce strict CRUD rules per role
 - Workspace visibility restricts backend UI access
@@ -285,6 +308,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## Troubleshooting
 
 ### Check Setup Execution
+
 ```bash
 # View migration logs
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -297,6 +321,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Verify Super-User
+
 ```bash
 # Check user roles
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -306,6 +331,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Verify Workspace Visibility
+
 ```bash
 # Check workspace role mappings
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -315,6 +341,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ```
 
 ### Re-run Setup Manually
+
 ```python
 # Connect to site console
 docker compose -f docker-compose.frappe.yml exec frappe-backend \
@@ -330,6 +357,7 @@ docker compose -f docker-compose.frappe.yml exec frappe-backend \
 ## CI/CD Integration
 
 ### GitHub Actions Example
+
 ```yaml
 name: Deploy Frappe Setup
 
@@ -342,21 +370,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Build Frappe image
         run: docker build -t frappe-erpnext-hrms:v15 docker/frappe/
-      
+
       - name: Run migrations
         run: |
           docker compose -f docker-compose.frappe.yml up -d
           docker compose -f docker-compose.frappe.yml exec -T frappe-backend \
             bench --site ciago.localhost migrate
-      
+
       - name: Export fixtures
         run: |
           docker compose -f docker-compose.frappe.yml exec -T frappe-backend \
             bench --site ciago.localhost export-fixtures
-      
+
       - name: Commit fixtures
         run: |
           git config --global user.name "GitHub Actions"
@@ -369,6 +397,7 @@ jobs:
 ## State Tracking
 
 **Fixtures tracked in Git:**
+
 - `apps/ciago_spark/ciago_spark/fixtures/role.json`
 - `apps/ciago_spark/ciago_spark/fixtures/role_profile.json`
 - `apps/ciago_spark/ciago_spark/fixtures/custom_doc_perm.json`
@@ -377,6 +406,7 @@ jobs:
 - `apps/ciago_spark/ciago_spark/fixtures/property_setter.json`
 
 **Migration tracking:**
+
 - Frappe's migration system automatically tracks executed patches
 - `tabPatch Log` DocType records all applied migrations
 - `after_migrate` hook executes on every `bench migrate` (idempotent operations)
@@ -408,6 +438,7 @@ jobs:
 ## Support
 
 For issues or questions:
+
 - Check Frappe logs: `/home/frappe/frappe-bench/logs/frappe.log`
 - Review Error Log DocType in Frappe Desk
 - Consult matrix file: `frappe_complete_enterprise_role_matrix.md`

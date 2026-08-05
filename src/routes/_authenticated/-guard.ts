@@ -2,7 +2,11 @@ import { redirect } from "@tanstack/react-router";
 import { isClerkAuthEnabledFn } from "@/lib/feature-flags.functions";
 import { getMyAuthUserId, getMyRoles, type MyRolesPayload } from "@/lib/roles.functions";
 import { isDashboardEnabled } from "@/lib/feature-flags.server";
-import { canAccessDashboard, canAccessSurface, type DashboardSurface } from "@/lib/dashboard-access";
+import {
+  canAccessDashboard,
+  canAccessSurface,
+  type DashboardSurface,
+} from "@/lib/dashboard-access";
 import type { AppRole } from "@prisma/client";
 
 declare global {
@@ -36,9 +40,12 @@ export async function requireAuthenticated(
   return { userId };
 }
 
-export async function requireRoles(
-  redirectPath: string,
-): Promise<{ userId: string; roles: Set<string>; appRoles: AppRole[]; departmentId: string | null }> {
+export async function requireRoles(redirectPath: string): Promise<{
+  userId: string;
+  roles: Set<string>;
+  appRoles: AppRole[];
+  departmentId: string | null;
+}> {
   const auth = await requireAuthenticated(redirectPath);
 
   const payload = await getMyRoles();
@@ -53,7 +60,12 @@ export async function requireRoles(
 export async function requireDashboardAccess(
   redirectPath: string,
   surface?: DashboardSurface,
-): Promise<{ userId: string; roles: Set<string>; appRoles: AppRole[]; departmentId: string | null }> {
+): Promise<{
+  userId: string;
+  roles: Set<string>;
+  appRoles: AppRole[];
+  departmentId: string | null;
+}> {
   const enabled = await isDashboardEnabled();
   if (!enabled) {
     throw redirect({ to: "/forbidden", search: { reason: "dashboard_disabled" } });

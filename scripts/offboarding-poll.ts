@@ -68,7 +68,9 @@ async function deprovisionEmployee(employeeId: string): Promise<void> {
   // ClickUp (manual revocation required)
   if (mapping.clickupUsername) {
     results.clickup.success = true; // Mark as handled, needs manual action
-    console.log(`[offboarding] ⚠ ClickUp: Manual revocation required for ${mapping.clickupUsername}`);
+    console.log(
+      `[offboarding] ⚠ ClickUp: Manual revocation required for ${mapping.clickupUsername}`,
+    );
   }
 
   // Teams (requires user ID, complex)

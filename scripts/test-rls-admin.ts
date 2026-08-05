@@ -24,7 +24,7 @@ async function main() {
       tx.userRole.findMany({
         where: { userId: ADMIN_USER_ID },
         select: { role: true, departmentId: true },
-      })
+      }),
     );
     console.log(`  ✓ Found ${roles.length} role(s):`);
     roles.forEach((r) => {
@@ -38,20 +38,19 @@ async function main() {
 
     // Test 3: Verify the RLS policy directly with raw SQL
     console.log("\nTest 3: Testing RLS policy with raw query...");
-    const rawRoles = await db.withRLS((tx) =>
-      tx.$queryRaw`
+    const rawRoles = await db.withRLS(
+      (tx) =>
+        tx.$queryRaw`
         SELECT role, department_id
         FROM user_roles
         WHERE user_id = ${ADMIN_USER_ID}::uuid
-      `
+      `,
     );
     console.log(`  ✓ Raw query returned ${(rawRoles as any[]).length} role(s)`);
 
     // Test 4: Check auth.uid() function
     console.log("\nTest 4: Checking auth.uid() within transaction...");
-    const uidResult = await db.withRLS((tx) =>
-      tx.$queryRaw`SELECT auth.uid() as current_user_id`
-    );
+    const uidResult = await db.withRLS((tx) => tx.$queryRaw`SELECT auth.uid() as current_user_id`);
     console.log(`  ✓ auth.uid() returns:`, (uidResult as any[])[0]?.current_user_id);
 
     console.log("\n✓ All tests passed!");

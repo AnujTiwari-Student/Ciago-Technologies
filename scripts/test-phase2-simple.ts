@@ -77,7 +77,9 @@ async function main() {
       throw new Error("Duplicate employee numbers!");
     }
 
-    console.log(`  ✅ Employees have different IDs: ${employee1.empNumber} vs ${employee2.empNumber}`);
+    console.log(
+      `  ✅ Employees have different IDs: ${employee1.empNumber} vs ${employee2.empNumber}`,
+    );
 
     // Test 6: Terminate employees (cleanup)
     console.log("\nTest 6: Terminate employees via termination API");
@@ -97,7 +99,6 @@ async function main() {
 
     console.log("\n=== All Tests PASSED ===\n");
     console.log("Disposable employee IDs:", disposableEmployeeIds);
-
   } catch (error) {
     console.error("\n=== TEST FAILED ===");
     console.error(error);

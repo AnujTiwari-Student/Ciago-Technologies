@@ -82,7 +82,7 @@ async function isFrappeEmployeeSyncEnabled(): Promise<boolean> {
  * - Already provisioned → no-op (handled by provisionFrappeEmployee)
  */
 export async function handleFrappeApplicationApplied(
-  options: HandleFrappeApplicationAppliedOptions
+  options: HandleFrappeApplicationAppliedOptions,
 ): Promise<FrappeApplicationAppliedResult> {
   const { db, client, applicationId, correlationId, workerId } = options;
   const logPrefix = `[frappe-applied-handler:${applicationId.slice(0, 8)}]`;
@@ -109,7 +109,7 @@ export async function handleFrappeApplicationApplied(
     const idempotencyKey = generateIdempotencyKey(
       "frappe_employee_provision",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     const eventResult = await createIntegrationEvent(db, {
@@ -158,7 +158,7 @@ export async function handleFrappeApplicationApplied(
       applicationId,
       db,
       client,
-      correlationId || eventId
+      correlationId || eventId,
     );
 
     console.log(`${logPrefix} Provisioning completed`, {
@@ -230,7 +230,7 @@ export async function handleFrappeApplicationApplied(
  */
 export async function verifyFrappeApplicationStatusApplied(
   db: PrismaClient,
-  applicationId: string
+  applicationId: string,
 ): Promise<boolean> {
   const application = await db.jobApplication.findUnique({
     where: { id: applicationId },
@@ -248,7 +248,7 @@ export async function verifyFrappeApplicationStatusApplied(
  */
 export async function isFrappeApplicationProvisioned(
   db: PrismaClient,
-  applicationId: string
+  applicationId: string,
 ): Promise<boolean> {
   const application = await db.jobApplication.findUnique({
     where: { id: applicationId },
@@ -258,8 +258,5 @@ export async function isFrappeApplicationProvisioned(
     },
   });
 
-  return (
-    !!application?.frappeEmployeeName &&
-    application.frappeProvisioningState === "succeeded"
-  );
+  return !!application?.frappeEmployeeName && application.frappeProvisioningState === "succeeded";
 }

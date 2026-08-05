@@ -41,7 +41,9 @@ function recordResult(result: Omit<CapabilityResult, "timestamp">) {
     NOT_SAFE_TO_PROBE: "⚠️",
   }[result.status];
 
-  console.log(`${statusEmoji} [${result.provider}] ${result.capability}: ${result.status}${result.notes ? ` (${result.notes})` : ""}`);
+  console.log(
+    `${statusEmoji} [${result.provider}] ${result.capability}: ${result.status}${result.notes ? ` (${result.notes})` : ""}`,
+  );
 }
 
 async function main() {
@@ -132,13 +134,16 @@ async function main() {
 
     // Check org membership management (read-only)
     try {
-      const response = await fetch(`https://api.github.com/orgs/${githubOrg}/memberships/NONEXISTENT_USER`, {
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
+      const response = await fetch(
+        `https://api.github.com/orgs/${githubOrg}/memberships/NONEXISTENT_USER`,
+        {
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
         },
-      });
+      );
 
       // 404 = endpoint exists but user not found (expected)
       // 403 = no permission
@@ -290,7 +295,7 @@ async function main() {
                 Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
               },
-            }
+            },
           );
 
           if (userResponse.ok) {

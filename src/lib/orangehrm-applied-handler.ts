@@ -72,7 +72,7 @@ export interface ApplicationAppliedResult {
  * - Already provisioned → no-op (handled by provisionOrangeHRMEmployee)
  */
 export async function handleApplicationApplied(
-  options: HandleApplicationAppliedOptions
+  options: HandleApplicationAppliedOptions,
 ): Promise<ApplicationAppliedResult> {
   const { db, client, applicationId, correlationId, workerId } = options;
   const logPrefix = `[applied-handler:${applicationId.slice(0, 8)}]`;
@@ -99,7 +99,7 @@ export async function handleApplicationApplied(
     const idempotencyKey = generateIdempotencyKey(
       "orangehrm_employee_provision",
       "job_application",
-      applicationId
+      applicationId,
     );
 
     const eventResult = await createIntegrationEvent(db, {
@@ -148,7 +148,7 @@ export async function handleApplicationApplied(
       applicationId,
       db,
       client,
-      correlationId || eventId
+      correlationId || eventId,
     );
 
     console.log(`${logPrefix} Provisioning completed`, {
@@ -221,7 +221,7 @@ export async function handleApplicationApplied(
  */
 export async function verifyApplicationStatusApplied(
   db: PrismaClient,
-  applicationId: string
+  applicationId: string,
 ): Promise<boolean> {
   const application = await db.jobApplication.findUnique({
     where: { id: applicationId },
@@ -239,7 +239,7 @@ export async function verifyApplicationStatusApplied(
  */
 export async function isApplicationProvisioned(
   db: PrismaClient,
-  applicationId: string
+  applicationId: string,
 ): Promise<boolean> {
   const application = await db.jobApplication.findUnique({
     where: { id: applicationId },
@@ -250,7 +250,6 @@ export async function isApplicationProvisioned(
   });
 
   return (
-    !!application?.orangehrmEmployeeId &&
-    application.orangehrmProvisioningState === "succeeded"
+    !!application?.orangehrmEmployeeId && application.orangehrmProvisioningState === "succeeded"
   );
 }

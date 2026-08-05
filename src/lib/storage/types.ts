@@ -5,13 +5,9 @@ export type SignedUrlResult =
   | { signedUrl: string; error: null }
   | { signedUrl: null; error: string };
 
-export type UploadResult =
-  | { path: string; error: null }
-  | { path: null; error: string };
+export type UploadResult = { path: string; error: null } | { path: null; error: string };
 
-export type DeleteResult =
-  | { success: true; error: null }
-  | { success: false; error: string };
+export type DeleteResult = { success: true; error: null } | { success: false; error: string };
 
 /**
  * Storage interface abstraction.

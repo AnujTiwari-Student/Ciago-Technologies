@@ -24,7 +24,13 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
-function logTest(name: string, status: "PASS" | "FAIL", message: string, error?: string, data?: any) {
+function logTest(
+  name: string,
+  status: "PASS" | "FAIL",
+  message: string,
+  error?: string,
+  data?: any,
+) {
   const result: TestResult = { name, status, message, error, data };
   results.push(result);
 
@@ -47,7 +53,9 @@ async function main() {
   console.log("\n" + "=".repeat(60));
   console.log("PHASE 4 MANUAL VALIDATION - APPLIED → HIRED");
   console.log("=".repeat(60));
-  console.log(`Environment: FRAPPE_EMPLOYEE_SYNC_ENABLED=${process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED}\n`);
+  console.log(
+    `Environment: FRAPPE_EMPLOYEE_SYNC_ENABLED=${process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED}\n`,
+  );
 
   if (process.env.FRAPPE_EMPLOYEE_SYNC_ENABLED !== "true") {
     console.error("❌ ABORT: Must run with FRAPPE_EMPLOYEE_SYNC_ENABLED=true");
@@ -80,7 +88,8 @@ async function main() {
       console.log(`✓ Created test job: ${testJob.title}\n`);
     }
 
-    const roleId = jobPosting?.id || (await db.jobPosting.findFirst({ where: { status: "published" } }))!.id;
+    const roleId =
+      jobPosting?.id || (await db.jobPosting.findFirst({ where: { status: "published" } }))!.id;
     const roleTitle = jobPosting?.title || "Test Engineer";
 
     // Create test application
@@ -127,7 +136,7 @@ async function main() {
           {
             action: result.provisioningResult.action,
             employeeName: frappeEmployeeName,
-          }
+          },
         );
       } else {
         logTest(
@@ -135,7 +144,7 @@ async function main() {
           "FAIL",
           "Failed to create Frappe employee",
           result.provisioningResult?.error || "Unknown error",
-          result
+          result,
         );
       }
     } catch (error) {
@@ -143,7 +152,7 @@ async function main() {
         "Test 1: APPLIED",
         "FAIL",
         "APPLIED test threw error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -165,13 +174,13 @@ async function main() {
               last_name: employee.last_name,
               status: employee.status,
               company: employee.company,
-            }
+            },
           );
         } else {
           logTest(
             "Test 2: Frappe Employee Exists",
             "FAIL",
-            `Employee ${frappeEmployeeName} not found in Frappe`
+            `Employee ${frappeEmployeeName} not found in Frappe`,
           );
         }
       } catch (error) {
@@ -179,7 +188,7 @@ async function main() {
           "Test 2: Frappe Employee Exists",
           "FAIL",
           "Failed to retrieve employee from Frappe",
-          error instanceof Error ? error.message : String(error)
+          error instanceof Error ? error.message : String(error),
         );
       }
     }
@@ -198,7 +207,8 @@ async function main() {
 
       if (
         app?.frappeEmployeeName === frappeEmployeeName &&
-        (app?.frappeProvisioningState === "succeeded" || app?.frappeProvisioningState === "needs_manual_review") &&
+        (app?.frappeProvisioningState === "succeeded" ||
+          app?.frappeProvisioningState === "needs_manual_review") &&
         app?.frappeProvisioningSucceededAt !== null
       ) {
         logTest(
@@ -209,14 +219,14 @@ async function main() {
           {
             frappeEmployeeName: app.frappeEmployeeName,
             state: app.frappeProvisioningState,
-          }
+          },
         );
       } else {
         logTest(
           "Test 3: Database State",
           "FAIL",
           "Application database state incorrect",
-          `Expected: employeeName=${frappeEmployeeName}, state=succeeded/needs_manual_review, Got: ${JSON.stringify(app)}`
+          `Expected: employeeName=${frappeEmployeeName}, state=succeeded/needs_manual_review, Got: ${JSON.stringify(app)}`,
         );
       }
     } catch (error) {
@@ -224,7 +234,7 @@ async function main() {
         "Test 3: Database State",
         "FAIL",
         "Failed to check database state",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -245,7 +255,7 @@ async function main() {
           "PASS",
           "Duplicate APPLIED correctly skipped (already completed)",
           undefined,
-          { reason: result.reason }
+          { reason: result.reason },
         );
       } else if (result.triggered && result.provisioningResult?.action === "already_provisioned") {
         logTest(
@@ -253,7 +263,7 @@ async function main() {
           "PASS",
           "Duplicate APPLIED correctly handled (already provisioned)",
           undefined,
-          { action: result.provisioningResult.action }
+          { action: result.provisioningResult.action },
         );
       } else {
         logTest(
@@ -261,7 +271,7 @@ async function main() {
           "FAIL",
           "Duplicate APPLIED should not create new employee",
           undefined,
-          result
+          result,
         );
       }
     } catch (error) {
@@ -269,7 +279,7 @@ async function main() {
         "Test 4: APPLIED Idempotency",
         "FAIL",
         "Idempotency test threw error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -311,7 +321,7 @@ async function main() {
           {
             action: result.upsertResult.action,
             employeeName: result.upsertResult.employeeName,
-          }
+          },
         );
       } else {
         logTest(
@@ -319,7 +329,7 @@ async function main() {
           "FAIL",
           "Failed to enrich Frappe employee",
           result.upsertResult?.error || "Unknown error",
-          result
+          result,
         );
       }
     } catch (error) {
@@ -327,7 +337,7 @@ async function main() {
         "Test 5: HIRED",
         "FAIL",
         "HIRED test threw error",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -361,7 +371,7 @@ async function main() {
         "Test 6: Cleanup",
         "FAIL",
         "Cleanup failed",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
       );
     }
 
