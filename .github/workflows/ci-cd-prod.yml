@@ -3,11 +3,9 @@ name: CI/CD - Production (Frappe + Cloudflare)
 on:
   push:
     branches:
-      - production
       - main
   pull_request:
     branches:
-      - production
       - main
 
 env:
