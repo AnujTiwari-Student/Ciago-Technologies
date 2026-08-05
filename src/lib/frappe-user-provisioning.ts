@@ -171,6 +171,32 @@ export async function provisionFrappeUser(
   const logPrefix = `[frappe-user:${applicationId.slice(0, 8)}]`;
   console.log(`${logPrefix} Starting Frappe User provisioning for ${email}`);
 
+  // CRITICAL: Check joining date before provisioning
+  const application = await db.jobApplication.findUnique({
+    where: { id: applicationId },
+    select: { joiningDate: true, status: true },
+  });
+
+  if (application?.joiningDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const joiningDate = new Date(application.joiningDate);
+    joiningDate.setHours(0, 0, 0, 0);
+
+    if (today < joiningDate) {
+      console.log(
+        `${logPrefix} User provisioning blocked: Joining date ${joiningDate.toISOString()} has not arrived yet`
+      );
+      return {
+        success: false,
+        userEmail: email,
+        action: "failed",
+        message: `Dashboard access locked until joining date: ${joiningDate.toDateString()}`,
+        error: "JOINING_DATE_NOT_REACHED",
+      };
+    }
+  }
+
   try {
     // Step 1: Fetch CiagoTech roles
     const userRoles = await db.userRole.findMany({
