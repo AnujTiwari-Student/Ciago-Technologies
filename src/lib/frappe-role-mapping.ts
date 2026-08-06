@@ -36,10 +36,11 @@ import type { AppRole } from "@prisma/client";
 export function mapCiagoRolesToFrappeRoles(ciagoRoles: AppRole[]): string[] {
   const frappeRoles = new Set<string>();
 
-  // Base: All users with any role get Employee access
+  // Base: All users with any role get Employee access + Support
   if (ciagoRoles.length > 0) {
     frappeRoles.add("Employee");
     frappeRoles.add("Employee Self Service");
+    frappeRoles.add("Support Team");
   }
 
   // Manager: Approval powers
@@ -48,10 +49,13 @@ export function mapCiagoRolesToFrappeRoles(ciagoRoles: AppRole[]): string[] {
     frappeRoles.add("Expense Approver");
   }
 
-  // HR: HR operations
+  // HR: Full HR operations including approval powers
   if (ciagoRoles.includes("hr")) {
     frappeRoles.add("HR User");
     frappeRoles.add("HR Manager");
+    frappeRoles.add("Leave Approver");
+    frappeRoles.add("Expense Approver");
+    frappeRoles.add("Interviewer");
   }
 
   // System roles: Technical/admin access

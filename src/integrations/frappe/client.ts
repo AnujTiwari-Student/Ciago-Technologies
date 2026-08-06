@@ -413,6 +413,18 @@ export class FrappeClient {
     );
   }
 
+  async enableUser(email: string): Promise<void> {
+    await this.request<FrappeAPIResponse<FrappeUser>>(
+      `/api/resource/User/${encodeURIComponent(email)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: 1,
+        }),
+      },
+    );
+  }
+
   // ============================================================
   // JOB OPENING MANAGEMENT METHODS
   // ============================================================

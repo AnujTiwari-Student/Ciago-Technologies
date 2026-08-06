@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import {
   Activity,
   Briefcase,
+  Calendar,
+  CalendarCheck,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -47,6 +49,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -99,8 +107,10 @@ import {
   upsertJobPosting,
   type JobPosting,
 } from "@/lib/jobPostings.functions";
+import { setJoiningDate } from "@/lib/joining-date.functions";
 import { useLookups } from "@/hooks/use-lookups";
 import { requireDashboardAccess } from "./-guard";
+import { format as formatDate } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
@@ -470,6 +480,22 @@ function ApplicationsPanel() {
     onError: (e: any) => toast.error(e?.message || "Delete failed"),
   });
 
+  const setJoiningDateFn = useServerFn(setJoiningDate);
+  const joiningDateMutation = useMutation({
+    mutationFn: (vars: { applicationId: string; joiningDate: Date }) =>
+      setJoiningDateFn({
+        data: {
+          applicationId: vars.applicationId,
+          joiningDate: vars.joiningDate.toISOString(),
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Joining date set — offer and joining letters sent via email");
+      qc.invalidateQueries({ queryKey: ["admin-applications"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to set joining date"),
+  });
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -639,6 +665,272 @@ function ApplicationsPanel() {
                     <span className="text-xs text-muted-foreground/50">—</span>
                   )}
                 </div>
+
+                {/* Background Check & Joining Date Section - Show for all hired candidates */}
+                {a.status === "hired" && (
+                  <>
+                    {/* Background Check Status Banner */}
+                    {a.bg_check_status === "not_started" || a.bg_check_status === "pending" || a.bg_check_status === null || !a.bg_check_status ? (
+                      <div className="col-span-full mt-3 rounded-lg border border-amber-500/40 bg-amber-50/60 p-3.5 shadow-sm dark:bg-amber-950/20">
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-full bg-amber-100 p-2 dark:bg-amber-900/30">
+                            <ShieldCheck className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                Background Check Required
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/40 bg-amber-500/10 text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-300"
+                              >
+                                {a.bg_check_status === "not_started" ? "Not Started" : a.bg_check_status ?? "Pending"}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                              Complete background verification to unlock joining date selection
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : a.bg_check_status === "failed" ? (
+                      <div className="col-span-full mt-3 rounded-lg border border-rose-500/40 bg-rose-50/60 p-3.5 shadow-sm dark:bg-rose-950/20">
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-full bg-rose-100 p-2 dark:bg-rose-900/30">
+                            <ShieldCheck className="h-4 w-4 text-rose-700 dark:text-rose-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-100">
+                                Background Check Failed
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className="border-rose-500/40 bg-rose-500/10 text-[10px] font-semibold uppercase tracking-widest text-rose-700 dark:text-rose-300"
+                              >
+                                Failed
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-rose-800 dark:text-rose-200">
+                              Contact HR for next steps
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : a.bg_check_status === "waived" ? (
+                      <div className="col-span-full mt-3 rounded-lg border border-blue-500/40 bg-blue-50/60 p-4 shadow-sm dark:bg-blue-950/20">
+                        <div className="mb-3 flex items-start gap-3">
+                          <div className="rounded-full bg-blue-100 p-2 dark:bg-blue-900/30">
+                            <CalendarCheck className="h-4 w-4 text-blue-700 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                                Set Joining Date
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className="border-blue-500/40 bg-blue-500/10 text-[10px] font-semibold uppercase tracking-widest text-blue-700 dark:text-blue-300"
+                              >
+                                BG Check Waived
+                              </Badge>
+                            </div>
+                            {a.bg_check_verified_at && (
+                              <p className="mt-1 text-xs text-blue-800 dark:text-blue-200">
+                                Waived on {formatDate(new Date(a.bg_check_verified_at), "PP")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {a.joining_date ? (
+                          <div className="space-y-2 border-t border-blue-200 pt-3 dark:border-blue-800">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              <p className="text-sm">
+                                <span className="font-medium text-blue-900 dark:text-blue-100">Joining Date:</span>{" "}
+                                <span className="font-bold text-blue-700 dark:text-blue-300">
+                                  {formatDate(new Date(a.joining_date), "PPP")}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {a.offer_letter_sent_at && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-blue-500/40 bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300"
+                                >
+                                  📄 Offer Letter: {formatDate(new Date(a.offer_letter_sent_at), "PP")}
+                                </Badge>
+                              )}
+                              {a.joining_letter_sent_at && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-purple-500/40 bg-purple-500/10 text-xs text-purple-700 dark:text-purple-300"
+                                >
+                                  📋 Joining Letter: {formatDate(new Date(a.joining_letter_sent_at), "PP")}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 border-t border-blue-200 pt-3 dark:border-blue-800">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  disabled={joiningDateMutation.isPending}
+                                  className="w-full border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700 dark:border-blue-500 dark:bg-blue-600"
+                                >
+                                  {joiningDateMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Calendar className="mr-2 h-4 w-4" />
+                                      Select Joining Date
+                                    </>
+                                  )}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <CalendarComponent
+                                  mode="single"
+                                  selected={undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      joiningDateMutation.mutate({
+                                        applicationId: a.id,
+                                        joiningDate: date,
+                                      });
+                                    }
+                                  }}
+                                  disabled={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    return date < today;
+                                  }}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <p className="text-xs text-center text-blue-700 dark:text-blue-300">
+                              📧 Will automatically generate and email offer + joining letters
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : a.bg_check_status === "passed" ? (
+                      <div className="col-span-full mt-3 rounded-lg border border-emerald-500/40 bg-emerald-50/60 p-4 shadow-sm dark:bg-emerald-950/20">
+                        <div className="mb-3 flex items-start gap-3">
+                          <div className="rounded-full bg-emerald-100 p-2 dark:bg-emerald-900/30">
+                            <CalendarCheck className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                Set Joining Date
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/40 bg-emerald-500/10 text-[10px] font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300"
+                              >
+                                BG Check Passed
+                              </Badge>
+                            </div>
+                            {a.bg_check_verified_at && (
+                              <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
+                                Passed on {formatDate(new Date(a.bg_check_verified_at), "PP")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {a.joining_date ? (
+                          <div className="space-y-2 border-t border-emerald-200 pt-3 dark:border-emerald-800">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                              <p className="text-sm">
+                                <span className="font-medium text-emerald-900 dark:text-emerald-100">Joining Date:</span>{" "}
+                                <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                  {formatDate(new Date(a.joining_date), "PPP")}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {a.offer_letter_sent_at && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-blue-500/40 bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300"
+                                >
+                                  📄 Offer Letter: {formatDate(new Date(a.offer_letter_sent_at), "PP")}
+                                </Badge>
+                              )}
+                              {a.joining_letter_sent_at && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-purple-500/40 bg-purple-500/10 text-xs text-purple-700 dark:text-purple-300"
+                                >
+                                  📋 Joining Letter: {formatDate(new Date(a.joining_letter_sent_at), "PP")}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 border-t border-emerald-200 pt-3 dark:border-emerald-800">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  disabled={joiningDateMutation.isPending}
+                                  className="w-full border-emerald-600 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                                >
+                                  {joiningDateMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Calendar className="mr-2 h-4 w-4" />
+                                      Select Joining Date
+                                    </>
+                                  )}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <CalendarComponent
+                                  mode="single"
+                                  selected={undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      joiningDateMutation.mutate({
+                                        applicationId: a.id,
+                                        joiningDate: date,
+                                      });
+                                    }
+                                  }}
+                                  disabled={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    return date < today;
+                                  }}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <p className="text-xs text-center text-emerald-700 dark:text-emerald-300">
+                              📧 Will automatically generate and email offer + joining letters
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </li>
             ))}
           </ul>

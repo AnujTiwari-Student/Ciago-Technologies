@@ -25,6 +25,11 @@ export type AdminApplication = {
   resume_storage_path: string | null;
   created_at: string;
   track_type: "standard" | "manager_track" | "hr_track" | null;
+  joining_date: string | null;
+  offer_letter_sent_at: string | null;
+  joining_letter_sent_at: string | null;
+  bg_check_status: "not_started" | "pending" | "passed" | "failed" | "waived" | null;
+  bg_check_verified_at: string | null;
 };
 
 export type AdminUser = {
@@ -129,23 +134,47 @@ export const listAllApplications = createServerFn({ method: "GET" })
         resumeLink: true,
         resumeStoragePath: true,
         createdAt: true,
+        joiningDate: true,
+        offerLetterSentAt: true,
+        joiningLetterSentAt: true,
       },
     });
 
-    const rows: AdminApplication[] = apps.map((a) => ({
-      id: a.id,
-      user_id: a.userId,
-      role_id: a.roleId,
-      role_title: a.roleTitle,
-      full_name: a.fullName,
-      email: a.email,
-      status: a.status,
-      portfolio_url: a.portfolioUrl,
-      resume_link: a.resumeLink,
-      resume_storage_path: a.resumeStoragePath,
-      created_at: a.createdAt.toISOString(),
-      track_type: null,
-    }));
+    // Fetch background verification data separately
+    const bgChecks = await adminDb.backgroundVerification.findMany({
+      where: {
+        applicationId: { in: apps.map(a => a.id) },
+      },
+      select: {
+        applicationId: true,
+        status: true,
+        verifiedAt: true,
+      },
+    });
+    const bgCheckMap = new Map(bgChecks.map(bg => [bg.applicationId, bg]));
+
+    const rows: AdminApplication[] = apps.map((a) => {
+      const bgCheck = bgCheckMap.get(a.id);
+      return {
+        id: a.id,
+        user_id: a.userId,
+        role_id: a.roleId,
+        role_title: a.roleTitle,
+        full_name: a.fullName,
+        email: a.email,
+        status: a.status,
+        portfolio_url: a.portfolioUrl,
+        resume_link: a.resumeLink,
+        resume_storage_path: a.resumeStoragePath,
+        created_at: a.createdAt.toISOString(),
+        track_type: null,
+        joining_date: a.joiningDate?.toISOString() ?? null,
+        offer_letter_sent_at: a.offerLetterSentAt?.toISOString() ?? null,
+        joining_letter_sent_at: a.joiningLetterSentAt?.toISOString() ?? null,
+        bg_check_status: bgCheck?.status ?? null,
+        bg_check_verified_at: bgCheck?.verifiedAt?.toISOString() ?? null,
+      };
+    });
 
     const roleIds = Array.from(new Set(rows.map((r) => r.role_id).filter(Boolean)));
     if (roleIds.length > 0) {
@@ -267,6 +296,36 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
         ...(data.status === "hired" && !prior?.hiredAt ? { hiredAt: new Date() } : {}),
       },
     });
+
+    // Auto-create background verification record when status changes to "hired"
+    if (data.status === "hired" && prior && prior.status !== "hired") {
+      const existingBgCheck = await adminDb.backgroundVerification.findUnique({
+        where: { applicationId: data.id },
+      });
+      if (!existingBgCheck) {
+        // Check if user already has a cleared bg check in the employees table
+        const employee = await adminDb.employee.findUnique({
+          where: { userId: prior.userId },
+          select: { backgroundCheckStatus: true },
+        });
+        const bgStatusMap: Record<string, string> = {
+          cleared: "passed",
+          flagged: "failed",
+          in_progress: "pending",
+          not_started: "not_started",
+        };
+        const initialStatus = bgStatusMap[employee?.backgroundCheckStatus ?? ""] ?? "not_started";
+
+        await adminDb.backgroundVerification.create({
+          data: {
+            applicationId: data.id,
+            userId: prior.userId,
+            status: initialStatus as any,
+            ...(initialStatus === "passed" ? { verifiedAt: new Date() } : {}),
+          },
+        });
+      }
+    }
 
     // Update Frappe custom_employment_status if employee exists
     if (prior && prior.status !== data.status) {

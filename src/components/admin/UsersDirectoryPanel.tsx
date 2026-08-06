@@ -22,11 +22,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   listDirectory,
   updateBgCheckStatus,
+  updateUserAppRole,
   DEPT_TYPES,
   BG_CHECK_STATUSES,
+  APP_ROLES,
   type DirectoryRow,
 } from "@/lib/users.functions";
 import { useMyRoles } from "@/hooks/use-my-roles";
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Admin",
+  moderator: "Moderator",
+  user: "User",
+  employee: "Employee",
+  hr: "HR",
+  manager: "Manager",
+  system_engineer: "Sys Engineer",
+  developer: "Developer",
+};
 
 const DEPT_LABEL: Record<string, string> = {
   engineering: "Engineering",
@@ -145,6 +158,51 @@ function BgCheckSelect({ row }: { row: DirectoryRow }) {
   );
 }
 
+function RoleSelect({ row }: { row: DirectoryRow }) {
+  const qc = useQueryClient();
+  const updateRoleFn = useServerFn(updateUserAppRole);
+
+  const mutation = useMutation({
+    mutationFn: (role: string) => updateRoleFn({ data: { user_id: row.user_id, role } }),
+    onSuccess: (_data, role) => {
+      toast.success(`Role "${ROLE_LABEL[role] || role}" assigned & synced to Frappe`);
+      qc.invalidateQueries({ queryKey: ["directory"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Update failed"),
+  });
+
+  const currentRole = row.is_admin ? "admin" : row.role;
+
+  return (
+    <Select
+      value={currentRole}
+      onValueChange={(v) => mutation.mutate(v)}
+      disabled={mutation.isPending}
+    >
+      <SelectTrigger
+        className={`h-7 w-[120px] text-xs border ${
+          currentRole === "admin"
+            ? "text-purple-600 border-purple-600/30"
+            : currentRole === "hr"
+              ? "text-teal-600 border-teal-600/30"
+              : currentRole === "manager"
+                ? "text-blue-600 border-blue-600/30"
+                : "text-muted-foreground border-muted-foreground/30"
+        }`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {APP_ROLES.map((r) => (
+          <SelectItem key={r} value={r}>
+            {ROLE_LABEL[r] || humanize(r)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function UsersDirectoryPanel() {
   const listFn = useServerFn(listDirectory);
   const {
@@ -233,8 +291,11 @@ export function UsersDirectoryPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All roles</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
+                    {APP_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABEL[r] || humanize(r)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select value={deptFilter} onValueChange={setDeptFilter}>
@@ -305,9 +366,7 @@ export function UsersDirectoryPanel() {
                             </div>
                           </td>
                           <td className="py-3 px-2">
-                            <Badge variant="outline" className="text-xs">
-                              {r.is_admin ? "Admin" : "User"}
-                            </Badge>
+                            <RoleSelect row={r} />
                           </td>
                           <td className="py-3 px-2 text-muted-foreground">
                             {r.department

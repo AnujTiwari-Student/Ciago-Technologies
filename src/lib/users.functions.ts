@@ -29,10 +29,19 @@ export const EMPLOYMENT_TYPES = [
 export const WORK_MODELS = ["onsite", "remote", "hybrid"] as const;
 export const PROBATION_STATUSES = ["under_review", "confirmed", "extended"] as const;
 export const BG_CHECK_STATUSES = ["not_started", "in_progress", "cleared", "flagged"] as const;
+
+const BG_STATUS_TO_VERIFICATION: Record<string, string> = {
+  not_started: "not_started",
+  in_progress: "pending",
+  cleared: "passed",
+  flagged: "failed",
+};
 export const DOC_VERIFY_STATUSES = ["pending", "verified", "rejected"] as const;
 export const ID_DOC_TYPES = ["pan", "aadhaar", "passport"] as const;
 
-export type AppRole = "admin" | "user";
+export type AppRole = "admin" | "moderator" | "user" | "employee" | "hr" | "manager" | "system_engineer" | "developer";
+
+export const APP_ROLES: AppRole[] = ["admin", "moderator", "user", "employee", "hr", "manager", "system_engineer", "developer"];
 
 export type DirectoryRow = {
   user_id: string;
@@ -99,7 +108,17 @@ export const listDirectory = createServerFn({ method: "GET" })
 
     const profileMap = new Map(profiles.map((p) => [p.userId, p]));
     const empMap = new Map(employees.map((e) => [e.userId, e]));
-    const roleMap = new Map(roles.map((r) => [r.userId, r]));
+    // Pick the highest-privilege role for each user
+    const rolePriority: Record<string, number> = {
+      admin: 8, system_engineer: 7, developer: 6, hr: 5, manager: 4, moderator: 3, employee: 2, user: 1,
+    };
+    const roleMap = new Map<string, (typeof roles)[number]>();
+    for (const r of roles) {
+      const existing = roleMap.get(r.userId);
+      if (!existing || (rolePriority[r.role] ?? 0) > (rolePriority[existing.role] ?? 0)) {
+        roleMap.set(r.userId, r);
+      }
+    }
     const onboardingMap = new Map(onboardingRecords.map((o) => [o.userId, o]));
 
     // Fetch document counts for all onboarding records
@@ -219,7 +238,155 @@ export const updateBgCheckStatus = createServerFn({ method: "POST" })
       },
     });
 
+    // Sync to background_verifications table for hired applications
+    const verificationStatus = BG_STATUS_TO_VERIFICATION[data.status] ?? "not_started";
+    const hiredApps = await adminDb.jobApplication.findMany({
+      where: { userId: data.user_id, status: "hired", isSoftDeleted: false },
+      select: { id: true },
+    });
+
+    for (const app of hiredApps) {
+      await adminDb.backgroundVerification.upsert({
+        where: { applicationId: app.id },
+        create: {
+          applicationId: app.id,
+          userId: data.user_id,
+          status: verificationStatus as any,
+          ...(verificationStatus === "passed" ? { verifiedAt: new Date(), verifiedBy: context.userId } : {}),
+        },
+        update: {
+          status: verificationStatus as any,
+          ...(verificationStatus === "passed" ? { verifiedAt: new Date(), verifiedBy: context.userId } : {}),
+        },
+      });
+    }
+
     return { success: true };
+  });
+
+export const updateUserAppRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: unknown) =>
+    z
+      .object({
+        user_id: z.string().uuid(),
+        role: z.enum(["admin", "moderator", "user", "employee", "hr", "manager", "system_engineer", "developer"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const actor = await getActorRoles(null, context.userId);
+    if (!actor.isAdmin) throw new Error("Forbidden");
+
+    const adminDb = getAdminDb();
+
+    // Upsert the user's role
+    await adminDb.userRole.upsert({
+      where: { userId_role: { userId: data.user_id, role: data.role } },
+      create: { userId: data.user_id, role: data.role },
+      update: {},
+    });
+
+    // Sync Frappe roles if user has a Frappe account
+    try {
+      const { mapCiagoRolesToFrappeRoles, formatRolesForFrappe } = await import("@/lib/frappe-role-mapping");
+      const { createFrappeClient } = await import("@/integrations/frappe/client");
+
+      // Get all roles for this user
+      const allRoles = await adminDb.userRole.findMany({
+        where: { userId: data.user_id },
+        select: { role: true },
+      });
+      const ciagoRoles = allRoles.map((r: any) => r.role);
+      const frappeRoles = mapCiagoRolesToFrappeRoles(ciagoRoles);
+
+      // Get user's email
+      const userMap = await adminDb.clerkUserMap.findFirst({
+        where: { authUserId: data.user_id },
+        select: { email: true },
+      });
+
+      if (userMap?.email) {
+        const client = createFrappeClient();
+        const frappeUser = await client.getUser(userMap.email);
+        if (frappeUser) {
+          await client.updateUserRoles(userMap.email, formatRolesForFrappe(frappeRoles));
+          console.log(`[role-sync] Updated Frappe roles for ${userMap.email}:`, frappeRoles);
+        }
+      }
+    } catch (e) {
+      console.error("[role-sync] Failed to sync Frappe roles:", e);
+    }
+
+    return { success: true, role: data.role };
+  });
+
+export const removeUserAppRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: unknown) =>
+    z
+      .object({
+        user_id: z.string().uuid(),
+        role: z.enum(["admin", "moderator", "user", "employee", "hr", "manager", "system_engineer", "developer"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const actor = await getActorRoles(null, context.userId);
+    if (!actor.isAdmin) throw new Error("Forbidden");
+
+    const adminDb = getAdminDb();
+
+    await adminDb.userRole.deleteMany({
+      where: { userId: data.user_id, role: data.role },
+    });
+
+    // Sync Frappe roles
+    try {
+      const { mapCiagoRolesToFrappeRoles, formatRolesForFrappe } = await import("@/lib/frappe-role-mapping");
+      const { createFrappeClient } = await import("@/integrations/frappe/client");
+
+      const allRoles = await adminDb.userRole.findMany({
+        where: { userId: data.user_id },
+        select: { role: true },
+      });
+      const ciagoRoles = allRoles.map((r: any) => r.role);
+      const frappeRoles = mapCiagoRolesToFrappeRoles(ciagoRoles);
+
+      const userMap = await adminDb.clerkUserMap.findFirst({
+        where: { authUserId: data.user_id },
+        select: { email: true },
+      });
+
+      if (userMap?.email) {
+        const client = createFrappeClient();
+        const frappeUser = await client.getUser(userMap.email);
+        if (frappeUser) {
+          await client.updateUserRoles(userMap.email, formatRolesForFrappe(frappeRoles));
+          console.log(`[role-sync] Updated Frappe roles for ${userMap.email}:`, frappeRoles);
+        }
+      }
+    } catch (e) {
+      console.error("[role-sync] Failed to sync Frappe roles:", e);
+    }
+
+    return { success: true };
+  });
+
+export const getUserRoles = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const actor = await getActorRoles(null, context.userId);
+    if (!actor.isAdmin) throw new Error("Forbidden");
+
+    const adminDb = getAdminDb();
+    const roles = await adminDb.userRole.findMany({
+      where: { userId: data.user_id },
+      select: { role: true },
+    });
+
+    return roles.map((r: any) => r.role as AppRole);
   });
 
 export const getUserDetail = createServerFn({ method: "GET" })

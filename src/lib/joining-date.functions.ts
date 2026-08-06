@@ -7,14 +7,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getAdminDb } from "@/lib/db/admin";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { generateOfferLetter, generateJoiningLetter, cleanupLetterFiles } from "./letter-generator";
 import { generateHiringEmailWithLetters } from "./email-templates/hiring-with-letters";
-import { Resend } from "resend";
+import { sendCredentialsEmail } from "./cron/send-joining-credentials";
 import fs from "fs";
 import path from "path";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Set joining date for a hired candidate and send offer + joining letters
@@ -31,16 +29,9 @@ export const setJoiningDate = createServerFn({ method: "POST" })
     const { applicationId, joiningDate } = data;
 
     try {
-      // 1. Fetch application with background check status
+      // 1. Fetch application
       const application = await db.jobApplication.findUnique({
         where: { id: applicationId },
-        include: {
-          user: {
-            include: {
-              backgroundVerification: true,
-            },
-          },
-        },
       });
 
       if (!application) {
@@ -52,31 +43,45 @@ export const setJoiningDate = createServerFn({ method: "POST" })
         throw new Error("Application status must be 'hired' to set joining date");
       }
 
-      // 3. Validate background check is cleared
-      const bgCheck = application.user?.backgroundVerification;
-      if (!bgCheck || bgCheck.status !== "cleared") {
-        throw new Error("Background verification must be cleared before setting joining date");
+      // 3. Validate background check is passed (cleared)
+      const bgCheck = await db.backgroundVerification.findUnique({
+        where: { applicationId },
+      });
+      if (!bgCheck || (bgCheck.status !== "passed" && bgCheck.status !== "waived")) {
+        throw new Error("Background verification must be passed or waived before setting joining date");
       }
 
-      // 4. Update application with joining date
+      // 4. Fetch salary from job posting
+      const jobPosting = await db.jobPosting.findUnique({
+        where: { id: application.roleId },
+        select: { salaryMinInr: true, salaryMaxInr: true },
+      });
+
+      const annualCtc = jobPosting?.salaryMaxInr
+        ? Number(jobPosting.salaryMaxInr)
+        : jobPosting?.salaryMinInr
+          ? Number(jobPosting.salaryMinInr)
+          : null;
+      const salaryCtcDisplay = annualCtc
+        ? `₹${annualCtc.toLocaleString("en-IN")}`
+        : "As per offer";
+
+      // 5. Update application with joining date
       const joiningDateObj = new Date(joiningDate);
-      const updatedApplication = await db.jobApplication.update({
+      await db.jobApplication.update({
         where: { id: applicationId },
         data: {
           joiningDate: joiningDateObj,
         },
-        include: {
-          user: true,
-        },
       });
 
-      // 5. Generate offer letter
+      // 6. Generate offer letter
       const joiningDateFormatted = format(joiningDateObj, "dd-MM-yyyy");
       const offerLetterResult = await generateOfferLetter({
         candidateName: application.fullName,
         position: application.roleTitle,
         joiningDate: joiningDateFormatted,
-        salaryCtc: `₹${(12_00_000).toLocaleString("en-IN")}`, // TODO: Get from application/offer data
+        salaryCtc: salaryCtcDisplay,
         email: application.email,
       });
 
@@ -109,7 +114,7 @@ export const setJoiningDate = createServerFn({ method: "POST" })
         firstName,
         position: application.roleTitle,
         joiningDate: joiningDateObj,
-        salaryCtc: `₹${(12_00_000).toLocaleString("en-IN")}`,
+        salaryCtc: salaryCtcDisplay,
         workEmail,
       });
 
@@ -117,26 +122,44 @@ export const setJoiningDate = createServerFn({ method: "POST" })
       const offerLetterBuffer = fs.readFileSync(offerLetterResult.filePath!);
       const joiningLetterBuffer = fs.readFileSync(joiningLetterResult.filePath!);
 
-      // 9. Send email with Resend
-      const emailResult = await resend.emails.send({
-        from: "Ciago Technologies <hr@ciagotech.com>",
-        to: application.email,
-        subject: emailContent.subject,
-        html: emailContent.html,
-        text: emailContent.text,
-        attachments: [
-          {
-            filename: `Offer_Letter_${application.fullName.replace(/\s+/g, "_")}.pdf`,
-            content: offerLetterBuffer,
-          },
-          {
-            filename: `Joining_Letter_${application.fullName.replace(/\s+/g, "_")}.pdf`,
-            content: joiningLetterBuffer,
-          },
-        ],
+      // 9. Send email with Resend using fetch API
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) {
+        throw new Error("RESEND_API_KEY not configured");
+      }
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          from: "Ciago Technologies <hr@ciagotech.com>",
+          to: application.email,
+          subject: emailContent.subject,
+          html: emailContent.html,
+          text: emailContent.text,
+          attachments: [
+            {
+              filename: `Offer_Letter_${application.fullName.replace(/\s+/g, "_")}.pdf`,
+              content: offerLetterBuffer.toString("base64"),
+            },
+            {
+              filename: `Joining_Letter_${application.fullName.replace(/\s+/g, "_")}.pdf`,
+              content: joiningLetterBuffer.toString("base64"),
+            },
+          ],
+        }),
       });
 
-      console.log(`[joining-date] Email sent successfully:`, emailResult);
+      const emailResult = await response.json();
+
+      if (!response.ok) {
+        throw new Error(`Resend API error: ${JSON.stringify(emailResult)}`);
+      }
+
+      console.log(`[joining-date] Email sent successfully:`, emailResult.id);
 
       // 10. Update application with sent timestamps
       await db.jobApplication.update({
@@ -155,7 +178,7 @@ export const setJoiningDate = createServerFn({ method: "POST" })
           subject: emailContent.subject,
           emailType: "hiring_notification",
           status: "sent",
-          resendId: emailResult.data?.id,
+          resendId: emailResult.id,
           userId: application.userId,
           applicationId: application.id,
           metadata: {
@@ -169,14 +192,24 @@ export const setJoiningDate = createServerFn({ method: "POST" })
       // 12. Cleanup PDF files after sending
       await cleanupLetterFiles([offerLetterResult.filePath!, joiningLetterResult.filePath!]);
 
+      // 13. If joining date is today or earlier, send Frappe credentials immediately
+      let credentialsSent = false;
+      if (joiningDateObj <= endOfDay(new Date()) && application.frappeProvisioningState === "succeeded") {
+        console.log(`[joining-date] Joining date is today/past — sending credentials email immediately`);
+        credentialsSent = await sendCredentialsEmail(application);
+      }
+
       return {
         success: true,
-        message: "Joining date set and letters sent successfully",
+        message: credentialsSent
+          ? "Joining date set, letters sent, and credentials email sent"
+          : "Joining date set and letters sent successfully",
         data: {
-          applicationId: updatedApplication.id,
-          joiningDate: updatedApplication.joiningDate,
+          applicationId: application.id,
+          joiningDate: joiningDateObj,
           emailSent: true,
           emailId: emailResult.data?.id,
+          credentialsSent,
         },
       };
     } catch (error) {
@@ -252,7 +285,7 @@ export const checkFrappeDashboardAccess = createServerFn({ method: "POST" })
       }
 
       // Check Frappe provisioning status
-      if (application.frappeProvisioningState !== "completed") {
+      if (application.frappeProvisioningState !== "succeeded") {
         return {
           hasAccess: false,
           reason: "provisioning_pending",
@@ -336,10 +369,15 @@ export const getTodayJoiningDates = createServerFn({ method: "GET" }).handler(as
           lt: tomorrow,
         },
         status: "hired",
-        frappeProvisioningState: "completed",
+        frappeProvisioningState: "succeeded",
       },
-      include: {
-        user: true,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        roleTitle: true,
+        joiningDate: true,
+        userId: true,
       },
     });
 

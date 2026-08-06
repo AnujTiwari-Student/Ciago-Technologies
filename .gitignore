@@ -82,3 +82,9 @@ resend-worker/
 
 # Documentation directory (local docs only)
 .docs/
+
+frappe-exports/
+
+frappe-backup.sh
+
+deploy.sh

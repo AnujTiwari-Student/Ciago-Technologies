@@ -472,75 +472,75 @@ COMMENT ON TABLE access_role_mappings IS 'Maps Ciago roles/designations to exter
 -- -----------------------------------------------------------------------------
 -- Add OrangeHRM lifecycle tracking fields
 
-ALTER TABLE job_applications
-  ADD COLUMN orangehrm_employee_id INT,
-  ADD COLUMN orangehrm_provisioning_state orangehrm_provisioning_state NOT NULL DEFAULT 'not_started',
-  ADD COLUMN orangehrm_provisioning_attempted_at TIMESTAMPTZ,
-  ADD COLUMN orangehrm_provisioning_succeeded_at TIMESTAMPTZ,
-  ADD COLUMN orangehrm_record_status orangehrm_record_status NOT NULL DEFAULT 'ACTIVE',
-  ADD COLUMN orangehrm_terminated_at TIMESTAMPTZ,
-  ADD COLUMN orangehrm_termination_reason orangehrm_termination_reason,
-  ADD COLUMN lifecycle_version INT NOT NULL DEFAULT 1;
+ALTER TABLE IF EXISTS public.job_applications
+  ADD COLUMN IF NOT EXISTS orangehrm_employee_id INT,
+  ADD COLUMN IF NOT EXISTS orangehrm_provisioning_state orangehrm_provisioning_state NOT NULL DEFAULT 'not_started',
+  ADD COLUMN IF NOT EXISTS orangehrm_provisioning_attempted_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS orangehrm_provisioning_succeeded_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS orangehrm_record_status orangehrm_record_status NOT NULL DEFAULT 'ACTIVE',
+  ADD COLUMN IF NOT EXISTS orangehrm_terminated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS orangehrm_termination_reason orangehrm_termination_reason,
+  ADD COLUMN IF NOT EXISTS lifecycle_version INT NOT NULL DEFAULT 1;
 
 -- UNIQUE constraint: one OrangeHRM employee cannot be mapped to multiple ACTIVE applications
 -- Terminated/rejected employees retain mapping for audit trail
-CREATE UNIQUE INDEX idx_job_applications_orangehrm_employee_active
-  ON job_applications(orangehrm_employee_id)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_job_applications_orangehrm_employee_active
+  ON public.job_applications(orangehrm_employee_id)
   WHERE orangehrm_employee_id IS NOT NULL AND orangehrm_record_status = 'ACTIVE';
 
 -- Index for reconciliation queries
-CREATE INDEX idx_job_applications_orangehrm_employee_id ON job_applications(orangehrm_employee_id)
+CREATE INDEX IF NOT EXISTS idx_job_applications_orangehrm_employee_id ON public.job_applications(orangehrm_employee_id)
   WHERE orangehrm_employee_id IS NOT NULL;
 
-CREATE INDEX idx_job_applications_orangehrm_record_status ON job_applications(orangehrm_record_status);
-CREATE INDEX idx_job_applications_lifecycle_version ON job_applications(lifecycle_version);
+CREATE INDEX IF NOT EXISTS idx_job_applications_orangehrm_record_status ON public.job_applications(orangehrm_record_status);
+CREATE INDEX IF NOT EXISTS idx_job_applications_lifecycle_version ON public.job_applications(lifecycle_version);
 
-COMMENT ON COLUMN job_applications.orangehrm_employee_id IS 'OrangeHRM employee ID (empNumber). Preserved even after termination for audit trail.';
-COMMENT ON COLUMN job_applications.orangehrm_record_status IS 'OrangeHRM record lifecycle status. TERMINATED means employee was terminated via termination API (NOT deleted - DELETE API unsupported).';
-COMMENT ON COLUMN job_applications.orangehrm_terminated_at IS 'Timestamp when OrangeHRM employee was terminated. Replaces orangehrm_deleted_at (DELETE API unsupported).';
-COMMENT ON COLUMN job_applications.orangehrm_termination_reason IS 'Reason for termination. PRE_HIRE_REJECTION for rejected candidates, distinct from employment termination.';
-COMMENT ON COLUMN job_applications.lifecycle_version IS 'Optimistic concurrency control version. Increment on each lifecycle state transition.';
+COMMENT ON COLUMN public.job_applications.orangehrm_employee_id IS 'OrangeHRM employee ID (empNumber). Preserved even after termination for audit trail.';
+COMMENT ON COLUMN public.job_applications.orangehrm_record_status IS 'OrangeHRM record lifecycle status. TERMINATED means employee was terminated via termination API (NOT deleted - DELETE API unsupported).';
+COMMENT ON COLUMN public.job_applications.orangehrm_terminated_at IS 'Timestamp when OrangeHRM employee was terminated. Replaces orangehrm_deleted_at (DELETE API unsupported).';
+COMMENT ON COLUMN public.job_applications.orangehrm_termination_reason IS 'Reason for termination. PRE_HIRE_REJECTION for rejected candidates, distinct from employment termination.';
+COMMENT ON COLUMN public.job_applications.lifecycle_version IS 'Optimistic concurrency control version. Increment on each lifecycle state transition.';
 
 -- -----------------------------------------------------------------------------
 -- employees table
 -- -----------------------------------------------------------------------------
 -- Add ESS, OrangeHRM termination, and offboarding tracking fields
 
-ALTER TABLE employees
-  ADD COLUMN orangehrm_system_user_id INT,
-  ADD COLUMN ess_account_status ess_account_status NOT NULL DEFAULT 'not_provisioned',
-  ADD COLUMN orangehrm_record_status orangehrm_record_status NOT NULL DEFAULT 'ACTIVE',
-  ADD COLUMN orangehrm_terminated_at TIMESTAMPTZ,
-  ADD COLUMN orangehrm_termination_reason orangehrm_termination_reason,
-  ADD COLUMN offboarding_status offboarding_status,
-  ADD COLUMN offboarding_initiated_at TIMESTAMPTZ,
-  ADD COLUMN offboarding_completed_at TIMESTAMPTZ,
-  ADD COLUMN last_working_day DATE,
-  ADD COLUMN offboarding_reason offboarding_reason;
+ALTER TABLE IF EXISTS public.employees
+  ADD COLUMN IF NOT EXISTS orangehrm_system_user_id INT,
+  ADD COLUMN IF NOT EXISTS ess_account_status ess_account_status NOT NULL DEFAULT 'not_provisioned',
+  ADD COLUMN IF NOT EXISTS orangehrm_record_status orangehrm_record_status NOT NULL DEFAULT 'ACTIVE',
+  ADD COLUMN IF NOT EXISTS orangehrm_terminated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS orangehrm_termination_reason orangehrm_termination_reason,
+  ADD COLUMN IF NOT EXISTS offboarding_status offboarding_status,
+  ADD COLUMN IF NOT EXISTS offboarding_initiated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS offboarding_completed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS last_working_day DATE,
+  ADD COLUMN IF NOT EXISTS offboarding_reason offboarding_reason;
 
 -- UNIQUE constraints: canonical 1:1 mappings
 -- Only ACTIVE employees enforce uniqueness - terminated employees retain mapping for audit
-CREATE UNIQUE INDEX idx_employees_orangehrm_employee_active
-  ON employees(orangehrm_employee_id)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_orangehrm_employee_active
+  ON public.employees(orangehrm_employee_id)
   WHERE orangehrm_employee_id IS NOT NULL AND orangehrm_record_status = 'ACTIVE';
 
-CREATE UNIQUE INDEX idx_employees_orangehrm_system_user
-  ON employees(orangehrm_system_user_id)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_orangehrm_system_user
+  ON public.employees(orangehrm_system_user_id)
   WHERE orangehrm_system_user_id IS NOT NULL;
 
 -- Indexes
-CREATE INDEX idx_employees_orangehrm_employee_id ON employees(orangehrm_employee_id)
+CREATE INDEX IF NOT EXISTS idx_employees_orangehrm_employee_id ON public.employees(orangehrm_employee_id)
   WHERE orangehrm_employee_id IS NOT NULL;
 
-CREATE INDEX idx_employees_ess_account_status ON employees(ess_account_status);
-CREATE INDEX idx_employees_orangehrm_record_status ON employees(orangehrm_record_status);
-CREATE INDEX idx_employees_offboarding_status ON employees(offboarding_status);
+CREATE INDEX IF NOT EXISTS idx_employees_ess_account_status ON public.employees(ess_account_status);
+CREATE INDEX IF NOT EXISTS idx_employees_orangehrm_record_status ON public.employees(orangehrm_record_status);
+CREATE INDEX IF NOT EXISTS idx_employees_offboarding_status ON public.employees(offboarding_status);
 
-COMMENT ON COLUMN employees.orangehrm_system_user_id IS 'OrangeHRM system user ID (ESS). Separate from orangehrm_employee_id. Employee record ≠ System user.';
-COMMENT ON COLUMN employees.ess_account_status IS 'ESS/System user lifecycle status. Separate from employee record.';
-COMMENT ON COLUMN employees.orangehrm_record_status IS 'OrangeHRM employee record lifecycle status. TERMINATED means employee was terminated via termination API (NOT deleted - DELETE API unsupported).';
-COMMENT ON COLUMN employees.orangehrm_terminated_at IS 'Timestamp when OrangeHRM employee was terminated during offboarding.';
-COMMENT ON COLUMN employees.orangehrm_termination_reason IS 'Reason for employment termination. Distinct from PRE_HIRE_REJECTION (which is on job_applications).';
+COMMENT ON COLUMN public.employees.orangehrm_system_user_id IS 'OrangeHRM system user ID (ESS). Separate from orangehrm_employee_id. Employee record ≠ System user.';
+COMMENT ON COLUMN public.employees.ess_account_status IS 'ESS/System user lifecycle status. Separate from employee record.';
+COMMENT ON COLUMN public.employees.orangehrm_record_status IS 'OrangeHRM employee record lifecycle status. TERMINATED means employee was terminated via termination API (NOT deleted - DELETE API unsupported).';
+COMMENT ON COLUMN public.employees.orangehrm_terminated_at IS 'Timestamp when OrangeHRM employee was terminated during offboarding.';
+COMMENT ON COLUMN public.employees.orangehrm_termination_reason IS 'Reason for employment termination. Distinct from PRE_HIRE_REJECTION (which is on job_applications).';
 
 -- =============================================================================
 -- DATA VALIDATION
