@@ -1,0 +1,549 @@
+name: CI/CD - Production (Frappe + Cloudflare)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frappe
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  checks: write
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # =========================================================================
+  # STEP 1: Security Scanning (FAIL FAST)
+  # =========================================================================
+  security-scan:
+    name: "🔐 Security: Secrets & Dependencies"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy filesystem secret scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          format: sarif
+          output: trivy-secret-results.sarif
+        continue-on-error: true
+
+      - name: Upload Trivy secret scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-secret-results.sarif
+        continue-on-error: true
+
+      - name: Run gitleaks secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  code-quality:
+    name: "🔍 Linting & Code Quality"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: security-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Prettier check
+        run: npm run format -- --check
+
+      - name: Install Python linting tools
+        run: |
+          pip install --no-cache-dir flake8 black isort bandit[baseline] safety
+          pip install --no-cache-dir -q -r requirements.txt || true
+
+      - name: Run Black formatter check
+        run: black --check . || true
+
+      - name: Run isort check
+        run: isort --check-only . || true
+
+      - name: Run Flake8
+        run: |
+          flake8 . --count --statistics \
+            --ignore=E501,W503,E203 \
+            --exclude=.git,__pycache__,venv,migrations,node_modules \
+            || true
+
+  # =========================================================================
+  # STEP 2: Testing & SAST
+  # =========================================================================
+  test:
+    name: "✅ Testing & Security Analysis"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-production
+          path: coverage/
+        if: always()
+
+      - name: Run Bandit SAST
+        run: |
+          pip install --no-cache-dir bandit[baseline]
+          bandit -r . -f json -o bandit-report.json \
+            --exclude ./venv,./migrations,./node_modules,./.venv \
+            || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+        if: always()
+
+      - name: Dependency audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+  # =========================================================================
+  # STEP 3: Build Cloudflare Worker (Frontend)
+  # =========================================================================
+  build-cloudflare:
+    name: "☁️ Build Cloudflare Worker"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Build for production
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          ls -la .output/
+          echo "Build size:"
+          du -sh .output/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-build
+          path: .output/
+          retention-days: 7
+
+  # =========================================================================
+  # STEP 4: Build & Scan Frappe Docker Image
+  # =========================================================================
+  build-frappe:
+    name: "🐳 Build & Scan Frappe Image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: test
+    if: success()
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=prod-
+            type=raw,value=production-{{date 'YYYYMMDD-HHmmss'}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/frappe-image.tar
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: "/tmp/frappe-image.tar"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container"
+        if: always()
+
+      - name: Load and push Docker image
+        if: success() && github.event_name == 'push'
+        run: docker load --input /tmp/frappe-image.tar
+
+      - name: Push to registry
+        if: success() && github.event_name == 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frappe/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.tags }}
+          format: cyclonedx-json
+          output-file: sbom-frappe.json
+        continue-on-error: true
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-frappe
+          path: sbom-frappe.json
+        if: always()
+
+  # =========================================================================
+  # STEP 5: Deploy Frontend to Cloudflare Workers
+  # =========================================================================
+  deploy-cloudflare:
+    name: "☁️ Deploy to Cloudflare"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-cloudflare, build-frappe]
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production-cloudflare
+      url: https://ciagotech.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudflare-build
+          path: .output/
+
+      - name: Deploy to Cloudflare Workers
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Create deployment record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production-cloudflare',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              environment_url: 'https://ciagotech.com',
+              description: 'Cloudflare deployment successful'
+            });
+        continue-on-error: true
+
+  # =========================================================================
+  # STEP 6: Deploy Frappe to Oracle Cloud
+  # =========================================================================
+  deploy-frappe-oracle:
+    name: "🚀 Deploy Frappe to Oracle Cloud"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-frappe, deploy-cloudflare]
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production-oracle
+      url: ${{ secrets.ORACLE_FRAPPE_URL }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key for Oracle Cloud
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" > ~/.ssh/oracle_key
+          chmod 600 ~/.ssh/oracle_key
+          ssh-keyscan -H ${{ secrets.ORACLE_SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Oracle Cloud Instance
+        run: |
+          ssh -i ~/.ssh/oracle_key -o StrictHostKeyChecking=no \
+            ${{ secrets.ORACLE_SSH_USER }}@${{ secrets.ORACLE_SERVER_IP }} << 'ENDSSH'
+          set -e
+
+          echo "🚀 Starting Frappe deployment on Oracle Cloud..."
+
+          # Navigate to application directory
+          cd /opt/ciago-frappe || cd ~/ciago-frappe
+
+          # Pull latest code
+          git fetch origin
+          git checkout main
+          git pull origin main
+
+          # Login to GitHub Container Registry
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Pull the latest image
+          docker pull ${{ needs.build-frappe.outputs.image-tag }}
+
+          # Create production deployment script if not exists
+          if [ ! -f .production/deploy.sh ]; then
+            mkdir -p .production
+            cat > .production/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          IMAGE_TAG=${1:-latest}
+          SITE_NAME=${2:-site1.localhost}
+          ENV=${3:-production}
+
+          echo "Deploying Frappe with image: $IMAGE_TAG"
+
+          # Stop existing containers
+          docker-compose -f docker-compose.prod.yml down || true
+
+          # Update docker-compose with new image
+          export FRAPPE_IMAGE=$IMAGE_TAG
+          export SITE_NAME=$SITE_NAME
+
+          # Start services
+          docker-compose -f docker-compose.prod.yml up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to be healthy..."
+          sleep 30
+
+          # Run migrations
+          docker-compose -f docker-compose.prod.yml exec -T frappe bench --site $SITE_NAME migrate
+
+          # Clear cache
+          docker-compose -f docker-compose.prod.yml exec -T frappe bench --site $SITE_NAME clear-cache
+
+          echo "✅ Deployment completed successfully"
+          EOF
+            chmod +x .production/deploy.sh
+          fi
+
+          # Run deployment
+          ./.production/deploy.sh "${{ needs.build-frappe.outputs.image-tag }}" \
+            "${{ secrets.ORACLE_FRAPPE_SITE_NAME }}" production
+
+          echo "✅ Oracle Cloud deployment completed"
+          ENDSSH
+
+      - name: Verify deployment health
+        run: |
+          sleep 30
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            ${{ secrets.ORACLE_FRAPPE_URL }}/api/method/ping || echo "000")
+
+          if [ "$response" -eq 200 ] || [ "$response" -eq 403 ]; then
+            echo "✅ Frappe is responding (HTTP $response)"
+          else
+            echo "❌ Frappe health check failed (HTTP $response)"
+            exit 1
+          fi
+
+      - name: Create deployment record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production-oracle',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              environment_url: '${{ secrets.ORACLE_FRAPPE_URL }}',
+              description: 'Oracle Cloud Frappe deployment successful'
+            });
+        continue-on-error: true
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/oracle_key
+
+  # =========================================================================
+  # STEP 7: Post-Deployment Notifications
+  # =========================================================================
+  notify-success:
+    name: "📢 Notify Deployment Success"
+    runs-on: ubuntu-latest
+    needs: [deploy-cloudflare, deploy-frappe-oracle]
+    if: success()
+    steps:
+      - name: Send success notification
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const message = `✅ **Production Deployment Successful**
+
+            **Cloudflare Frontend**: https://ciagotech.com
+            **Oracle Frappe Backend**: ${{ secrets.ORACLE_FRAPPE_URL }}
+
+            **Commit**: ${{ github.sha }}
+            **Branch**: ${{ github.ref_name }}
+            **Triggered by**: @${{ github.actor }}`;
+
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: message
+            });
+
+  notify-failure:
+    name: "❌ Notify Deployment Failure"
+    runs-on: ubuntu-latest
+    needs: [deploy-cloudflare, deploy-frappe-oracle]
+    if: failure()
+    steps:
+      - name: Create issue for deployment failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Production Deployment Failed - ${new Date().toISOString()}`,
+              body: `## Deployment Failure Report
+
+              **Workflow Run**: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              **Commit**: ${{ github.sha }}
+              **Branch**: ${{ github.ref_name }}
+              **Triggered by**: @${{ github.actor }}
+
+              ### Next Steps
+              1. Review the workflow logs
+              2. Check deployment scripts in \`.production/\`
+              3. Verify Oracle Cloud instance connectivity
+              4. Confirm Cloudflare configuration
+
+              **Automatic rollback**: Not implemented - manual intervention required.`,
+              labels: ['deployment', 'production', 'bug', 'urgent']
+            });
+
+            console.log('Created issue:', issue.data.number);

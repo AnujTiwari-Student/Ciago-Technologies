@@ -1,42 +1,100 @@
 name = "ciagotech"
-type = "javascript"
-account_id = ""
+main = ".output/server/index.mjs"
+compatibility_date = "2024-01-01"
 workers_dev = true
-route = ""
-zone_id = ""
 
-# Set environment-specific variables via environment sections
+# Account configuration - fill in your Cloudflare account ID
+# Get from: https://dash.cloudflare.com/ → Workers & Pages → Account ID
+account_id = ""
+
+# Build configuration
+[build]
+command = "npm run build"
+
+# Observability configuration
+[observability]
+enabled = true
+
+# Production environment
 [env.production]
 name = "ciagotech-production"
+workers_dev = false
 routes = [
-  { pattern = "ciagotech.com/*", zone_name = "ciagotech.com" }
+  { pattern = "ciagotech.com/*", zone_name = "ciagotech.com" },
+  { pattern = "www.ciagotech.com/*", zone_name = "ciagotech.com" }
 ]
-vars = { ENVIRONMENT = "production" }
 
+[env.production.vars]
+ENVIRONMENT = "production"
+NODE_ENV = "production"
+# FRAPPE_API_URL = "https://your-frappe-backend.com" # Set via wrangler secret
+
+# Staging environment
 [env.staging]
 name = "ciagotech-staging"
+workers_dev = false
 routes = [
   { pattern = "staging.ciagotech.com/*", zone_name = "ciagotech.com" }
 ]
-vars = { ENVIRONMENT = "staging" }
 
+[env.staging.vars]
+ENVIRONMENT = "staging"
+NODE_ENV = "production"
+# FRAPPE_API_URL = "https://staging-frappe-backend.com" # Set via wrangler secret
+
+# Development environment
 [env.development]
 name = "ciagotech-development"
 workers_dev = true
-vars = { ENVIRONMENT = "development" }
 
-# D1 Database binding (if needed in the future)
+[env.development.vars]
+ENVIRONMENT = "development"
+NODE_ENV = "development"
+# FRAPPE_API_URL = "http://localhost:8000" # Set via wrangler secret
+
+# D1 Database binding (uncomment when ready)
 # [[d1_databases]]
 # binding = "DB"
-# database_name = "ciagotech"
-# database_id = ""
+# database_name = "ciagotech-db"
+# database_id = "" # Get from: wrangler d1 create ciagotech-db
+# preview_database_id = "" # Get from: wrangler d1 create ciagotech-db-preview
 
-# KV namespace bindings
+# KV namespace bindings (uncomment when ready)
 # [[kv_namespaces]]
 # binding = "KV"
-# id = ""
-# preview_id = ""
+# id = "" # Get from: wrangler kv:namespace create "KV" --preview false
+# preview_id = "" # Get from: wrangler kv:namespace create "KV" --preview true
 
-# Environment variable bindings (reference .env or secrets)
-# [env.production.vars]
-# DATABASE_URL = "your_database_url"
+# R2 bucket bindings (uncomment when ready)
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "ciagotech-assets"
+# preview_bucket_name = "ciagotech-assets-preview"
+
+# Analytics Engine binding (uncomment when ready)
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"
+
+# Browser Rendering API (uncomment when ready)
+# [browser]
+# binding = "BROWSER"
+
+# AI binding (uncomment when ready)
+# [ai]
+# binding = "AI"
+
+# Durable Objects (uncomment when ready)
+# [[durable_objects.bindings]]
+# name = "DO"
+# class_name = "DurableObjectExample"
+# script_name = "ciagotech"
+
+# Queue bindings (uncomment when ready)
+# [[queues.producers]]
+# binding = "QUEUE"
+# queue = "ciagotech-queue"
+
+# [[queues.consumers]]
+# queue = "ciagotech-queue"
+# max_batch_size = 10
+# max_batch_timeout = 30

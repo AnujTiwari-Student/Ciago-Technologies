@@ -40,8 +40,9 @@ jobs:
       - name: Run Trivy secret scanner
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: secret
+          scan-type: fs
           scan-ref: .
+          scanners: secret
           format: sarif
           output: trivy-secret-results.sarif
         continue-on-error: true

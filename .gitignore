@@ -16,7 +16,18 @@ docs
 !.env.example
 !.env.test
 
+# Lock Files (use bun.lock only)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Temporary files and tokens
 .orangehrm-token.json
+baseline.sql
+summary.txt
+
+# Temporary scripts
+fix-and-restart.sh
 
 # Dependencies and Build Outputs
 node_modules
@@ -83,8 +94,8 @@ resend-worker/
 # Documentation directory (local docs only)
 .docs/
 
+# Production directories (deployment docs and tests)
+.production/
+.production_test/
+
 frappe-exports/
-
-frappe-backup.sh
-
-deploy.sh

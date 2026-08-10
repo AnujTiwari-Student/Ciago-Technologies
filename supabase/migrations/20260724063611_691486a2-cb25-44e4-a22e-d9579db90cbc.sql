@@ -1,1 +1,0 @@
-ALTER TABLE public.onboarding_records ADD COLUMN IF NOT EXISTS form_state jsonb NOT NULL DEFAULT '{}'::jsonb;
