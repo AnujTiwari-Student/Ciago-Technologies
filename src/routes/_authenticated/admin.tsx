@@ -107,7 +107,7 @@ import {
   upsertJobPosting,
   type JobPosting,
 } from "@/lib/jobPostings.functions";
-import { setJoiningDate } from "@/lib/joining-date.functions";
+import { setJoiningDate, sendFrappeCredentials } from "@/lib/joining-date.functions";
 import { useLookups } from "@/hooks/use-lookups";
 import { requireDashboardAccess } from "./-guard";
 import { format as formatDate } from "date-fns";
@@ -490,10 +490,21 @@ function ApplicationsPanel() {
         },
       }),
     onSuccess: () => {
-      toast.success("Joining date set — offer and joining letters sent via email");
+      toast.success("Joining date set — letters sent. Configure Frappe dashboard, then send credentials.");
       qc.invalidateQueries({ queryKey: ["admin-applications"] });
     },
     onError: (e: any) => toast.error(e?.message || "Failed to set joining date"),
+  });
+
+  const sendCredentialsFn = useServerFn(sendFrappeCredentials);
+  const sendCredentialsMutation = useMutation({
+    mutationFn: (applicationId: string) =>
+      sendCredentialsFn({ data: { applicationId } }),
+    onSuccess: () => {
+      toast.success("Credentials sent — employee can now log in to Frappe");
+      qc.invalidateQueries({ queryKey: ["admin-applications"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to send credentials"),
   });
 
   return (
@@ -773,6 +784,36 @@ function ApplicationsPanel() {
                                 </Badge>
                               )}
                             </div>
+                            {a.frappe_credentials_sent_at ? (
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/40 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
+                              >
+                                🔑 Credentials Sent: {formatDate(new Date(a.frappe_credentials_sent_at), "PP")}
+                              </Badge>
+                            ) : a.frappe_provisioning_state === "succeeded" ? (
+                              <div className="pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={sendCredentialsMutation.isPending}
+                                  onClick={() => sendCredentialsMutation.mutate(a.id)}
+                                  className="w-full border-teal-600 text-teal-700 hover:bg-teal-50 dark:border-teal-500 dark:text-teal-300 dark:hover:bg-teal-950"
+                                >
+                                  {sendCredentialsMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    "🔑 Send Frappe Credentials"
+                                  )}
+                                </Button>
+                                <p className="mt-1 text-xs text-center text-muted-foreground">
+                                  Configure dashboard in Frappe first, then send
+                                </p>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                           <div className="space-y-3 border-t border-blue-200 pt-3 dark:border-blue-800">
@@ -878,6 +919,36 @@ function ApplicationsPanel() {
                                 </Badge>
                               )}
                             </div>
+                            {a.frappe_credentials_sent_at ? (
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/40 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
+                              >
+                                🔑 Credentials Sent: {formatDate(new Date(a.frappe_credentials_sent_at), "PP")}
+                              </Badge>
+                            ) : a.frappe_provisioning_state === "succeeded" ? (
+                              <div className="pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={sendCredentialsMutation.isPending}
+                                  onClick={() => sendCredentialsMutation.mutate(a.id)}
+                                  className="w-full border-teal-600 text-teal-700 hover:bg-teal-50 dark:border-teal-500 dark:text-teal-300 dark:hover:bg-teal-950"
+                                >
+                                  {sendCredentialsMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    "🔑 Send Frappe Credentials"
+                                  )}
+                                </Button>
+                                <p className="mt-1 text-xs text-center text-muted-foreground">
+                                  Configure dashboard in Frappe first, then send
+                                </p>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                           <div className="space-y-3 border-t border-emerald-200 pt-3 dark:border-emerald-800">

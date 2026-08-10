@@ -30,6 +30,8 @@ export type AdminApplication = {
   joining_letter_sent_at: string | null;
   bg_check_status: "not_started" | "pending" | "passed" | "failed" | "waived" | null;
   bg_check_verified_at: string | null;
+  frappe_provisioning_state: string | null;
+  frappe_credentials_sent_at: string | null;
 };
 
 export type AdminUser = {
@@ -137,6 +139,8 @@ export const listAllApplications = createServerFn({ method: "GET" })
         joiningDate: true,
         offerLetterSentAt: true,
         joiningLetterSentAt: true,
+        frappeProvisioningState: true,
+        frappeCredentialsSentAt: true,
       },
     });
 
@@ -173,6 +177,8 @@ export const listAllApplications = createServerFn({ method: "GET" })
         joining_letter_sent_at: a.joiningLetterSentAt?.toISOString() ?? null,
         bg_check_status: bgCheck?.status ?? null,
         bg_check_verified_at: bgCheck?.verifiedAt?.toISOString() ?? null,
+        frappe_provisioning_state: a.frappeProvisioningState ?? null,
+        frappe_credentials_sent_at: a.frappeCredentialsSentAt?.toISOString() ?? null,
       };
     });
 

@@ -307,15 +307,12 @@ export const updateUserAppRole = createServerFn({ method: "POST" })
       });
 
       if (userMap?.email) {
-        const client = createFrappeClient();
-        const frappeUser = await client.getUser(userMap.email);
-        if (frappeUser) {
-          await client.updateUserRoles(userMap.email, formatRolesForFrappe(frappeRoles));
-          console.log(`[role-sync] Updated Frappe roles for ${userMap.email}:`, frappeRoles);
-        }
+        // Frappe roles managed manually in Frappe UI - NOT synced from CiagoTech
+        // This prevents overwriting admin-configured roles/permissions/workspaces
+        console.log(`[role-sync] Frappe roles for ${userMap.email} managed in Frappe UI (not auto-synced)`);
       }
     } catch (e) {
-      console.error("[role-sync] Failed to sync Frappe roles:", e);
+      console.error("[role-sync] Note: Frappe roles managed manually in Frappe UI:", e);
     }
 
     return { success: true, role: data.role };
@@ -359,15 +356,12 @@ export const removeUserAppRole = createServerFn({ method: "POST" })
       });
 
       if (userMap?.email) {
-        const client = createFrappeClient();
-        const frappeUser = await client.getUser(userMap.email);
-        if (frappeUser) {
-          await client.updateUserRoles(userMap.email, formatRolesForFrappe(frappeRoles));
-          console.log(`[role-sync] Updated Frappe roles for ${userMap.email}:`, frappeRoles);
-        }
+        // Frappe roles managed manually in Frappe UI - NOT synced from CiagoTech
+        // This prevents overwriting admin-configured roles/permissions/workspaces
+        console.log(`[role-sync] Frappe roles for ${userMap.email} managed in Frappe UI (not auto-synced)`);
       }
     } catch (e) {
-      console.error("[role-sync] Failed to sync Frappe roles:", e);
+      console.error("[role-sync] Note: Frappe roles managed manually in Frappe UI:", e);
     }
 
     return { success: true };

@@ -1,7 +1,20 @@
 /**
  * CiagoTech AppRole → Frappe HRMS Role Mapping
  *
- * PURPOSE: Map CiagoTech organizational roles to appropriate Frappe HRMS roles
+ * ⚠️⚠️⚠️ DEPRECATED: This file is NO LONGER USED for automatic role assignment ⚠️⚠️⚠️
+ *
+ * CURRENT BEHAVIOR (as of fix):
+ * - Roles/permissions/workspaces are configured MANUALLY in Frappe UI
+ * - Code does NOT automatically assign or update Frappe roles
+ * - Admin configures roles AFTER user creation in Frappe UI
+ * - This prevents overwriting admin-configured settings
+ *
+ * WHY THIS CHANGED:
+ * - Automatic role updates were overwriting admin configurations
+ * - Frappe UI is now the single source of truth for roles/permissions/workspaces
+ * - This file kept for DOCUMENTATION/REFERENCE only
+ *
+ * PURPOSE (historical): Map CiagoTech organizational roles to appropriate Frappe HRMS roles
  *
  * SECURITY PRINCIPLE: Minimal privilege
  * - Start with Employee role (basic access)

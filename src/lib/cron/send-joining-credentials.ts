@@ -202,7 +202,9 @@ export async function sendCredentialsEmail(application: any): Promise<boolean> {
 }
 
 /**
- * Main cron job function - sends credentials to all employees joining today
+ * @deprecated Credentials are now sent manually by admin after configuring Frappe dashboard.
+ * Use sendFrappeCredentials server function from joining-date.functions.ts instead.
+ * Kept for backward compatibility if referenced elsewhere.
  */
 export async function sendJoiningDayCredentials(): Promise<{
   success: boolean;
@@ -211,74 +213,13 @@ export async function sendJoiningDayCredentials(): Promise<{
   failed: number;
   errors: string[];
 }> {
-  console.log("[credentials] Starting joining day credentials job...");
+  console.log("[credentials] Cron disabled — credentials are now sent manually by admin after dashboard configuration");
 
-  const db = getAdminDb();
-  const today = startOfDay(new Date());
-  const tomorrow = endOfDay(new Date());
-
-  try {
-    const applications = await db.jobApplication.findMany({
-      where: {
-        joiningDate: {
-          gte: today,
-          lte: tomorrow,
-        },
-        status: "hired",
-        frappeProvisioningState: "succeeded",
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        roleTitle: true,
-        joiningDate: true,
-        userId: true,
-        frappeProvisioningState: true,
-      },
-    });
-
-    console.log(`[credentials] Found ${applications.length} employees joining today`);
-
-    const results = {
-      success: true,
-      processed: applications.length,
-      sent: 0,
-      failed: 0,
-      errors: [] as string[],
-    };
-
-    for (const application of applications) {
-      try {
-        const sent = await sendCredentialsEmail(application);
-        if (sent) {
-          results.sent++;
-        } else {
-          results.failed++;
-          results.errors.push(`Failed to send to ${application.email}`);
-        }
-      } catch (error) {
-        results.failed++;
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        results.errors.push(`${application.email}: ${errorMsg}`);
-        console.error(`[credentials] Error processing ${application.email}:`, error);
-      }
-    }
-
-    if (results.failed > 0) {
-      results.success = false;
-    }
-
-    console.log("[credentials] Job completed:", results);
-    return results;
-  } catch (error) {
-    console.error("[credentials] Fatal error:", error);
-    return {
-      success: false,
-      processed: 0,
-      sent: 0,
-      failed: 0,
-      errors: [error instanceof Error ? error.message : String(error)],
-    };
-  }
+  return {
+    success: true,
+    processed: 0,
+    sent: 0,
+    failed: 0,
+    errors: [],
+  };
 }

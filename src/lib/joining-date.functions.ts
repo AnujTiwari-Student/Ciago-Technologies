@@ -7,10 +7,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getAdminDb } from "@/lib/db/admin";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { format } from "date-fns";
 import { generateOfferLetter, generateJoiningLetter, cleanupLetterFiles } from "./letter-generator";
 import { generateHiringEmailWithLetters } from "./email-templates/hiring-with-letters";
-import { sendCredentialsEmail } from "./cron/send-joining-credentials";
 import fs from "fs";
 import path from "path";
 
@@ -192,24 +191,54 @@ export const setJoiningDate = createServerFn({ method: "POST" })
       // 12. Cleanup PDF files after sending
       await cleanupLetterFiles([offerLetterResult.filePath!, joiningLetterResult.filePath!]);
 
-      // 13. If joining date is today or earlier, send Frappe credentials immediately
-      let credentialsSent = false;
-      if (joiningDateObj <= endOfDay(new Date()) && application.frappeProvisioningState === "succeeded") {
-        console.log(`[joining-date] Joining date is today/past — sending credentials email immediately`);
-        credentialsSent = await sendCredentialsEmail(application);
+      // 13. Create Frappe User (disabled) so admin can configure dashboard before enabling
+      let frappeUserCreated = false;
+      if (application.frappeProvisioningState === "succeeded") {
+        try {
+          const { createFrappeClient } = await import("@/integrations/frappe/client");
+          const { provisionFrappeUserDisabled } = await import("./frappe-user-provisioning");
+          const client = createFrappeClient();
+
+          const fullApp = await db.jobApplication.findUnique({
+            where: { id: applicationId },
+            select: { userId: true, frappeEmployeeName: true },
+          });
+
+          if (fullApp?.frappeEmployeeName) {
+            const nameParts = application.fullName.trim().split(/\s+/);
+            const firstName = nameParts[0] || application.fullName;
+            const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : null;
+
+            const result = await provisionFrappeUserDisabled(
+              applicationId,
+              fullApp.frappeEmployeeName,
+              application.email,
+              firstName,
+              lastName,
+              fullApp.userId,
+              db,
+              client,
+            );
+            frappeUserCreated = result.success;
+            console.log(`[joining-date] Frappe user created (disabled): ${result.message}`);
+          }
+        } catch (err) {
+          console.error("[joining-date] Failed to create disabled Frappe user:", err);
+        }
       }
 
       return {
         success: true,
-        message: credentialsSent
-          ? "Joining date set, letters sent, and credentials email sent"
+        message: frappeUserCreated
+          ? "Joining date set, letters sent, and Frappe dashboard prepared (pending admin configuration)"
           : "Joining date set and letters sent successfully",
         data: {
           applicationId: application.id,
           joiningDate: joiningDateObj,
           emailSent: true,
           emailId: emailResult.data?.id,
-          credentialsSent,
+          frappeUserCreated,
+          credentialsPending: true,
         },
       };
     } catch (error) {
@@ -393,3 +422,73 @@ export const getTodayJoiningDates = createServerFn({ method: "GET" }).handler(as
     );
   }
 });
+
+/**
+ * Send Frappe credentials to an employee.
+ * Called by admin AFTER configuring their dashboard/workspace in Frappe UI.
+ * Enables the user account and sends login credentials email.
+ */
+export const sendFrappeCredentials = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      applicationId: z.string().uuid(),
+    })
+  )
+  .handler(async ({ data }) => {
+    const db = getAdminDb();
+    const { applicationId } = data;
+
+    try {
+      const application = await db.jobApplication.findUnique({
+        where: { id: applicationId },
+      });
+
+      if (!application) {
+        throw new Error("Application not found");
+      }
+
+      if (application.status !== "hired") {
+        throw new Error("Application must be in 'hired' status");
+      }
+
+      if (!application.joiningDate) {
+        throw new Error("Joining date must be set before sending credentials");
+      }
+
+      if (application.frappeProvisioningState !== "succeeded") {
+        throw new Error("Frappe employee must be provisioned first");
+      }
+
+      const { sendCredentialsEmail } = await import("./cron/send-joining-credentials");
+      const { createFrappeClient } = await import("@/integrations/frappe/client");
+      const client = createFrappeClient();
+
+      // Enable the user in Frappe before sending credentials
+      await client.enableUser(application.email);
+      console.log(`[send-credentials] Enabled Frappe user: ${application.email}`);
+
+      const sent = await sendCredentialsEmail(application);
+
+      if (!sent) {
+        throw new Error("Failed to send credentials email");
+      }
+
+      // Track that credentials were sent
+      await db.jobApplication.update({
+        where: { id: applicationId },
+        data: {
+          frappeCredentialsSentAt: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        message: `Credentials sent to ${application.email} — user account is now active`,
+      };
+    } catch (error) {
+      console.error("[send-credentials] Error:", error);
+      throw new Error(
+        `Failed to send credentials: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  });

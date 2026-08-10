@@ -24,12 +24,14 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AboutUsRouteImport } from './routes/about-us'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CareersJobIdRouteImport } from './routes/careers_.$jobId'
 import { Route as AuthSsoCallbackRouteImport } from './routes/auth.sso-callback'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedMyApplicationsRouteImport } from './routes/_authenticated/my-applications'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as CareersJobIdApplyRouteImport } from './routes/careers_.$jobId_.apply'
 
 const WhatWeThinkRoute = WhatWeThinkRouteImport.update({
   id: '/what-we-think',
@@ -105,6 +107,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CareersJobIdRoute = CareersJobIdRouteImport.update({
+  id: '/careers_/$jobId',
+  path: '/careers/$jobId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthSsoCallbackRoute = AuthSsoCallbackRouteImport.update({
   id: '/sso-callback',
   path: '/sso-callback',
@@ -136,6 +143,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const CareersJobIdApplyRoute = CareersJobIdApplyRouteImport.update({
+  id: '/careers_/$jobId_/apply',
+  path: '/careers/$jobId/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -158,6 +170,8 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/careers/$jobId': typeof CareersJobIdRoute
+  '/careers/$jobId/apply': typeof CareersJobIdApplyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -180,6 +194,8 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/careers/$jobId': typeof CareersJobIdRoute
+  '/careers/$jobId/apply': typeof CareersJobIdApplyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -204,6 +220,8 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/auth/sso-callback': typeof AuthSsoCallbackRoute
+  '/careers_/$jobId': typeof CareersJobIdRoute
+  '/careers_/$jobId_/apply': typeof CareersJobIdApplyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -228,6 +246,8 @@ export interface FileRouteTypes {
     | '/profile'
     | '/users'
     | '/auth/sso-callback'
+    | '/careers/$jobId'
+    | '/careers/$jobId/apply'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -250,6 +270,8 @@ export interface FileRouteTypes {
     | '/profile'
     | '/users'
     | '/auth/sso-callback'
+    | '/careers/$jobId'
+    | '/careers/$jobId/apply'
   id:
     | '__root__'
     | '/'
@@ -273,6 +295,8 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/users'
     | '/auth/sso-callback'
+    | '/careers_/$jobId'
+    | '/careers_/$jobId_/apply'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -291,6 +315,8 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   WhatWeDoRoute: typeof WhatWeDoRoute
   WhatWeThinkRoute: typeof WhatWeThinkRoute
+  CareersJobIdRoute: typeof CareersJobIdRoute
+  CareersJobIdApplyRoute: typeof CareersJobIdApplyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -400,6 +426,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/careers_/$jobId': {
+      id: '/careers_/$jobId'
+      path: '/careers/$jobId'
+      fullPath: '/careers/$jobId'
+      preLoaderRoute: typeof CareersJobIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/sso-callback': {
       id: '/auth/sso-callback'
       path: '/sso-callback'
@@ -441,6 +474,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin'
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/careers_/$jobId_/apply': {
+      id: '/careers_/$jobId_/apply'
+      path: '/careers/$jobId/apply'
+      fullPath: '/careers/$jobId/apply'
+      preLoaderRoute: typeof CareersJobIdApplyRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -490,6 +530,8 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   WhatWeDoRoute: WhatWeDoRoute,
   WhatWeThinkRoute: WhatWeThinkRoute,
+  CareersJobIdRoute: CareersJobIdRoute,
+  CareersJobIdApplyRoute: CareersJobIdApplyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -47,6 +47,7 @@ export const adminNavItems: NavItem[] = [
   { label: "Applications", to: "/admin", search: { tab: "applications" } },
   { label: "By Job", to: "/admin", search: { tab: "by-role" } },
   { label: "Job Postings", to: "/admin", search: { tab: "postings" } },
+  { label: "Documents", to: "/admin", search: { tab: "documents" } },
   { label: "Users", to: "/admin", search: { tab: "users" } },
   { label: "Audit Logs", to: "/admin", search: { tab: "audit" } },
   { label: "Profile", to: "/admin", search: { tab: "profile" } },

@@ -224,13 +224,11 @@ export async function provisionFrappeUser(
       if (employee && employee.user_id === email) {
         console.log(`${logPrefix} User already linked to Employee`);
 
-        // Ensure roles are always reconciled, even for existing users.
-        if (frappeRoles.length > 0) {
-          await client.updateUserRoles(email, frappeRoles);
-          console.log(
-            `${logPrefix} Roles reconciled for existing linked user: ${frappeRoleNames.join(", ")}`,
-          );
-        }
+        // Roles are managed manually in Frappe UI - DO NOT update via API
+        // This prevents overwriting admin-configured roles/permissions/workspaces
+        console.log(
+          `${logPrefix} User exists - roles managed in Frappe UI (not auto-updated)`,
+        );
 
         await db.auditLog.create({
           data: {
@@ -270,12 +268,10 @@ export async function provisionFrappeUser(
       console.log(`${logPrefix} Linking existing User to Employee`);
       await client.linkUserToEmployee(employeeName, email);
 
-      if (frappeRoles.length > 0) {
-        await client.updateUserRoles(email, frappeRoles);
-        console.log(
-          `${logPrefix} Roles reconciled for existing user after link: ${frappeRoleNames.join(", ")}`,
-        );
-      }
+      // Roles managed manually in Frappe UI after user-employee link
+      console.log(
+        `${logPrefix} User linked - roles to be configured manually in Frappe UI`,
+      );
 
       await db.auditLog.create({
         data: {
@@ -330,14 +326,9 @@ export async function provisionFrappeUser(
     console.log(`${logPrefix} User linked to Employee: ${email} → ${employeeName}`);
 
     // Step 6: Assign roles AFTER linking (Frappe validates Employee link for Employee/ESS roles)
-    if (frappeRoles.length > 0) {
-      await client.updateUserRoles(email, frappeRoles);
-      console.log(`${logPrefix} Roles assigned: ${frappeRoleNames.join(", ")}`);
-    }
-
-    // Step 6b: Assign Module Profile (restricts sidebar modules by default)
-    await client.setUserModuleProfile(email, "Employee Profile");
-    console.log(`${logPrefix} Module Profile set to: Employee Profile`);
+    // Roles and Module Profile managed manually in Frappe UI
+    // NO automatic assignment to prevent overwriting admin configuration
+    console.log(`${logPrefix} User created - configure roles/workspace in Frappe UI`);
 
     // Step 7: Audit log
     await db.auditLog.create({
@@ -397,6 +388,102 @@ export async function provisionFrappeUser(
       userEmail: null,
       action: "failed",
       message: `Frappe User provisioning failed: ${errorMessage}`,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Create Frappe User account but DISABLED.
+ * Admin configures workspace/permissions in Frappe UI, then manually sends credentials.
+ */
+export async function provisionFrappeUserDisabled(
+  applicationId: string,
+  employeeName: string,
+  email: string,
+  firstName: string,
+  lastName: string | null,
+  userId: string,
+  db: PrismaClient,
+  client: FrappeClient,
+): Promise<FrappeUserProvisioningResult> {
+  const logPrefix = `[frappe-user-disabled:${applicationId.slice(0, 8)}]`;
+  console.log(`${logPrefix} Creating disabled Frappe User for ${email}`);
+
+  try {
+    const userRoles = await db.userRole.findMany({
+      where: { userId },
+      select: { role: true },
+    });
+
+    const ciagoRoles = userRoles.map((r) => r.role);
+    const frappeRoleNames = mapCiagoRolesToFrappeRoles(ciagoRoles as AppRole[]);
+    const frappeRoles = formatRolesForFrappe(frappeRoleNames);
+
+    const existingUser = await client.getUser(email);
+
+    if (existingUser) {
+      console.log(`${logPrefix} Frappe User already exists: ${email} — ensuring disabled`);
+      await client.disableUser(email);
+
+      // Roles managed manually in Frappe UI - no automatic assignment
+
+      await db.auditLog.create({
+        data: {
+          action: "FRAPPE_USER_DISABLED_FOR_ADMIN_SETUP",
+          targetResource: `job_applications/${applicationId}`,
+          details: { email, employeeName, roles: frappeRoleNames },
+        },
+      });
+
+      return {
+        success: true,
+        userEmail: email,
+        action: "already_exists",
+        message: `Frappe User exists and disabled for admin configuration: ${email}`,
+      };
+    }
+
+    await client.createUser({
+      email,
+      first_name: firstName,
+      last_name: lastName || undefined,
+      user_type: "System User",
+      enabled: 0,
+      send_welcome_email: 0,
+    });
+
+    await client.linkUserToEmployee(employeeName, email);
+
+    if (frappeRoles.length > 0) {
+      // Roles and Module Profile managed manually in Frappe UI
+    }
+
+    await db.auditLog.create({
+      data: {
+        action: "FRAPPE_USER_CREATED_DISABLED_FOR_ADMIN_SETUP",
+        targetResource: `job_applications/${applicationId}`,
+        details: { email, employeeName, roles: frappeRoleNames, firstName, lastName },
+      },
+    });
+
+    console.log(`${logPrefix} Frappe User created (disabled), ready for admin configuration`);
+
+    return {
+      success: true,
+      userEmail: email,
+      action: "created",
+      message: `Frappe User created (disabled) — admin must configure dashboard then send credentials: ${email}`,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`${logPrefix} Failed to create disabled user:`, errorMessage);
+
+    return {
+      success: false,
+      userEmail: null,
+      action: "failed",
+      message: `Failed to create disabled Frappe User: ${errorMessage}`,
       error: errorMessage,
     };
   }

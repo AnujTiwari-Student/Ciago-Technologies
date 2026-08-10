@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useSearch, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch, Link, redirect, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -124,8 +124,11 @@ function AuthPage() {
   const [clerkAuthEnabled, setClerkAuthEnabled] = useState(!FLAGS.USE_CLERK_AUTH);
   const [clerkAuthLoading, setClerkAuthLoading] = useState(FLAGS.USE_CLERK_AUTH);
   const disabledSignOutAttemptedRef = useRef(false);
+  const matchRoute = useMatchRoute();
+  const isChildRoute = matchRoute({ to: "/auth/sso-callback", fuzzy: true });
 
   useEffect(() => {
+    if (isChildRoute) return;
     if (!FLAGS.USE_CLERK_AUTH) return;
     let cancelled = false;
     (async () => {
@@ -142,9 +145,10 @@ function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isChildRoute]);
 
   useEffect(() => {
+    if (isChildRoute) return;
     if (loading) return;
     if (!FLAGS.USE_CLERK_AUTH) {
       if (user) navigate({ to: redirectTo });
@@ -161,7 +165,11 @@ function AuthPage() {
       return;
     }
     if (user) navigate({ to: redirectTo });
-  }, [loading, user, navigate, redirectTo, clerkAuthEnabled, clerkAuthLoading, signOut]);
+  }, [isChildRoute, loading, user, navigate, redirectTo, clerkAuthEnabled, clerkAuthLoading, signOut]);
+
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">

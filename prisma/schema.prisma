@@ -219,6 +219,7 @@ model JobApplication {
   educationalQualifications        Json?                       @map("educational_qualifications")
   previousWorkExperiences          Json?                       @map("previous_work_experiences")
   frappeJobApplicantName           String?                     @unique @map("frappe_job_applicant_name")
+  frappeCredentialsSentAt          DateTime?                   @map("frappe_credentials_sent_at") @db.Timestamptz(6)
   phoneNumber                      String?                     @map("phone_number")
 
   @@index([orangehrmEmployeeId], map: "idx_job_applications_orangehrm_employee_id", where: raw("(orangehrm_employee_id IS NOT NULL)"))
@@ -352,6 +353,38 @@ model Profile {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("profiles")
+  @@schema("public")
+}
+
+model ApplicantCoreInfo {
+  userId                    String   @id @map("user_id") @db.Uuid
+  fullName                  String?  @map("full_name")
+  email                     String?
+  phoneNumber               String?  @map("phone_number")
+  country                   String?
+  city                      String?
+  address                   String?
+  linkedin                  String?
+  portfolioUrl              String?  @map("portfolio_url")
+  currentCompany            String?  @map("current_company")
+  currentTitle              String?  @map("current_title")
+  totalYearsExperience      Int?     @map("total_years_experience")
+  highestEducationLevel     String?  @map("highest_education_level")
+  educationalQualifications Json?    @map("educational_qualifications")
+  previousWorkExperiences   Json?    @map("previous_work_experiences")
+  resumeStoragePath         String?  @map("resume_storage_path")
+  resumeFileName            String?  @map("resume_file_name")
+  expectedSalaryCurrency    String?  @default("INR") @map("expected_salary_currency")
+  expectedSalaryMin         BigInt?  @map("expected_salary_min")
+  expectedSalaryMax         BigInt?  @map("expected_salary_max")
+  gender                    String?
+  veteranStatus             String?  @map("veteran_status")
+  disabilityStatus          String?  @map("disability_status")
+  workAuthorization         String?  @map("work_authorization")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("applicant_core_info")
   @@schema("public")
 }
 
