@@ -16,8 +16,7 @@ docs
 !.env.example
 !.env.test
 
-# Lock Files (use bun.lock only)
-package-lock.json
+# Lock Files
 yarn.lock
 pnpm-lock.yaml
 
