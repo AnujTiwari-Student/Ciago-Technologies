@@ -16,6 +16,10 @@ docs
 !.env.example
 !.env.test
 
+# Internal ops docs (contains IPs, credentials references)
+DEPLOYMENT_URLS.md
+RESUME_HERE.md
+
 # Lock Files
 yarn.lock
 pnpm-lock.yaml
