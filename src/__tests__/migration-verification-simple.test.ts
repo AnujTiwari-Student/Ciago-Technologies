@@ -89,7 +89,7 @@ describe("Migration Verification", () => {
         try {
           const adminDb = getAdminDb();
           await adminDb.clerkUserMap.deleteMany({ where: { authUserId } });
-          await adminDb.$queryRawUnsafe(`DELETE FROM auth.users WHERE id = '${authUserId}'::uuid`);
+          await adminDb.$executeRaw`DELETE FROM auth.users WHERE id = ${authUserId}::uuid`;
         } catch {}
       }
       try {

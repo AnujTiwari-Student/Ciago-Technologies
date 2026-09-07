@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 // ============================================================
 // Shared types
@@ -54,6 +53,7 @@ export const listStaffUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<StaffUser[]> => {
     await assertAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const [roles, depts, mappings, profiles] = await Promise.all([
@@ -115,6 +115,7 @@ export const setStaffUserRole = createServerFn({ method: "POST" })
   .validator((d: unknown) => setRoleSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     if (data.userId === context.userId && data.role !== "admin") {

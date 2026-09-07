@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type AttendanceRecord = {
   id: string;
@@ -124,6 +123,7 @@ export const decideRegularization = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const row = await adminDb.attendanceRecord.update({
       where: { id: data.id },
@@ -139,6 +139,7 @@ export const decideRegularization = createServerFn({ method: "POST" })
 export const listPendingRegularizations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const rows = await adminDb.attendanceRecord.findMany({
       where: { status: "pending_regularization" },

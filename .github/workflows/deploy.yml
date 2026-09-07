@@ -1,0 +1,56 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Doppler CLI
+        run: |
+          curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://cli.doppler.com/install.sh" | sudo sh
+
+      - name: Set deploy target
+        id: target
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env=prd" >> $GITHUB_OUTPUT
+            echo "name=ciagotech-production" >> $GITHUB_OUTPUT
+          else
+            echo "env=stg" >> $GITHUB_OUTPUT
+            echo "name=ciagotech-staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set worker name in wrangler.toml
+        run: |
+          sed -i "s/^name = .*/name = \"${{ steps.target.outputs.name }}\"/" wrangler.toml
+
+      - name: Build
+        run: doppler run -- npm run build
+        env:
+          DOPPLER_TOKEN: ${{ steps.target.outputs.env == 'prd' && secrets.DOPPLER_TOKEN_PRD || secrets.DOPPLER_TOKEN_STG }}
+
+      - name: Deploy to Cloudflare Workers
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

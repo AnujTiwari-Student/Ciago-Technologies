@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import {
   CONDITIONAL_DOC_LABELS,
   computeDocRequirements,
@@ -145,6 +144,7 @@ export const getMyOnboarding = createServerFn({ method: "GET" })
     );
     if (!app) return null;
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const posting = await adminDb.jobPosting.findUnique({
       where: { id: app.roleId },
@@ -216,6 +216,7 @@ export const acceptOffer = createServerFn({ method: "POST" })
     if (!app) throw new Error("Not found");
     if (app.status !== "offered") throw new Error("Offer not available");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const posting = await adminDb.jobPosting.findUnique({
       where: { id: app.roleId },
@@ -264,6 +265,7 @@ export const declineOffer = createServerFn({ method: "POST" })
     );
     if (!app) throw new Error("Not found");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     await adminDb.onboardingRecord.upsert({
       where: { applicationId: app.id },
@@ -392,6 +394,7 @@ export const recordUploadedDoc = createServerFn({ method: "POST" })
     );
     if (!rec) throw new Error("Not found");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const existing = await adminDb.onboardingDocument.findFirst({
@@ -425,6 +428,7 @@ export const deleteUploadedDoc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const doc = await adminDb.onboardingDocument.findUnique({
@@ -438,7 +442,7 @@ export const deleteUploadedDoc = createServerFn({ method: "POST" })
 
     // Storage: delete from R2
     const { getStorage } = await import("@/lib/storage");
-    const storage = getStorage();
+    const storage = await getStorage();
     await storage.remove("onboarding-docs", [doc.storagePath]);
 
     await adminDb.onboardingDocument.delete({ where: { id: data.id } });
@@ -470,6 +474,7 @@ export const submitOnboarding = createServerFn({ method: "POST" })
       throw new Error("Onboarding paperwork incomplete");
     }
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const app = await adminDb.jobApplication.findUnique({

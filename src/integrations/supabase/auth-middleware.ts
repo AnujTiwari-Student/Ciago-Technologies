@@ -3,6 +3,27 @@ import { getRequest } from "@tanstack/react-start/server";
 import { createUserDb, createAdminDb, type UserPrismaClient } from "@/lib/db/neon";
 import { isClerkAuthenticationEnabled } from "@/lib/feature-flags.server";
 
+async function withDbRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isConnectionError =
+        err?.message?.includes("connection timeout") ||
+        err?.message?.includes("Connection terminated") ||
+        err?.message?.includes("ECONNREFUSED") ||
+        err?.message?.includes("ENOTFOUND") ||
+        err?.message?.includes("Client has encountered a connection error") ||
+        err?.code === "ECONNRESET" ||
+        err?.code === "ETIMEDOUT";
+      if (!isConnectionError || attempt === retries) throw err;
+      console.warn(`[auth-middleware] DB connection failed (attempt ${attempt + 1}), retrying...`);
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable: ${name}`);
@@ -57,10 +78,12 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
     }
 
     const adminDb = createAdminDb(DATABASE_URL);
-    let mapping = await adminDb.clerkUserMap.findUnique({
-      where: { clerkUserId },
-      select: { authUserId: true },
-    });
+    let mapping = await withDbRetry(() =>
+      adminDb.clerkUserMap.findUnique({
+        where: { clerkUserId },
+        select: { authUserId: true },
+      })
+    );
 
     if (!mapping) {
       const clerkClient = createClerkClient({ secretKey: CLERK_SECRET_KEY });
@@ -75,12 +98,14 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
 
       const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || null;
 
-      const prov = await provisionClerkUser(adminDb, {
-        clerkUserId,
-        email,
-        emailVerified,
-        fullName,
-      });
+      const prov = await withDbRetry(() =>
+        provisionClerkUser(adminDb, {
+          clerkUserId,
+          email,
+          emailVerified,
+          fullName,
+        })
+      );
 
       if (!("authUserId" in prov)) {
         const message =

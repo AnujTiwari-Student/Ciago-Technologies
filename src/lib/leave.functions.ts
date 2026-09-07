@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 // ============================================================
 // Types & helpers
@@ -101,6 +100,7 @@ export const listPendingLeaveRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<PendingLeaveRow[]> => {
     await assertApprover(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const rows = await adminDb.leaveRequest.findMany({
@@ -134,6 +134,7 @@ export const decideLeaveRequest = createServerFn({ method: "POST" })
   .validator((d: z.infer<typeof decisionSchema>) => decisionSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertApprover(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const updated = await adminDb.leaveRequest.update({

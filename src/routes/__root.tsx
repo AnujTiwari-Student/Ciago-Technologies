@@ -15,6 +15,7 @@ import { AuthProvider } from "../lib/auth";
 import { ClerkProviderBoundary } from "@/integrations/clerk/client";
 import { useEnsureUserMapped } from "@/hooks/use-ensure-user-mapped";
 import { isAuthButtonEnabledFn } from "@/lib/feature-flags.functions";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function NotFoundComponent() {
   return (
@@ -73,10 +74,17 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  beforeLoad: async () => ({
-    authButtonEnabled: await isAuthButtonEnabledFn(),
-  }),
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+}>()({
+  beforeLoad: async () => {
+    const authButtonEnabled = await isAuthButtonEnabledFn();
+    return { authButtonEnabled };
+  },
+  loader: async () => {
+    const authButtonEnabled = await isAuthButtonEnabledFn();
+    return { authButtonEnabled };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -99,13 +107,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           // both the dev frontend (`*.clerk.accounts.dev`) and the
           // production frontend (`*.clerk.com` / `clerk.com`) so cutover
           // and rollback don't require a code change.
-          "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com",
           // Clerk's browser.js spins up a Web Worker from a blob: URL
           // when running in dev mode. Without `worker-src 'self' blob:`,
           // the browser falls back to script-src and refuses the worker.
           "worker-src 'self' blob:",
           "frame-src https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com",
-          "connect-src 'self' https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://cdn.configcat.com https://clerk-telemetry.com",
+          "connect-src 'self' https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://cdn.configcat.com https://clerk-telemetry.com",
         ].join("; "),
       },
     ],
@@ -158,20 +166,22 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <ClerkProviderBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <AuthProvider>
-            {/* Step 11: ensures a Clerk user's Supabase mapping exists before
-                any authenticated route reads data. No-op when flag is off or
-                user is signed out. */}
-            <EnsureUserMapped />
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-          </AuthProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </ClerkProviderBoundary>
+    <ErrorBoundary>
+      <ClerkProviderBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <AuthProvider>
+              {/* Step 11: ensures a Clerk user's Supabase mapping exists before
+                  any authenticated route reads data. No-op when flag is off or
+                  user is signed out. */}
+              <EnsureUserMapped />
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </AuthProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ClerkProviderBoundary>
+    </ErrorBoundary>
   );
 }
 

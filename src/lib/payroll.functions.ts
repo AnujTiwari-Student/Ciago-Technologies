@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import { computeSalarySlip } from "@/lib/payroll-utils";
 
 export type SalaryStructure = {
@@ -89,6 +88,7 @@ export const upsertSalaryStructure = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await requireHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const row = await adminDb.salaryStructure.create({
       data: {
@@ -122,6 +122,7 @@ export const generateSalarySlip = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await requireHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const structure = await adminDb.salaryStructure.findFirst({
@@ -184,6 +185,7 @@ export const listEmployeeDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await requireHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const roles = await adminDb.userRole.findMany({
@@ -209,6 +211,7 @@ export const listSalarySlipsForUser = createServerFn({ method: "GET" })
   .validator((d: any) => z.object({ user_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<SalarySlip[]> => {
     await requireHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const rows = await adminDb.salarySlip.findMany({
       where: { userId: data.user_id },

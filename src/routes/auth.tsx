@@ -121,8 +121,13 @@ function AuthPage() {
   const search = useSearch({ from: "/auth" });
   const { user, loading, signOut } = useAuth();
   const redirectTo = safePath(search.redirect);
-  const [clerkAuthEnabled, setClerkAuthEnabled] = useState(!FLAGS.USE_CLERK_AUTH);
-  const [clerkAuthLoading, setClerkAuthLoading] = useState(FLAGS.USE_CLERK_AUTH);
+
+  // In development with USE_CLERK_AUTH=true, skip the async flag check
+  const isDev = import.meta.env.DEV;
+  const skipAsyncCheck = isDev && FLAGS.USE_CLERK_AUTH;
+
+  const [clerkAuthEnabled, setClerkAuthEnabled] = useState(skipAsyncCheck ? true : !FLAGS.USE_CLERK_AUTH);
+  const [clerkAuthLoading, setClerkAuthLoading] = useState(skipAsyncCheck ? false : FLAGS.USE_CLERK_AUTH);
   const disabledSignOutAttemptedRef = useRef(false);
   const matchRoute = useMatchRoute();
   const isChildRoute = matchRoute({ to: "/auth/sso-callback", fuzzy: true });
@@ -130,6 +135,8 @@ function AuthPage() {
   useEffect(() => {
     if (isChildRoute) return;
     if (!FLAGS.USE_CLERK_AUTH) return;
+    if (skipAsyncCheck) return; // Skip async check in dev mode
+
     let cancelled = false;
     (async () => {
       try {
@@ -145,7 +152,7 @@ function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, [isChildRoute]);
+  }, [isChildRoute, skipAsyncCheck]);
 
   useEffect(() => {
     if (isChildRoute) return;

@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type ProfileRow = {
   user_id: string;
@@ -41,7 +40,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
     // Storage: signed URL for avatar (R2)
     if (base.avatar_path) {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       const result = await storage.createSignedUrl("avatars", base.avatar_path, 60 * 60 * 24 * 7);
       base.avatar_url = result.signedUrl;
     }
@@ -112,7 +111,7 @@ export const withdrawMyApplication = createServerFn({ method: "POST" })
 
     if (row.resumeStoragePath) {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       await storage.remove("resumes", [row.resumeStoragePath]);
     }
     return { ok: true };

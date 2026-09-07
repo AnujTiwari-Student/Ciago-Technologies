@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import type { AppRole } from "@prisma/client";
 import { canAccessDashboard } from "@/lib/dashboard-access";
 
@@ -32,6 +31,7 @@ export type MyEmployeeAccessPayload = {
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyRolesPayload> => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const rows = await adminDb.userRole.findMany({
       where: { userId: context.userId },
@@ -67,6 +67,7 @@ export const getMyAuthUserId = createServerFn({ method: "GET" })
 export const getMyEmployeeAccess = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<MyEmployeeAccessPayload> => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const [roleRows, onboardingRows] = await Promise.all([
       adminDb.userRole.findMany({

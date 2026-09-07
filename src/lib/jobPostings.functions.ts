@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type JobPosting = {
   id: string;
@@ -28,23 +27,29 @@ export type JobPosting = {
   updated_at: string;
 };
 
-export const listActiveJobPostings = createServerFn({ method: "GET" }).handler(async () => {
-  const adminDb = getAdminDb();
-  const rows = await adminDb.jobPosting.findMany({
-    where: { status: "published" },
-    orderBy: { createdAt: "desc" },
-  });
-  return rows as unknown as JobPosting[];
-});
+export const listActiveJobPostings = createServerFn({ method: "GET" }).handler(
+  async (): Promise<JobPosting[]> => {
+    const { getAdminDb } = await import("@/lib/db/admin");
+    const adminDb = getAdminDb();
+    const rows = await adminDb.jobPosting.findMany({
+      where: { status: "published" },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows as unknown as JobPosting[];
+  },
+);
 
-export const listEmploymentTypes = createServerFn({ method: "GET" }).handler(async () => {
-  const adminDb = getAdminDb();
-  const data = await adminDb.employmentType.findMany({
-    select: { code: true, label: true, sortOrder: true },
-    orderBy: { sortOrder: "asc" },
-  });
-  return data.map((e) => ({ code: e.code, label: e.label, sort_order: e.sortOrder }));
-});
+export const listEmploymentTypes = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { getAdminDb } = await import("@/lib/db/admin");
+    const adminDb = getAdminDb();
+    const data = await adminDb.employmentType.findMany({
+      select: { code: true, label: true, sortOrder: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    return data.map((e) => ({ code: e.code, label: e.label, sort_order: e.sortOrder }));
+  },
+);
 
 async function assertAdminOrHr(_db: any, userId: string) {
   const { getAdminDb } = await import("@/lib/db/admin");
@@ -56,6 +61,7 @@ async function assertAdminOrHr(_db: any, userId: string) {
 }
 
 async function shouldScopeToDepartment(userId: string): Promise<string | null> {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const roles = await adminDb.userRole.findMany({
     where: { userId },
@@ -82,6 +88,7 @@ export const listAllJobPostings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdminOrHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
@@ -117,6 +124,7 @@ export const upsertJobPosting = createServerFn({ method: "POST" })
   .validator((d: unknown) => upsertSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdminOrHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const result = await adminDb.jobPosting.upsert({
@@ -197,6 +205,7 @@ export const deleteJobPosting = createServerFn({ method: "POST" })
   .validator((d: unknown) => deleteSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdminOrHr(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const row = await adminDb.jobPosting.findUnique({

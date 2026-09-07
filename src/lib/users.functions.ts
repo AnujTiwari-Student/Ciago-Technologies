@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export const DEPT_TYPES = [
   "engineering",
@@ -73,6 +72,7 @@ export type DirectoryRow = {
 async function getActorRoles(_db: any, userId: string) {
   // Use adminDb to bypass RLS for role checks — the user's own role
   // must be readable regardless of RLS policies on user_roles table.
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const roles = await adminDb.userRole.findMany({
     where: { userId },
@@ -90,6 +90,7 @@ export const listDirectory = createServerFn({ method: "GET" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     // Build directory from clerk_user_map + profiles + employees + user_roles
     const users = await adminDb.clerkUserMap.findMany({
@@ -225,6 +226,7 @@ export const updateBgCheckStatus = createServerFn({ method: "POST" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     await adminDb.employee.upsert({
@@ -278,6 +280,7 @@ export const updateUserAppRole = createServerFn({ method: "POST" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     // Upsert the user's role
@@ -332,6 +335,7 @@ export const removeUserAppRole = createServerFn({ method: "POST" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     await adminDb.userRole.deleteMany({
@@ -374,6 +378,7 @@ export const getUserRoles = createServerFn({ method: "GET" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const roles = await adminDb.userRole.findMany({
       where: { userId: data.user_id },
@@ -390,6 +395,7 @@ export const getUserDetail = createServerFn({ method: "GET" })
     const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const targetAdminRole = await adminDb.userRole.findFirst({
@@ -419,7 +425,7 @@ export const getUserDetail = createServerFn({ method: "GET" })
     let signedDocs: Array<(typeof docs)[number] & { signed_url: string | null }> = [];
     try {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       signedDocs = await Promise.all(
         docs.map(async (d) => {
           let signed_url: string | null = null;
@@ -487,6 +493,7 @@ export const upsertEmployee = createServerFn({ method: "POST" })
     const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const targetAdminRole = await adminDb.userRole.findFirst({
       where: { userId: data.user_id, role: "admin" },
@@ -562,6 +569,7 @@ export const setUserRole = createServerFn({ method: "POST" })
     const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const targetAdminRole = await adminDb.userRole.findFirst({
       where: { userId: data.user_id, role: "admin" },
@@ -608,6 +616,7 @@ export const upsertIdentityDoc = createServerFn({ method: "POST" })
       const actor = await getActorRoles(context.db, context.userId);
       if (!actor.isAdmin) throw new Error("Only the owner or admin can upload identity documents");
     }
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const existing = await adminDb.identityDocument.findFirst({
       where: { userId: data.user_id, docType: data.doc_type },
@@ -651,6 +660,7 @@ export const verifyIdentityDoc = createServerFn({ method: "POST" })
     const actor = await getActorRoles(context.db, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const doc = await adminDb.identityDocument.findUnique({
       where: { id: data.doc_id },
@@ -693,6 +703,7 @@ export const listAssignables = createServerFn({ method: "GET" })
     const actor = await getActorRoles(null, context.userId);
     if (!actor.isAdmin) throw new Error("Forbidden");
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const users = await adminDb.clerkUserMap.findMany({
       select: { authUserId: true, email: true },

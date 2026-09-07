@@ -106,12 +106,8 @@ function ClerkTokenBridge() {
 
 function ClerkProviderFragment({ children }: { children: ReactNode }) {
   const publishableKey = readPublishableKey();
+
   if (!publishableKey) {
-    // Misconfiguration: flag is on but no publishable key. Surface the
-    // children so the rest of the app doesn't crash; a console warning
-    // helps diagnose at runtime. The Clerk forms will also fall through
-    // gracefully because Clerk's hooks return loading states when the
-    // provider is missing its key.
     if (typeof console !== "undefined") {
       console.warn(
         "[clerk] USE_CLERK_AUTH is on but VITE_CLERK_PUBLISHABLE_KEY is missing. " +
@@ -120,6 +116,7 @@ function ClerkProviderFragment({ children }: { children: ReactNode }) {
     }
     return <>{children}</>;
   }
+
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <ClerkTokenBridge />

@@ -27,9 +27,24 @@ function roleSetFromPayload(payload: MyRolesPayload): Set<string> {
 export async function requireAuthenticated(
   redirectPath: string,
 ): Promise<{ userId: string | null }> {
-  const clerkAuthEnabled = await isClerkAuthEnabledFn();
-  if (!clerkAuthEnabled) {
-    throw redirect({ to: "/forbidden", search: { reason: "clerk_auth_disabled" } });
+  try {
+    const clerkAuthEnabled = await Promise.race([
+      isClerkAuthEnabledFn(),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => reject(new Error("Auth check timeout")), 5000)
+      )
+    ]);
+
+    if (!clerkAuthEnabled) {
+      throw redirect({ to: "/forbidden", search: { reason: "clerk_auth_disabled" } });
+    }
+  } catch (error) {
+    // If timeout or error, assume enabled in development
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[requireAuthenticated] Auth check failed, assuming enabled:", error);
+    } else {
+      throw redirect({ to: "/forbidden", search: { reason: "auth_check_failed" } });
+    }
   }
 
   if (!readClerkToken()) {
@@ -66,9 +81,24 @@ export async function requireDashboardAccess(
   appRoles: AppRole[];
   departmentId: string | null;
 }> {
-  const enabled = await isDashboardEnabled();
-  if (!enabled) {
-    throw redirect({ to: "/forbidden", search: { reason: "dashboard_disabled" } });
+  try {
+    const enabled = await Promise.race([
+      isDashboardEnabled(),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => reject(new Error("Dashboard check timeout")), 5000)
+      )
+    ]);
+
+    if (!enabled) {
+      throw redirect({ to: "/forbidden", search: { reason: "dashboard_disabled" } });
+    }
+  } catch (error) {
+    // If timeout or error, assume enabled in development
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[requireDashboardAccess] Dashboard check failed, assuming enabled:", error);
+    } else {
+      throw redirect({ to: "/forbidden", search: { reason: "dashboard_check_failed" } });
+    }
   }
 
   const result = await requireRoles(redirectPath);

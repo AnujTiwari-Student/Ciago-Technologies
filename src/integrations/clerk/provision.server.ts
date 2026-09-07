@@ -17,7 +17,6 @@
 // Returns the canonical auth_user_id (UUID) for the given Clerk identity.
 // Callers use this value as the RLS-context user id.
 
-import { getAdminDb } from "@/lib/db/admin";
 
 export type ClerkIdentity = {
   clerkUserId: string;
@@ -59,6 +58,7 @@ export async function provisionClerkUser(
   const email = identity.email.trim().toLowerCase();
   if (!email) return { kind: "missing_email" };
 
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
 
   // (1) Direct lookup by Clerk user id.
@@ -165,6 +165,7 @@ export async function lookupClerkIdByAuthUserId(
   _unused: unknown,
   authUserId: string,
 ): Promise<string | null> {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const row = await adminDb.clerkUserMap.findFirst({
     where: { authUserId },

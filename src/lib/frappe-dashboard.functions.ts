@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import { createFrappeClient } from "@/integrations/frappe/client";
 
 export type FrappeDashboardStats = {
@@ -79,6 +78,7 @@ export type FrappeDashboardStats = {
 };
 
 async function assertSystemAccess(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const count = await adminDb.userRole.count({
     where: {
@@ -93,6 +93,7 @@ export const getFrappeDashboardStats = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<FrappeDashboardStats> => {
     await assertSystemAccess(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     // Environment & Safety Status

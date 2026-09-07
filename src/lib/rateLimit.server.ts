@@ -1,5 +1,4 @@
 import { getRequestHeader, getRequestIP } from "@tanstack/react-start/server";
-import { getAdminDb } from "@/lib/db/admin";
 
 export function getClientIp(): string {
   try {
@@ -27,6 +26,7 @@ export async function enforceRateLimit(opts: {
   max: number;
   windowSeconds: number;
 }): Promise<void> {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const since = new Date(Date.now() - opts.windowSeconds * 1000);
 

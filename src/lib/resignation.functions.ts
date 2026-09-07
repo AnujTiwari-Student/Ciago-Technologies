@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type Resignation = {
   id: string;
@@ -25,6 +24,7 @@ export const submitResignation = createServerFn({ method: "POST" })
     z.object({ last_working_day: isoDate, reason: z.string().max(1000).optional() }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const row = await context.db.withRLS((tx) =>
       tx.resignation.create({
@@ -74,6 +74,7 @@ export const listMyResignation = createServerFn({ method: "GET" })
 export const listAllResignations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const rows = await adminDb.resignation.findMany({
       orderBy: { createdAt: "desc" },
@@ -106,6 +107,7 @@ export const decideResignation = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const row = await adminDb.resignation.update({
       where: { id: data.id },

@@ -27,7 +27,6 @@ import {
   type ProvisionError,
 } from "@/integrations/clerk/provision-neon.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type EnsureMappingResult =
   | { ok: true; authUserId: string; created: boolean; reused: boolean }
@@ -64,6 +63,7 @@ export const ensureClerkMapping = createServerFn({ method: "POST" })
       return { ok: false, reason: "no authenticated identity available" };
     }
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const identity: ClerkIdentity = {
       clerkUserId,

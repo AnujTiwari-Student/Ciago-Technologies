@@ -5,7 +5,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 async function assertAdmin(db: any, userId: string) {
   const count = await db.withRLS((tx: any) =>
@@ -27,6 +26,7 @@ export const provisionServiceAccounts = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.db, context.userId);
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const results = {
@@ -168,6 +168,7 @@ export const deprovisionServiceAccounts = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.db, context.userId);
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const mapping = await adminDb.serviceAccountMapping.findFirst({
@@ -203,17 +204,9 @@ export const deprovisionServiceAccounts = createServerFn({ method: "POST" })
       results.clickup.success = true; // Manual revocation required
     }
 
-    // Disable OrangeHRM ESS
+    // OrangeHRM removed — skip
     if (mapping.orangehrmUserId) {
-      try {
-        const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
-        const ohr = getOrangeHRMClient();
-        await ohr.updateUserStatus(mapping.orangehrmUserId, false);
-        results.orangehrm.success = true;
-      } catch (error) {
-        results.orangehrm.error = error instanceof Error ? error.message : String(error);
-        console.error("[offboarding] OrangeHRM disable failed:", error);
-      }
+      results.orangehrm.success = true;
     }
 
     // Update mapping

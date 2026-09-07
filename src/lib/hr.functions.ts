@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import { docLabel } from "@/lib/onboarding.functions";
 
 export type OnboardingQueueRow = {
@@ -86,6 +85,7 @@ export type OnboardingDetail = {
 
 async function assertHrOrAdmin(_db: any, userId: string): Promise<void> {
   // Bypass RLS for role checks — roles must always be readable
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
@@ -95,6 +95,7 @@ export const listOnboardingQueue = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<OnboardingQueueRow[]> => {
     await assertHrOrAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const adminRoleCount = await adminDb.userRole.count({
@@ -183,6 +184,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ onboarding_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<OnboardingDetail> => {
     await assertHrOrAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const rec = await adminDb.onboardingRecord.findUnique({
@@ -208,7 +210,7 @@ export const getOnboardingDetail = createServerFn({ method: "POST" })
 
     // Signed URLs for HR review (private bucket, valid 15 minutes) — R2
     const { getStorage } = await import("@/lib/storage");
-    const storage = getStorage();
+    const storage = await getStorage();
     const documents: OnboardingDocDetail[] = [];
     for (const d of docs) {
       let signed: string | null = null;
@@ -382,6 +384,7 @@ export const reviewOnboardingDocument = createServerFn({ method: "POST" })
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting a document.");
     }
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const doc = await adminDb.onboardingDocument.findUnique({
@@ -495,6 +498,7 @@ export const updateOnboardingVerificationStatus = createServerFn({ method: "POST
       throw new Error("Rejection feedback is required when rejecting onboarding.");
     }
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const rec = await adminDb.onboardingRecord.findUnique({
@@ -660,6 +664,7 @@ export const bulkReviewOnboardingDocuments = createServerFn({ method: "POST" })
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting.");
     }
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const targetStatuses = data.include_statuses ?? ["pending"];
 
@@ -784,6 +789,7 @@ export const setOnboardingDoj = createServerFn({ method: "POST" })
   .validator((d: unknown) => dojSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const today = new Date();
@@ -895,6 +901,7 @@ export const setOnboardingVerification = createServerFn({ method: "POST" })
     if ((data.status === "changes_requested" || data.status === "rejected") && !data.feedback) {
       throw new Error("Feedback is required when requesting changes or rejecting.");
     }
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const rec = await adminDb.onboardingRecord.findUnique({
@@ -974,6 +981,7 @@ export const previewDocReviewEmail = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const doc = await adminDb.onboardingDocument.findUnique({
@@ -1023,6 +1031,7 @@ export const listDocumentVersions = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }): Promise<OnboardingDocVersion[]> => {
     await assertHrOrAdmin(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const rows = await adminDb.onboardingDocument.findMany({
@@ -1032,7 +1041,7 @@ export const listDocumentVersions = createServerFn({ method: "POST" })
 
     // Signed URLs — R2
     const { getStorage } = await import("@/lib/storage");
-    const storage = getStorage();
+    const storage = await getStorage();
     const out: OnboardingDocVersion[] = [];
     for (const r of rows) {
       let signed: string | null = null;

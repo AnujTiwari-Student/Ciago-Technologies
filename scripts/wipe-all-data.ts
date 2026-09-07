@@ -72,7 +72,7 @@ async function main() {
     console.log(`   Found ${authUsers.length} rows in auth.users`);
 
     if (authUsers.length > 0) {
-      await adminDb.$executeRawUnsafe(`DELETE FROM auth.users WHERE true`);
+      await adminDb.$executeRaw`DELETE FROM auth.users WHERE true`;
       console.log(`   ✓ Deleted from auth.users: ${authUsers.length} rows`);
     } else {
       console.log(`   ✓ auth.users already empty`);

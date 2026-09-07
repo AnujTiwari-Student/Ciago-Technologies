@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 const coreInfoSchema = z.object({
   fullName: z.string().trim().max(200).optional(),
@@ -32,6 +31,7 @@ export type CoreInfoInput = z.infer<typeof coreInfoSchema>;
 export const getMyCoreInfo = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const db = getAdminDb();
     const userId = context.userId;
 
@@ -72,6 +72,7 @@ export const upsertMyCoreInfo = createServerFn({ method: "POST" })
   .validator(coreInfoSchema)
   .handler(async ({ context, data }) => {
     try {
+      const { getAdminDb } = await import("@/lib/db/admin");
       const db = getAdminDb();
 
       if (!db) {
@@ -111,6 +112,7 @@ export const upsertMyCoreInfo = createServerFn({ method: "POST" })
 export const getJobPostingById = createServerFn({ method: "GET" })
   .validator(z.object({ jobId: z.string().uuid() }))
   .handler(async ({ data }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const db = getAdminDb();
     const posting = await db.jobPosting.findUnique({
       where: { id: data.jobId, status: "published" },

@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import {
   educationalQualificationsSchema,
   normalizeEducationalQualifications,
@@ -54,6 +53,7 @@ export const submitApplication = createServerFn({ method: "POST" })
       throw new Error("Provide a resume file or a resume link.");
     }
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const educationalQualifications = normalizeEducationalQualifications(
       data.educationalQualifications,
@@ -100,7 +100,7 @@ export const submitApplication = createServerFn({ method: "POST" })
     let resumeAccessUrl: string | null = data.resumeLink || null;
     if (data.resumeStoragePath) {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       const result = await storage.createSignedUrl(
         "resumes",
         data.resumeStoragePath,

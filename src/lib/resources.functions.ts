@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { enforceRateLimit, getClientIp, getClientHost } from "@/lib/rateLimit.server";
 import { verifyTurnstile } from "@/lib/turnstile.server";
-import { getAdminDb } from "@/lib/db/admin";
 
 const inputSchema = z.object({
   email: z.string().trim().email().max(200),
@@ -29,6 +28,7 @@ export const requestResource = createServerFn({ method: "POST" })
     });
     await verifyTurnstile(data.turnstileToken || undefined, ip, getClientHost());
 
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     await adminDb.resourceDownload.create({
       data: { email: data.email, resourceSlug: data.slug },

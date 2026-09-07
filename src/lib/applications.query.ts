@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type MyApplication = {
   id: string;
@@ -44,6 +43,7 @@ export const listMyApplications = createServerFn({ method: "GET" })
     const roleIds = Array.from(new Set(apps.map((r) => r.roleId))).filter(Boolean);
     const codeByRole = new Map<string, string | null>();
     if (roleIds.length > 0) {
+      const { getAdminDb } = await import("@/lib/db/admin");
       const adminDb = getAdminDb();
       const postings = await adminDb.jobPosting.findMany({
         where: { id: { in: roleIds } },

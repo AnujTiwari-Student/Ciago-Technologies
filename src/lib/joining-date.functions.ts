@@ -6,7 +6,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getAdminDb } from "@/lib/db/admin";
 import { format } from "date-fns";
 import { generateOfferLetter, generateJoiningLetter, cleanupLetterFiles } from "./letter-generator";
 import { generateHiringEmailWithLetters } from "./email-templates/hiring-with-letters";
@@ -24,6 +23,7 @@ export const setJoiningDate = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const db = getAdminDb();
     const { applicationId, joiningDate } = data;
 
@@ -259,6 +259,7 @@ export const checkFrappeDashboardAccess = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const db = getAdminDb();
     const { applicationId } = data;
 
@@ -341,6 +342,7 @@ export const checkFrappeDashboardAccess = createServerFn({ method: "POST" })
  * Get all applications with joining dates (for admin dashboard)
  */
 export const getApplicationsWithJoiningDates = createServerFn({ method: "GET" }).handler(async () => {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const db = getAdminDb();
 
   try {
@@ -383,6 +385,7 @@ export const getApplicationsWithJoiningDates = createServerFn({ method: "GET" })
  * Get joining dates for today (for cron job)
  */
 export const getTodayJoiningDates = createServerFn({ method: "GET" }).handler(async () => {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const db = getAdminDb();
 
   try {
@@ -435,6 +438,7 @@ export const sendFrappeCredentials = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const db = getAdminDb();
     const { applicationId } = data;
 

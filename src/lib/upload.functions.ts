@@ -19,7 +19,7 @@ export const uploadFile = createServerFn({ method: "POST" })
     }
 
     const { getStorage } = await import("@/lib/storage");
-    const storage = getStorage();
+    const storage = await getStorage();
     const buffer = Buffer.from(data.base64, "base64");
     const result = await storage.upload(data.bucket, data.path, buffer, data.contentType);
     if (result.error) throw new Error(result.error);

@@ -1,11 +1,12 @@
-name = "ciagotech"
+name = "ciagotech-staging"
 main = ".output/server/index.mjs"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 # Account configuration - fill in your Cloudflare account ID
 # Get from: https://dash.cloudflare.com/ → Workers & Pages → Account ID
-account_id = ""
+account_id = "843c692336b003ca79f308d59b05660a"
 
 # Build configuration
 [build]
@@ -15,42 +16,10 @@ command = "npm run build"
 [observability]
 enabled = true
 
-# Production environment
-[env.production]
-name = "ciagotech-production"
-workers_dev = false
-routes = [
-  { pattern = "ciagotech.com/*", zone_name = "ciagotech.com" },
-  { pattern = "www.ciagotech.com/*", zone_name = "ciagotech.com" }
-]
-
-[env.production.vars]
-ENVIRONMENT = "production"
-NODE_ENV = "production"
-# FRAPPE_API_URL = "https://your-frappe-backend.com" # Set via wrangler secret
-
-# Staging environment
-[env.staging]
-name = "ciagotech-staging"
-workers_dev = false
-routes = [
-  { pattern = "staging.ciagotech.com/*", zone_name = "ciagotech.com" }
-]
-
-[env.staging.vars]
-ENVIRONMENT = "staging"
-NODE_ENV = "production"
-# FRAPPE_API_URL = "https://staging-frappe-backend.com" # Set via wrangler secret
-
-# Development environment
-[env.development]
-name = "ciagotech-development"
-workers_dev = true
-
-[env.development.vars]
-ENVIRONMENT = "development"
-NODE_ENV = "development"
-# FRAPPE_API_URL = "http://localhost:8000" # Set via wrangler secret
+# Environments are managed via separate deploys with different wrangler.toml names
+# Production: name = "ciagotech-production", routes ciagotech.com/*
+# Staging: name = "ciagotech-staging" (current), workers_dev = true
+# See .production/DEPLOYMENT_START_GUIDE.md for deployment instructions
 
 # D1 Database binding (uncomment when ready)
 # [[d1_databases]]

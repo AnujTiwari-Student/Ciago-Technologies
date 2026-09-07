@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 const ALLOWED_STATUSES = [
   "applied",
@@ -44,12 +43,14 @@ export type AdminUser = {
 };
 
 async function assertAdmin(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const count = await adminDb.userRole.count({ where: { userId, role: "admin" } });
   if (count === 0) throw new Error("Forbidden");
 }
 
 async function assertHrOrAdmin(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const count = await adminDb.userRole.count({
     where: { userId, role: { in: ["admin", "hr"] } },
@@ -63,6 +64,7 @@ async function assertHrOrAdmin(_db: any, userId: string) {
  * HR and manager roles see only their department's data.
  */
 async function shouldScopeToDepartment(userId: string): Promise<string | null> {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const roles = await adminDb.userRole.findMany({
     where: { userId },
@@ -88,7 +90,8 @@ async function shouldScopeToDepartment(userId: string): Promise<string | null> {
 export const checkIsAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
     const count = await adminDb.userRole.count({
       where: { userId: context.userId, role: "admin" },
     });
@@ -99,7 +102,8 @@ export const listAllApplications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertHrOrAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     // Determine if we need to scope by department
     const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
@@ -196,7 +200,7 @@ export const listAllApplications = createServerFn({ method: "GET" })
     const withPaths = rows.filter((r) => r.resume_storage_path);
     if (withPaths.length > 0) {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       await Promise.all(
         withPaths.map(async (r) => {
           const result = await storage.createSignedUrl(
@@ -221,7 +225,8 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => updateSchema.parse(data))
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     const prior = await adminDb.jobApplication.findUnique({
       where: { id: data.id },
@@ -448,64 +453,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
       const { createIntegrationEvent, generateIdempotencyKey } =
         await import("@/lib/integration-events");
 
-      // OrangeHRM provisioning (existing)
-      try {
-        const { handleApplicationApplied } = await import("@/lib/orangehrm-applied-handler");
-        const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
-
-        // Create event SYNCHRONOUSLY - this is the durable record of provisioning intent
-        const idempotencyKey = generateIdempotencyKey(
-          "orangehrm_employee_provision",
-          "job_application",
-          data.id,
-        );
-
-        const eventResult = await createIntegrationEvent(adminDb, {
-          eventType: "orangehrm_employee_provision",
-          entityType: "job_application",
-          entityId: data.id,
-          idempotencyKey,
-          correlationId: `status-update-${data.id}`,
-          source: "application_status_update",
-          maxAttempts: 3,
-        });
-
-        console.log("[applied-orangehrm] Integration event created", {
-          applicationId: data.id,
-          eventId: eventResult.id,
-          alreadyExists: eventResult.alreadyExists,
-        });
-
-        // Process asynchronously ONLY if event was newly created or is pending
-        if (!eventResult.alreadyCompleted) {
-          const client = getOrangeHRMClient();
-
-          // Non-blocking processing - event is already durably recorded
-          handleApplicationApplied({
-            db: adminDb,
-            client,
-            applicationId: data.id,
-            correlationId: `status-update-${data.id}`,
-          }).catch((e) => {
-            console.error("[applied-orangehrm] Async provisioning processing failed", {
-              applicationId: data.id,
-              eventId: eventResult.id,
-              error: e.message,
-            });
-            // Event exists and can be retried by background worker or manual intervention
-          });
-        }
-      } catch (eventError) {
-        // Event creation itself failed - this is a critical error
-        console.error("[applied-orangehrm] CRITICAL: Failed to create integration event", {
-          applicationId: data.id,
-          error: eventError instanceof Error ? eventError.message : String(eventError),
-        });
-        // Status update still succeeds, but provisioning intent not recorded
-        // Admin must manually create event or trigger provisioning
-      }
-
-      // Phase 3: Frappe HR provisioning (NEW - independent flag)
+      // Frappe HR provisioning
       try {
         const { handleFrappeApplicationApplied } = await import("@/lib/frappe-applied-handler");
         const { createFrappeClient } = await import("@/integrations/frappe/client");
@@ -581,63 +529,7 @@ export const updateApplicationStatus = createServerFn({ method: "POST" })
           ? (posting.department as any)
           : null;
 
-      // Phase 3: OrangeHRM employee upsert/enrichment at HIRED (existing)
-      // Employee was created at APPLIED state (Phase 2)
-      // HIRED reconciles/updates the existing employee with full onboarding data
-      // NEVER creates duplicate employee - uses centralized provisioning for fallback
-      let orangehrmEmployeeId: number | null = null;
-
-      try {
-        const { getOrangeHRMClient } = await import("@/integrations/orangehrm/client");
-        const { handleApplicationHired } = await import("@/lib/orangehrm-hired-handler");
-
-        const client = getOrangeHRMClient();
-
-        console.log("[hire-flow] Triggering Phase 3 OrangeHRM upsert/enrichment");
-
-        // Non-blocking call: HIRED flow must not fail due to OrangeHRM issues
-        handleApplicationHired({
-          db: adminDb,
-          client,
-          applicationId: prior.id,
-          candidateId: prior.userId,
-          correlationId: `status-update-hired-${prior.id}`,
-        }).catch((e) => {
-          console.error("[hire-flow] OrangeHRM upsert/enrichment trigger failed", {
-            applicationId: prior.id,
-            error: e.message,
-          });
-        });
-
-        // Load orangehrmEmployeeId for local Employee record creation
-        // This is best-effort - even if handler hasn't completed yet,
-        // we create the Employee row with whatever mapping exists
-        const application = await adminDb.jobApplication.findUnique({
-          where: { id: prior.id },
-          select: {
-            orangehrmEmployeeId: true,
-            orangehrmProvisioningState: true,
-          },
-        });
-
-        orangehrmEmployeeId = application?.orangehrmEmployeeId || null;
-
-        if (orangehrmEmployeeId) {
-          console.log("[hire-flow] OrangeHRM employee ID available", {
-            empNumber: orangehrmEmployeeId,
-            provisioningState: application?.orangehrmProvisioningState,
-          });
-        } else {
-          console.warn(
-            "[hire-flow] OrangeHRM employee ID not yet available (provisioning may be in progress)",
-          );
-        }
-      } catch (lookupError) {
-        console.error("[hire-flow] Failed to trigger OrangeHRM upsert/enrichment", lookupError);
-      }
-
-      // Phase 3: Frappe HR employee upsert/enrichment at HIRED (NEW)
-      // Independent of OrangeHRM - controlled by separate feature flag
+      // Frappe HR employee upsert/enrichment at HIRED
       // Employee was created at APPLIED state - HIRED enriches the existing employee
       // NEVER creates duplicate employee
       let frappeEmployeeName: string | null = null;
@@ -743,7 +635,8 @@ export const deleteRejectedApplication = createServerFn({ method: "POST" })
   .validator((data: unknown) => deleteSchema.parse(data))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     const row = await adminDb.jobApplication.findUnique({
       where: { id: data.id },
@@ -754,7 +647,7 @@ export const deleteRejectedApplication = createServerFn({ method: "POST" })
 
     if (row.resumeStoragePath) {
       const { getStorage } = await import("@/lib/storage");
-      const storage = getStorage();
+      const storage = await getStorage();
       await storage.remove("resumes", [row.resumeStoragePath]);
     }
 
@@ -775,7 +668,8 @@ export const listAllUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     const mappings = await adminDb.clerkUserMap.findMany({
       select: { authUserId: true, email: true, createdAt: true },
@@ -816,7 +710,8 @@ export const setUserAdminRole = createServerFn({ method: "POST" })
     if (data.userId === context.userId && !data.makeAdmin) {
       throw new Error("You cannot revoke your own admin role.");
     }
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     if (data.makeAdmin) {
       const existing = await adminDb.userRole.findFirst({
@@ -874,7 +769,8 @@ export const listApplicantsByRole = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<RoleApplicantsGroup[]> => {
     await assertHrOrAdmin(context.db, context.userId);
-    const adminDb = getAdminDb();
+    const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
     const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
 
@@ -984,7 +880,8 @@ export const getDashboardMetrics = createServerFn({ method: "GET" })
       hiredByDepartment: Array<{ department: string; count: number }>;
     }> => {
       await assertHrOrAdmin(context.db, context.userId);
-      const adminDb = getAdminDb();
+      const { getAdminDb } = await import("@/lib/db/admin");
+  const adminDb = getAdminDb();
 
       const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
 

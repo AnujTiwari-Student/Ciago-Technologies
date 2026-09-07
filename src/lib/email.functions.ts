@@ -10,7 +10,6 @@
  * For now, email tracking works but status updates require manual polling or external webhook.
  */
 
-import { getAdminDb } from "@/lib/db/admin";
 import { getSenderForEmailType, formatSender, type EmailType } from "@/lib/email-config";
 
 export type SendEmailOptions = {
@@ -34,6 +33,7 @@ export async function sendWorkflowEmail(options: SendEmailOptions): Promise<{
   const sender = getSenderForEmailType(emailType);
   const from = formatSender(sender);
 
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
 
   // Create email record
@@ -145,6 +145,7 @@ export async function handleResendWebhook(payload: {
     return;
   }
 
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
 
   const emailRecord = await adminDb.email.findFirst({

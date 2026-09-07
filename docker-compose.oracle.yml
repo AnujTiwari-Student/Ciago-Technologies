@@ -11,10 +11,10 @@ services:
     restart: unless-stopped
     platform: linux/arm64
     environment:
-      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-${FRAPPE_DB_PASSWORD:-CiagoFrappe2026!}}
       MYSQL_DATABASE: frappe
       MYSQL_USER: frappe
-      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD:-${FRAPPE_DB_PASSWORD:-CiagoFrappe2026!}}
     volumes:
       - /opt/frappe-data/mariadb:/var/lib/mysql
     networks:
@@ -81,7 +81,7 @@ services:
       DB_HOST: frappe-mariadb
       DB_PORT: 3306
       DB_NAME: frappe
-      DB_PASSWORD: ${MARIADB_PASSWORD}
+      DB_PASSWORD: ${MARIADB_PASSWORD:-${FRAPPE_DB_PASSWORD:-CiagoFrappe2026!}}
       REDIS_CACHE: redis://frappe-redis-cache:6379
       REDIS_QUEUE: redis://frappe-redis-queue:6379
       SOCKETIO_PORT: 9000
@@ -114,6 +114,7 @@ services:
       - "443:443"
     volumes:
       - /opt/frappe-data/sites:/var/www/html:ro
+      - /opt/frappe-data/assets:/srv/assets:ro
       - /opt/frappe-data/nginx/conf.d:/etc/nginx/conf.d:ro
       - /opt/frappe-data/nginx/ssl:/etc/nginx/ssl:ro
       - /opt/frappe-data/nginx/logs:/var/log/nginx

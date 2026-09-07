@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 
 export type AuditLog = {
   id: string;
@@ -26,6 +25,7 @@ export const listAuditLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => filterSchema.parse(data ?? {}))
   .handler(async ({ data, context }) => {
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
     const count = await adminDb.userRole.count({
       where: { userId: context.userId, role: "admin" },

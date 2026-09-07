@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAdminDb } from "@/lib/db/admin";
 import type { DeptType } from "@prisma/client";
 
 export type EmployeeDirectoryEntry = {
@@ -29,6 +28,7 @@ export type EmployeeDirectoryEntry = {
  * - hr, manager → departmentId (department-scoped)
  */
 async function shouldScopeToDepartment(userId: string): Promise<string | null> {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const roles = await adminDb.userRole.findMany({
     where: { userId },
@@ -55,6 +55,7 @@ async function shouldScopeToDepartment(userId: string): Promise<string | null> {
  * Dashboard-eligible roles: admin, system_engineer, developer, hr, manager
  */
 async function assertDashboardAccess(_db: any, userId: string) {
+  const { getAdminDb } = await import("@/lib/db/admin");
   const adminDb = getAdminDb();
   const count = await adminDb.userRole.count({
     where: {
@@ -78,6 +79,7 @@ export const listAllEmployees = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<EmployeeDirectoryEntry[]> => {
     await assertDashboardAccess(context.db, context.userId);
+    const { getAdminDb } = await import("@/lib/db/admin");
     const adminDb = getAdminDb();
 
     const scopedDepartmentId = await shouldScopeToDepartment(context.userId);
@@ -199,6 +201,7 @@ export const getDepartmentStats = createServerFn({ method: "GET" })
       recentHires: number;
     }> => {
       await assertDashboardAccess(context.db, context.userId);
+      const { getAdminDb } = await import("@/lib/db/admin");
       const adminDb = getAdminDb();
 
       const scopedDepartmentId = await shouldScopeToDepartment(context.userId);

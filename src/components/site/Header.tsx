@@ -103,7 +103,24 @@ function AuthMenu({
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
 
+  // Show sign-in button if auth is loading but user is not logged in, or if user is explicitly null
+  if (loading && !user) {
+    if (!authButtonEnabled) return null;
+    return (
+      <Link
+        to="/auth"
+        className="hidden items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:border-brand hover:text-brand sm:inline-flex"
+      >
+        <LogIn className="h-4 w-4" />
+        Sign in
+      </Link>
+    );
+  }
+
+  // Still loading but might have user data
   if (loading) return null;
+
+  // Not logged in
   if (!user) {
     if (!authButtonEnabled) return null;
     return (
@@ -179,7 +196,8 @@ function AuthMenu({
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const { authButtonEnabled } = RootRoute.useRouteContext();
+  const loaderData = RootRoute.useLoaderData();
+  const authButtonEnabled = loaderData?.authButtonEnabled ?? false;
   const { user } = useAuth();
   const { isAdmin, isDashboardUser } = useMyRoles();
 
