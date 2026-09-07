@@ -24,10 +24,10 @@ export const Route = createFileRoute("/cookies")({
         content: "Manage your cookie preferences for Ciago Technologies.",
       },
       { property: "og:type", content: "article" },
-      { property: "og:url", content: "/cookies" },
+      { property: "og:url", content: "https://platform.ciagotech.com/cookies" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/cookies" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/cookies" }],
   }),
   component: CookiesPage,
 });

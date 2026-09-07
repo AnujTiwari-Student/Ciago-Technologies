@@ -42,7 +42,7 @@ export const Route = createFileRoute("/careers")({
           "Remote-first roles for engineers who care about craft, scale and cutting-edge tech.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/careers" },
+      { property: "og:url", content: "https://platform.ciagotech.com/careers" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Careers — Ciago Technologies" },
       {
@@ -51,7 +51,7 @@ export const Route = createFileRoute("/careers")({
           "Remote-first roles for engineers who care about craft, scale and cutting-edge tech.",
       },
     ],
-    links: [{ rel: "canonical", href: "/careers" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/careers" }],
   }),
   component: Careers,
 });
@@ -192,7 +192,7 @@ function Careers() {
     hiringOrganization: {
       "@type": "Organization",
       name: "Ciago Technologies",
-      sameAs: "https://ciago-vision-hub.lovable.app",
+      sameAs: "https://platform.ciagotech.com",
     },
     jobLocation: {
       "@type": "Place",

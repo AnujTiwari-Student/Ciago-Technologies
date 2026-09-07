@@ -54,7 +54,7 @@ export const Route = createFileRoute("/what-we-do")({
           "Custom software, industry solutions, backend engineering and cloud infrastructure — one integrated team.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/what-we-do" },
+      { property: "og:url", content: "https://platform.ciagotech.com/what-we-do" },
       { property: "og:site_name", content: "Ciago Technologies" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Services — Ciago Technologies" },
@@ -64,7 +64,7 @@ export const Route = createFileRoute("/what-we-do")({
           "Custom software, industry solutions, backend engineering and cloud infrastructure services.",
       },
     ],
-    links: [{ rel: "canonical", href: "/what-we-do" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/what-we-do" }],
     scripts: [
       {
         type: "application/ld+json",

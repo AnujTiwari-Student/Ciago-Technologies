@@ -39,7 +39,7 @@ export const Route = createFileRoute("/resources")({
         content: "Enterprise engineering blueprints on Kubernetes, Go APIs, SRE and cloud cost.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/resources" },
+      { property: "og:url", content: "https://platform.ciagotech.com/resources" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Resources & Whitepapers — Ciago Technologies" },
       {
@@ -47,7 +47,7 @@ export const Route = createFileRoute("/resources")({
         content: "Enterprise engineering blueprints from our senior team.",
       },
     ],
-    links: [{ rel: "canonical", href: "/resources" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/resources" }],
   }),
   component: ResourcesPage,
 });

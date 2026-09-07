@@ -18,10 +18,10 @@ export const Route = createFileRoute("/privacy")({
         content: "How Ciago Technologies handles your personal information.",
       },
       { property: "og:type", content: "article" },
-      { property: "og:url", content: "/privacy" },
+      { property: "og:url", content: "https://platform.ciagotech.com/privacy" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/privacy" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/privacy" }],
   }),
   component: PrivacyPage,
 });

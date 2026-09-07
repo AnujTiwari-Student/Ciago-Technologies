@@ -18,10 +18,10 @@ export const Route = createFileRoute("/terms")({
         content: "Terms governing the use of Ciago Technologies services.",
       },
       { property: "og:type", content: "article" },
-      { property: "og:url", content: "/terms" },
+      { property: "og:url", content: "https://platform.ciagotech.com/terms" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/terms" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/terms" }],
   }),
   component: TermsPage,
 });

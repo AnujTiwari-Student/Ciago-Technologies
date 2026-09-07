@@ -24,7 +24,7 @@ export const Route = createFileRoute("/about-us")({
         content: "Our story, our values and the brands we build for.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/about-us" },
+      { property: "og:url", content: "https://platform.ciagotech.com/about-us" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "About Us — Ciago Technologies" },
       {
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/about-us")({
         content: "Our story, our values and the brands we build for.",
       },
     ],
-    links: [{ rel: "canonical", href: "/about-us" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/about-us" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -40,13 +40,13 @@ export const Route = createFileRoute("/about-us")({
           "@context": "https://schema.org",
           "@type": "AboutPage",
           name: "About Ciago Technologies",
-          url: "https://ciago-vision-hub.lovable.app/about-us",
+          url: "https://platform.ciagotech.com/about-us",
           description:
             "The story, values and team behind Ciago Technologies — a senior engineering firm building resilient software and cloud platforms.",
           mainEntity: {
             "@type": "Organization",
             name: "Ciago Technologies",
-            url: "https://ciago-vision-hub.lovable.app",
+            url: "https://platform.ciagotech.com",
           },
         }),
       },

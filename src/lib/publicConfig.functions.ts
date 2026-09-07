@@ -12,7 +12,8 @@ function isPreviewHost(host: string | null): boolean {
     h.startsWith("localhost") ||
     h.startsWith("127.0.0.1") ||
     h.endsWith(".lovable.app") ||
-    h.endsWith(".lovableproject.com")
+    h.endsWith(".lovableproject.com") ||
+    h.endsWith(".workers.dev")
   );
 }
 

@@ -18,7 +18,8 @@ export async function verifyTurnstile(
     host.startsWith("localhost") ||
     host.startsWith("127.0.0.1") ||
     host.endsWith(".lovable.app") ||
-    host.endsWith(".lovableproject.com");
+    host.endsWith(".lovableproject.com") ||
+    host.endsWith(".workers.dev");
   const secret = isPreview ? TEST_SECRET : configured;
   if (!secret) {
     console.warn("[turnstile] TURNSTILE_SECRET_KEY not set — skipping bot check.");

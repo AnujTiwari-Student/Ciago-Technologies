@@ -134,10 +134,21 @@ export const Route = createRootRouteWithContext<{
           "@context": "https://schema.org",
           "@type": "Organization",
           name: "Ciago Technologies",
+          url: "https://platform.ciagotech.com",
+          logo: "https://platform.ciagotech.com/logo-light.svg",
           description:
             "Premium technology services & consulting — custom software, cloud infrastructure, DevOps and SRE.",
           slogan: "Architecting the Future of Digital Business",
           areaServed: "Worldwide",
+          sameAs: [
+            "https://github.com/Ciago-Technologies",
+            "https://www.linkedin.com/company/ciago-technologies",
+          ],
+          contactPoint: {
+            "@type": "ContactPoint",
+            contactType: "customer service",
+            availableLanguage: ["English", "Hindi"],
+          },
         }),
       },
     ],

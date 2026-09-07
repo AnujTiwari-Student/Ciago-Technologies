@@ -2,6 +2,10 @@ User-agent: *
 Allow: /
 
 Disallow: /auth
-Disallow: /lovable/
+Disallow: /admin
+Disallow: /profile
+Disallow: /onboarding
+Disallow: /my-applications
+Disallow: /forbidden
 
-Sitemap: https://ciago-vision-hub.lovable.app/sitemap.xml
+Sitemap: https://platform.ciagotech.com/sitemap.xml

@@ -69,7 +69,9 @@ export const Route = createFileRoute("/")({
           "Custom software, industry solutions, backend engineering and cloud infrastructure — one integrated senior team.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/" },
+      { property: "og:url", content: "https://platform.ciagotech.com" },
+      { property: "og:image", content: "https://platform.ciagotech.com/logo-light.svg" },
+      { property: "og:locale", content: "en_US" },
       { name: "twitter:card", content: "summary_large_image" },
       {
         name: "twitter:title",
@@ -81,7 +83,7 @@ export const Route = createFileRoute("/")({
           "Custom software, industry solutions, backend engineering and cloud infrastructure — one integrated senior team.",
       },
     ],
-    links: [{ rel: "canonical", href: "/" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -89,6 +91,7 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "WebSite",
           name: "Ciago Technologies",
+          url: "https://platform.ciagotech.com",
           description:
             "Premium technology services & consulting for teams building scalable software, cloud infrastructure and enterprise solutions.",
         }),

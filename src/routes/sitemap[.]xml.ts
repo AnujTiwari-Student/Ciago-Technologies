@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-const BASE_URL = "https://ciago-vision-hub.lovable.app";
+const BASE_URL = "https://platform.ciagotech.com";
 
 interface SitemapEntry {
   path: string;
@@ -20,7 +20,6 @@ export const Route = createFileRoute("/sitemap.xml")({
           { path: "/about-us", changefreq: "monthly", priority: "0.7" },
           { path: "/careers", changefreq: "weekly", priority: "0.8" },
           { path: "/resources", changefreq: "monthly", priority: "0.7" },
-          { path: "/auth", changefreq: "yearly", priority: "0.3" },
           { path: "/privacy", changefreq: "yearly", priority: "0.3" },
           { path: "/terms", changefreq: "yearly", priority: "0.3" },
           { path: "/security", changefreq: "yearly", priority: "0.3" },

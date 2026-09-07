@@ -19,10 +19,10 @@ export const Route = createFileRoute("/security")({
           "Security practices, data protection and responsible disclosure at Ciago Technologies.",
       },
       { property: "og:type", content: "article" },
-      { property: "og:url", content: "/security" },
+      { property: "og:url", content: "https://platform.ciagotech.com/security" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "/security" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/security" }],
   }),
   component: SecurityPage,
 });

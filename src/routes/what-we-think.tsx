@@ -20,7 +20,7 @@ export const Route = createFileRoute("/what-we-think")({
         content: "Our vision and mission — building future-proof digital infrastructure.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/what-we-think" },
+      { property: "og:url", content: "https://platform.ciagotech.com/what-we-think" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "What We Think — Ciago Technologies" },
       {
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/what-we-think")({
         content: "Our vision and mission — building future-proof digital infrastructure.",
       },
     ],
-    links: [{ rel: "canonical", href: "/what-we-think" }],
+    links: [{ rel: "canonical", href: "https://platform.ciagotech.com/what-we-think" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -36,13 +36,13 @@ export const Route = createFileRoute("/what-we-think")({
           "@context": "https://schema.org",
           "@type": "WebPage",
           name: "What We Think — Ciago Technologies",
-          url: "https://ciago-vision-hub.lovable.app/what-we-think",
+          url: "https://platform.ciagotech.com/what-we-think",
           description:
             "Ciago Technologies' vision and mission — architecting scalable, future-proof digital infrastructure.",
           isPartOf: {
             "@type": "WebSite",
             name: "Ciago Technologies",
-            url: "https://ciago-vision-hub.lovable.app",
+            url: "https://platform.ciagotech.com",
           },
         }),
       },
