@@ -92,23 +92,6 @@ export const Route = createRootRouteWithContext<{
       { property: "og:site_name", content: "Ciago Technologies" },
       { name: "theme-color", content: "#0f172a" },
       { name: "referrer", content: "strict-origin-when-cross-origin" },
-      {
-        httpEquiv: "Content-Security-Policy",
-        content: [
-          "default-src 'self'",
-          "base-uri 'self'",
-          "object-src 'none'",
-          "frame-ancestors 'none'",
-          "form-action 'self'",
-          "img-src 'self' data: blob: https:",
-          "font-src 'self' https://fonts.gstatic.com data:",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.accounts.dev https://*.ciagotech.com",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://*.ciagotech.com",
-          "worker-src 'self' blob:",
-          "frame-src https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com https://accounts.ciagotech.com",
-          "connect-src 'self' https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://*.ciagotech.com https://cdn.configcat.com https://clerk-telemetry.com",
-        ].join("; "),
-      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
