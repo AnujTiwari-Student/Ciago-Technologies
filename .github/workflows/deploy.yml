@@ -32,25 +32,25 @@ jobs:
         run: |
           curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://cli.doppler.com/install.sh" | sudo sh
 
-      - name: Set deploy target
-        id: target
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "env=prd" >> $GITHUB_OUTPUT
-            echo "name=ciagotech-production" >> $GITHUB_OUTPUT
-          else
-            echo "env=stg" >> $GITHUB_OUTPUT
-            echo "name=ciagotech-staging" >> $GITHUB_OUTPUT
-          fi
+      - name: Set worker name (production)
+        if: github.ref_name == 'main'
+        run: sed -i "1s/.*/name = \"ciagotech-production\"/" wrangler.toml
 
-      - name: Set worker name in wrangler.toml
-        run: |
-          sed -i "s/^name = .*/name = \"${{ steps.target.outputs.name }}\"/" wrangler.toml
+      - name: Set worker name (staging)
+        if: github.ref_name != 'main'
+        run: sed -i "1s/.*/name = \"ciagotech-staging\"/" wrangler.toml
 
-      - name: Build
+      - name: Build (production)
+        if: github.ref_name == 'main'
         run: doppler run -- npm run build
         env:
-          DOPPLER_TOKEN: ${{ steps.target.outputs.env == 'prd' && secrets.DOPPLER_TOKEN_PRD || secrets.DOPPLER_TOKEN_STG }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_PRD }}
+
+      - name: Build (staging)
+        if: github.ref_name != 'main'
+        run: doppler run -- npm run build
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
 
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
