@@ -1,4 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { useEffect, useState } from "react";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import {
@@ -44,6 +47,55 @@ import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/site/Header";
 import { SiteFooter } from "@/components/site/Footer";
 import { IllusHero } from "@/components/site/Illustration";
+
+const contactSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  company: z.string().min(1),
+  service: z.string().optional(),
+  details: z.string().min(1),
+});
+
+const submitContactForm = createServerFn({ method: "POST" })
+  .validator((data: unknown) => contactSchema.parse(data))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) throw new Error("Email service not configured");
+
+    const { enforceRateLimit, getClientIp } = await import("@/lib/rateLimit.server");
+    await enforceRateLimit({ bucket: "contact_form", key: getClientIp(), max: 5, windowSeconds: 3600 });
+
+    const html = `
+      <h2>New Service Request from platform.ciagotech.com</h2>
+      <table style="border-collapse:collapse;width:100%">
+        <tr><td style="padding:8px;font-weight:bold;border:1px solid #ddd">Name</td><td style="padding:8px;border:1px solid #ddd">${data.name}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;border:1px solid #ddd">Email</td><td style="padding:8px;border:1px solid #ddd">${data.email}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;border:1px solid #ddd">Company</td><td style="padding:8px;border:1px solid #ddd">${data.company}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;border:1px solid #ddd">Service</td><td style="padding:8px;border:1px solid #ddd">${data.service || "Not specified"}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold;border:1px solid #ddd">Details</td><td style="padding:8px;border:1px solid #ddd">${data.details}</td></tr>
+      </table>
+      <p style="margin-top:16px;color:#666">Reply directly to this email to respond to ${data.name}.</p>
+    `;
+
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: "Ciago Platform <noreply@ciagotech.com>",
+        to: ["info@ciagotech.com"],
+        reply_to: data.email,
+        subject: `Service Request: ${data.service || "General Inquiry"} — ${data.name}`,
+        html,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to send: ${err}`);
+    }
+
+    return { success: true };
+  });
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -498,15 +550,30 @@ function WhyUs() {
 
 function ContactSection() {
   const [submitting, setSubmitting] = useState(false);
+  const sendContact = useServerFn(submitContactForm);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      (e.target as HTMLFormElement).reset();
-      toast.success("Thanks! We'll be in touch within one business day.");
-    }, 700);
+    const form = e.target as HTMLFormElement;
+    const fd = new FormData(form);
+    sendContact({
+      data: {
+        name: fd.get("name") as string,
+        email: fd.get("email") as string,
+        company: fd.get("company") as string,
+        service: fd.get("service") as string || undefined,
+        details: fd.get("details") as string,
+      },
+    })
+      .then(() => {
+        form.reset();
+        toast.success("Thanks! We'll be in touch within one business day.");
+      })
+      .catch((err: any) => {
+        toast.error(err?.message || "Failed to send. Please email info@ciagotech.com directly.");
+      })
+      .finally(() => setSubmitting(false));
   }
 
   return (
@@ -527,7 +594,7 @@ function ContactSection() {
             <ul className="mt-8 space-y-4 text-sm">
               {[
                 { icon: ShieldCheck, t: "NDA on request, always." },
-                { icon: Mail, t: "hello@ciago.tech" },
+                { icon: Mail, t: "info@ciagotech.com" },
                 { icon: Activity, t: "Response within 24 hours." },
               ].map(({ icon: I, t }) => (
                 <li key={t} className="flex items-center gap-3">
