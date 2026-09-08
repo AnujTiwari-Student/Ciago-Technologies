@@ -102,18 +102,11 @@ export const Route = createRootRouteWithContext<{
           "form-action 'self'",
           "img-src 'self' data: blob: https:",
           "font-src 'self' https://fonts.gstatic.com data:",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.accounts.dev",
-          // Clerk domains are required when USE_CLERK_AUTH is on. We list
-          // both the dev frontend (`*.clerk.accounts.dev`) and the
-          // production frontend (`*.clerk.com` / `clerk.com`) so cutover
-          // and rollback don't require a code change.
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com",
-          // Clerk's browser.js spins up a Web Worker from a blob: URL
-          // when running in dev mode. Without `worker-src 'self' blob:`,
-          // the browser falls back to script-src and refuses the worker.
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.accounts.dev https://*.ciagotech.com",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://*.ciagotech.com",
           "worker-src 'self' blob:",
-          "frame-src https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com",
-          "connect-src 'self' https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://cdn.configcat.com https://clerk-telemetry.com",
+          "frame-src https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://accounts.clerk.com https://accounts.ciagotech.com",
+          "connect-src 'self' https://api.resend.com https://challenges.cloudflare.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk.accounts.dev https://clerk.com https://*.ciagotech.com https://cdn.configcat.com https://clerk-telemetry.com",
         ].join("; "),
       },
     ],
