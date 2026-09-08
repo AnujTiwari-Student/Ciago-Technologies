@@ -38,8 +38,8 @@ function readFlag(name: keyof FeatureFlags, fallback: boolean): boolean {
 }
 
 export const FLAGS: FeatureFlags = {
-  USE_CLERK_AUTH: readFlag("USE_CLERK_AUTH", false),
-  USE_NEON_DB: readFlag("USE_NEON_DB", false),
+  USE_CLERK_AUTH: true,
+  USE_NEON_DB: true,
 };
 
 export const FEATURE_FLAGS = {

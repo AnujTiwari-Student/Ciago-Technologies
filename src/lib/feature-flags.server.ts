@@ -101,13 +101,8 @@ export function getDefaultCapabilities(): Capabilities {
  *
  * In development, auto-enables to bypass ConfigCat network issues.
  */
-export async function isDashboardEnabled(target?: FlagTargetContext): Promise<boolean> {
-  // In development, auto-enable dashboard
-  if (process.env.NODE_ENV === "development") {
-    return true;
-  }
-
-  return isFlagOn("dashboardEnabled", target, DEFAULT_CAPABILITIES.dashboardEnabled);
+export async function isDashboardEnabled(_target?: FlagTargetContext): Promise<boolean> {
+  return true;
 }
 
 /**
@@ -116,13 +111,8 @@ export async function isDashboardEnabled(target?: FlagTargetContext): Promise<bo
  *
  * In development, auto-enables when USE_CLERK_AUTH=true to bypass ConfigCat network issues.
  */
-export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): Promise<boolean> {
-  // In development, auto-enable Clerk auth if configured
-  if (process.env.NODE_ENV === "development" && process.env.USE_CLERK_AUTH === "true") {
-    return true;
-  }
-
-  return isCriticalFlagOn("clerkAuthentication", target, DEFAULT_CAPABILITIES.clerkAuthentication);
+export async function isClerkAuthenticationEnabled(_target?: FlagTargetContext): Promise<boolean> {
+  return true;
 }
 
 /**
@@ -130,17 +120,8 @@ export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): 
  * This is evaluated on the server so SSR never imports the browser-only
  * ConfigCat React provider.
  */
-export async function isAuthenticationButtonEnabled(target?: FlagTargetContext): Promise<boolean> {
-  // In development, auto-enable the button if Clerk auth is configured
-  if (process.env.NODE_ENV === "development" && process.env.USE_CLERK_AUTH === "true") {
-    return true;
-  }
-
-  return isFlagOn(
-    "authenticationButtonEnabled",
-    target,
-    DEFAULT_CAPABILITIES.authenticationButtonEnabled,
-  );
+export async function isAuthenticationButtonEnabled(_target?: FlagTargetContext): Promise<boolean> {
+  return true;
 }
 
 /**
