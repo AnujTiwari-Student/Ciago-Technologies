@@ -17,7 +17,7 @@ command = "npm run build"
 enabled = true
 
 # Environments are managed via separate deploys with different wrangler.toml names
-# Production: name = "ciagotech-production", routes ciagotech.com/*
+# Production: name = "ciagotech-staging", routes ciagotech.com/*
 # Staging: name = "ciagotech-staging" (current), workers_dev = true
 # See .production/DEPLOYMENT_START_GUIDE.md for deployment instructions
 

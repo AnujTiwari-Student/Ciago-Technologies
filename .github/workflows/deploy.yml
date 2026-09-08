@@ -40,14 +40,9 @@ jobs:
         if: github.ref_name != 'main'
         run: sed -i "s/^name = .*/name = \"ciagotech-staging\"/" wrangler.toml
 
-      - name: Build (production)
-        if: github.ref_name == 'main'
-        run: doppler run -- npm run build
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_PRD }}
-
-      - name: Build (staging)
-        if: github.ref_name != 'main'
+      # Using STG config for both until Clerk production instance is fully configured.
+      # Switch production back to DOPPLER_TOKEN_PRD when ready.
+      - name: Build
         run: doppler run -- npm run build
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN_STG }}
