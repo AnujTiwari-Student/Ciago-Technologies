@@ -102,9 +102,8 @@ export function getDefaultCapabilities(): Capabilities {
  * In development, auto-enables to bypass ConfigCat network issues.
  */
 export async function isDashboardEnabled(target?: FlagTargetContext): Promise<boolean> {
-  if (process.env.USE_CLERK_AUTH === "true") {
-    return true;
-  }
+  const flag = process.env.USE_CLERK_AUTH ?? process.env.VITE_USE_CLERK_AUTH;
+  if (flag === "true" || flag === "1") return true;
 
   return isFlagOn("dashboardEnabled", target, DEFAULT_CAPABILITIES.dashboardEnabled);
 }
@@ -116,9 +115,8 @@ export async function isDashboardEnabled(target?: FlagTargetContext): Promise<bo
  * In development, auto-enables when USE_CLERK_AUTH=true to bypass ConfigCat network issues.
  */
 export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): Promise<boolean> {
-  if (process.env.USE_CLERK_AUTH === "true") {
-    return true;
-  }
+  const flag = process.env.USE_CLERK_AUTH ?? process.env.VITE_USE_CLERK_AUTH;
+  if (flag === "true" || flag === "1") return true;
 
   return isCriticalFlagOn("clerkAuthentication", target, DEFAULT_CAPABILITIES.clerkAuthentication);
 }
@@ -129,9 +127,8 @@ export async function isClerkAuthenticationEnabled(target?: FlagTargetContext): 
  * ConfigCat React provider.
  */
 export async function isAuthenticationButtonEnabled(target?: FlagTargetContext): Promise<boolean> {
-  if (process.env.USE_CLERK_AUTH === "true") {
-    return true;
-  }
+  const flag = process.env.USE_CLERK_AUTH ?? process.env.VITE_USE_CLERK_AUTH;
+  if (flag === "true" || flag === "1") return true;
 
   return isFlagOn(
     "authenticationButtonEnabled",
